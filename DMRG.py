@@ -365,7 +365,7 @@ def getHLRs(H, psi, workingSite=None):
     return HLs, HRs
 
 
-def getGroundState(H, HLs, HRs, psi, psiCompare=None, accuration=10**(-5)):
+def getGroundState(H, HLs, HRs, psi, psiCompare=None, accuration=10**(-3)):
     truncErrs = []
     [psi, E0, truncErr, HLs, HRs] = dmrgSweep(psi, H, HLs, HRs, psiCompare)
     truncErrs.append(truncErr)
@@ -374,6 +374,7 @@ def getGroundState(H, HLs, HRs, psi, psiCompare=None, accuration=10**(-5)):
         truncErrs.append(truncErr)
         if math.fabs((E0Curr-E0)/E0) < accuration:
             return psi, E0Curr, truncErrs
+        print(math.fabs((E0Curr-E0)/E0))
         E0 = E0Curr
 
 

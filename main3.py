@@ -74,54 +74,23 @@ psi = bops.getStartupState(N, d=d)
 for k in [len(psi) - 1 - i for i in range(len(psi) - A2[-1] - 1)]:
     psi = bops.shiftWorkingSite(psi, k, '<<')
 
-psiDagger = bops.copyState(psi, conj=True)
-i = A1[-1]
-sigma = trUnitary(i)
-temp = bops.copyState([psi[i]])[0]
-temp.tensor = np.conj(temp.tensor)
-T = bops.permute(bops.multiContraction(bops.multiContraction(temp, sigma, [1], [0]), psiDagger[i], [2], [1]), [0, 2, 1, 3])
-origSizes = [T.tensor.shape[0], T.tensor.shape[1]]
-tMatrix = np.reshape(T.tensor, [sum(origSizes), sum(origSizes)])
-vals, vecs = np.linalg.eig(tMatrix)
-vals = np.round(vals, 6)
-uVec = vecs[:, list(vals).index(1)]
-uMatrix = np.reshape(uVec, origSizes)
-uMatrix /= np.sqrt(np.trace(np.matmul(uMatrix, np.conj(np.transpose(uMatrix)))) / len(uMatrix))
-print(np.trace(np.matmul(uMatrix, np.conj(uMatrix))) / len(uMatrix))
-U = tn.Node(uMatrix, backend=None)
-
-
-RMatrix = np.zeros((d, d, d, d))
-for j in range(d):
-    for jp in range(d):
-        RMatrix[j, jp, j, jp] = Utr[j, jp]
-R = tn.Node(RMatrix, backend=None)
-
-# psiCopy = bops.copyState(psi)
 # psiDagger = bops.copyState(psi, conj=True)
-# psiCopyDagger = bops.copyState(psiCopy, conj=True)
-# curr1 = bops.multiContraction(psi[A1[0]], psiDagger[A1[0]], [0], [0])
-# curr2 = bops.multiContraction(psiCopy[A1[0]], psiCopyDagger[A1[0]], [0], [0])
-# Rcurr = bops.copyState([R])[0]
-# curr = bops.multiContraction(bops.multiContraction(curr1, Rcurr, [0, 2], [0, 2]), curr2, [2, 3], [0, 2])
-# for i in range(A1[1], A1[-1]):
-#     curr = bops.multiContraction(curr, psi[i], [0], [0])
-#     curr = bops.multiContraction(curr, psiDagger[i], [0], [0])
-#     curr = bops.multiContraction(curr, psiCopy[i], [0], [0])
-#     curr = bops.multiContraction(curr, psiCopyDagger[i], [0], [0])
-#     Rcurr = bops.copyState([R])[0]
-#     curr = bops.multiContraction(curr, Rcurr, [0, 2, 4, 6], [0, 2, 1, 3])
-# for i in range(A2[0], A2[-1] - 1):
-#     curr = bops.multiContraction(curr, psi[i], [0], [0])
-#     curr = bops.multiContraction(curr, psiDagger[i], [0], [0])
-#     curr = bops.multiContraction(curr, psiCopy[i], [0, 4], [0, 1])
-#     curr = bops.multiContraction(curr, psiCopyDagger[i], [0, 1], [0, 1])
-# i = A2[-1]
-# curr = bops.multiContraction(curr, psi[i], [0], [0])
-# curr = bops.multiContraction(curr, psiDagger[i], [0, 4], [0, 2])
-# curr = bops.multiContraction(curr, psiCopy[i], [0, 3], [0, 1])
-# curr = bops.multiContraction(curr, psiCopyDagger[i], [0, 1, 2], [0, 1, 2])
-# b = 1
+# i = A1[-1]
+# sigma = trUnitary(i)
+# temp = bops.copyState([psi[i]])[0]
+# temp.tensor = np.conj(temp.tensor)
+# T = bops.permute(bops.multiContraction(bops.multiContraction(temp, sigma, [1], [0]), psiDagger[i], [2], [1]), [0, 2, 1, 3])
+# origSizes = [T.tensor.shape[0], T.tensor.shape[1]]
+# tMatrix = np.round(np.reshape(T.tensor, [origSizes[0] * origSizes[1], origSizes[0] * origSizes[1]]), 14)
+# vals, vecs = scipy.sparse.linalg.eigs(tMatrix, k=1)
+# # vals = np.round(vals, 6)
+# # uVec = vecs[:, list(vals).index(1)]
+# uVec = vecs[:, 0]
+# uMatrix = np.reshape(uVec, origSizes)
+# uMatrix /= np.sqrt(np.trace(np.matmul(uMatrix, np.conj(np.transpose(uMatrix)))) / len(uMatrix))
+# print(np.trace(np.matmul(uMatrix, np.conj(uMatrix))) / len(uMatrix))
+# U = tn.Node(uMatrix, backend=None)
+
 
 psiP = bops.copyState(psi, conj=True)
 for i in A1 + A2:

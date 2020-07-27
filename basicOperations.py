@@ -6,6 +6,13 @@ from typing import Any, Dict, List, Optional, Set, Text, Tuple, Union, \
     Sequence, Iterable, Type
 
 
+def getLegsUnifierTensor(dim1, dim2):
+    unifier = np.zeros((dim1, dim2, dim1 * dim2))
+    for i in range(dim1):
+        for j in range(dim2):
+            unifier[i, j, i * dim2 + j] = 1
+    return unifier
+
 def getStartupState(n, d=2, mode='general'):
     psi = [None] * n
     if mode == 'general':
@@ -14,12 +21,7 @@ def getStartupState(n, d=2, mode='general'):
             baseLeftTensor[0, 1, 0] = -1
             baseLeftTensor[0, 0, 1] = 1
         elif d == 3:
-            baseLeftTensor = np.zeros((2, 3, 2), dtype=complex)
-            baseLeftTensor[0, 0, 1] = np.sqrt(2/3)
-            baseLeftTensor[0, 1, 0] = -np.sqrt(1/3)
-            baseLeftTensor[1, 1, 1] = np.sqrt(1 / 3)
-            baseLeftTensor[1, 2, 0] = -np.sqrt(2/3)
-            # baseLeftTensor[0, 2, 2] = -1
+            print("TODO")
         psi[0] = tn.Node(baseLeftTensor, name='site0', axis_names=['v0', 's0', 'v1'], backend=None)
         if d == 2:
             baseMiddleTensor = np.zeros((2, 2, 2), dtype=complex)
@@ -28,21 +30,7 @@ def getStartupState(n, d=2, mode='general'):
             baseMiddleTensor[1, 1, 0] = -1 / math.sqrt(2)
             baseMiddleTensor[0, 0, 1] = 1 / math.sqrt(2)
         elif d == 3:
-            baseMiddleTensor = np.zeros((2, 3, 2), dtype=complex)
-            baseMiddleTensor[0, 0, 1] = np.sqrt(2/3)
-            baseMiddleTensor[0, 1, 0] = -np.sqrt(1/3)
-            baseMiddleTensor[1, 1, 1] = np.sqrt(1 / 3)
-            baseMiddleTensor[1, 2, 0] = -np.sqrt(2/3)
-            # baseMiddleTensor = np.zeros((3, 3, 3), dtype=complex)
-            # baseMiddleTensor[0, 0, 1] = -1 / math.sqrt(3)
-            # baseMiddleTensor[0, 1, 2] = -1 / math.sqrt(3)
-            # baseMiddleTensor[0, 2, 0] = 1 / math.sqrt(3)
-            # baseMiddleTensor[1, 2, 0] = -1 / math.sqrt(3)
-            # baseMiddleTensor[1, 0, 1] = 1 / math.sqrt(3)
-            # baseMiddleTensor[1, 1, 2] = 1 / math.sqrt(3)
-            # baseMiddleTensor[2, 0, 1] = -1 / math.sqrt(3)
-            # baseMiddleTensor[2, 1, 2] = -1 / math.sqrt(3)
-            # baseMiddleTensor[2, 2, 0] = 1 / math.sqrt(3)
+            print("TODO")
         for i in range(1, n-1):
             psi[i] = tn.Node(baseMiddleTensor, name=('site' + str(i)),
                                    axis_names=['v' + str(i), 's' + str(i), 'v' + str(i+1)],
@@ -52,12 +40,7 @@ def getStartupState(n, d=2, mode='general'):
             baseRightTensor[0, 1, 0] = -1 / math.sqrt(2)
             baseRightTensor[1, 0, 0] = 1 / math.sqrt(2)
         elif d == 3:
-            baseRightTensor = np.zeros((2, 3, 2), dtype=complex)
-            baseRightTensor[0, 0, 1] = np.sqrt(2/3)
-            baseRightTensor[0, 1, 0] = -np.sqrt(1/3)
-            baseRightTensor[1, 1, 1] = np.sqrt(1 / 3)
-            baseRightTensor[1, 2, 0] = -np.sqrt(2/3)
-            # baseRightTensor[2, 0, 0] = -1
+            print("TODO")
         psi[n - 1] = tn.Node(baseRightTensor, name=('site' + str(n - 1)),
                                    axis_names=['v' + str(n - 1), 's' + str(n - 1), 'v' + str(n)],
                                    backend=None)
@@ -107,6 +90,38 @@ def getStartupState(n, d=2, mode='general'):
                              backend=None)
         norm = getOverlap(psi, psi)
         psi[n - 1] = multNode(psi[n - 1], 1 / np.sqrt(norm))
+        return psi
+    elif mode=='pbc':
+        connectorsUnifierTensor = getLegsUnifierTensor(2, 2)
+        physicalUnifierTensor = getLegsUnifierTensor(d, d)
+        baseTensor = np.zeros((2, 3, 2), dtype=complex)
+        baseTensor[0, 0, 1] = np.sqrt(2 / 3)
+        baseTensor[0, 1, 0] = -np.sqrt(1 / 3)
+        baseTensor[1, 1, 1] = np.sqrt(1 / 3)
+        baseTensor[1, 2, 0] = -np.sqrt(2 / 3)
+        baseLeftTensor = np.tensordot(baseTensor, baseTensor, axes=([0], [2]))
+        baseLeftTensor = np.tensordot(baseLeftTensor, physicalUnifierTensor, axes=([0, 3], [0, 1]))
+        baseLeftTensor = np.tensordot(baseLeftTensor, connectorsUnifierTensor, axes=([0, 1], [0, 1]))
+        baseLeftTensor = np.reshape(baseLeftTensor, [1, baseLeftTensor.shape[0], baseLeftTensor.shape[1]])
+        psi[0] = tn.Node(baseLeftTensor, name='site0', axis_names=['v0', 's0', 'v1'],
+                         backend=None)
+        baseMiddleTensor = np.tensordot(connectorsUnifierTensor, baseTensor, axes=([0], [0]))
+        baseMiddleTensor = np.tensordot(baseMiddleTensor, baseTensor, axes=([0], [2]))
+        baseMiddleTensor = np.tensordot(baseMiddleTensor, physicalUnifierTensor, axes=([1, 4], [0, 1]))
+        baseMiddleTensor = np.tensordot(baseMiddleTensor, connectorsUnifierTensor, axes=([1, 2], [0, 1]))
+        for i in range(1, n-1):
+            psi[i] = tn.Node(baseMiddleTensor, name=('site' + str(i)),
+                                   axis_names=['v' + str(i), 's' + str(i), 'v' + str(i+1)],
+                                   backend=None)
+        baseRightTensor = np.tensordot(baseTensor, baseTensor, axes=([2], [0]))
+        baseRightTensor = np.tensordot(connectorsUnifierTensor, baseRightTensor, axes=([0, 1], [0, 3]))
+        baseRightTensor = np.tensordot(baseRightTensor, physicalUnifierTensor, axes=([1, 2], [0, 1]))
+        baseRightTensor = np.reshape(baseRightTensor, [baseRightTensor.shape[0], baseRightTensor.shape[1], 1])
+        psi[n - 1] = tn.Node(baseRightTensor, name=('site' + str(n - 1)),
+                                   axis_names=['v' + str(n - 1), 's' + str(n - 1), 'v' + str(n)],
+                                   backend=None)
+        norm = getOverlap(psi, psi)
+        psi[n-1] = multNode(psi[n-1], 1/np.sqrt(norm))
         return psi
 
 # Assuming psi1, psi2 have the same length, Hilbert space etc.
