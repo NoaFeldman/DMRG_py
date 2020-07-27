@@ -7,13 +7,14 @@ import DMRG as dmrg
 from matplotlib import pyplot as plt
 from partialTranspose import getPartiallyTransposed, getStraightDM
 
+d = 3
 
-sX = np.zeros((3, 3), dtype=complex)
+sX = np.zeros((d, d), dtype=complex)
 sX[0, 1] = 1 / np.sqrt(2)
 sX[1, 0] = 1 / np.sqrt(2)
 sX[1, 2] = 1 / np.sqrt(2)
 sX[2, 1] = 1 / np.sqrt(2)
-sZ = np.zeros((3, 3), dtype=complex)
+sZ = np.zeros((d, d), dtype=complex)
 sZ[0, 0] = -1
 sZ[1, 1] = 0
 sZ[2, 2] = 1
@@ -26,7 +27,7 @@ sZsZ = np.kron(sZ, sZ)
 Utr = linalg.expm(1j * np.pi * sY)
 
 def getAKLTHamiltonianMatrices(N):
-    onsiteTerms = [np.zeros((3, 3))] * N
+    onsiteTerms = [np.zeros((d, d))] * N
     neighborTerms = [sXsX + sYsY + sZsZ + np.matmul(sXsX + sYsY + sZsZ, sXsX + sYsY + sZsZ) / 3] * N
     return onsiteTerms, neighborTerms
 
@@ -39,16 +40,16 @@ def getHamiltonianMatrices(N, B, D):
 
 """A Random matrix distributed with Haar measure"""
 def haar_measure(n):
-    z = (scipy.randn(n, n) + 1j * scipy.randn(n, n)) / scipy.sqrt(2.0)
+    z = (np.random.randn(n, n) + 1j * np.random.randn(n, n)) / np.sqrt(2.0)
     q,r = scipy.linalg.qr(z)
-    d = scipy.diagonal(r)
-    ph = d / scipy.absolute(d)
-    q = scipy.multiply(q, ph, q)
+    d = np.diagonal(r)
+    ph = d / np.absolute(d)
+    q = np.multiply(q, ph, q)
     return q
 
 
 def randomUnitary(site):
-    return tn.Node(haar_measure(3), name=('U' + str(site)),
+    return tn.Node(haar_measure(d), name=('U' + str(site)),
                              axis_names=['s' + str(site), 's' + str(site) + '*'],
                              backend=None)
 
@@ -59,13 +60,13 @@ def trUnitary(site):
                              backend=None)
 
 
-N = 256
+N = 32
 B = 0
 D = 0
 A1 = [i for i in range(int(N/4), int(N/2))]
 A2 = [i for i in range(int(N/2), int(3 * N/4))]
 onsiteTerms, neighborTerms = getHamiltonianMatrices(N, B, D)
-psi = bops.getStartupState(N, d=3)
+psi = bops.getStartupState(N, d=d)
 # H = dmrg.getDMRGH(N, onsiteTerms, neighborTerms, d=3)
 # HLs, HRs = dmrg.getHLRs(H, psi)
 # psi, E0, truncErrs = dmrg.getGroundState(H, HLs, HRs, psi, None)
@@ -89,12 +90,50 @@ uMatrix /= np.sqrt(np.trace(np.matmul(uMatrix, np.conj(np.transpose(uMatrix)))) 
 print(np.trace(np.matmul(uMatrix, np.conj(uMatrix))) / len(uMatrix))
 U = tn.Node(uMatrix, backend=None)
 
-psiP = bops.copyState(psi)
+
+RMatrix = np.zeros((d, d, d, d))
+for j in range(d):
+    for jp in range(d):
+        RMatrix[j, jp, j, jp] = Utr[j, jp]
+R = tn.Node(RMatrix, backend=None)
+
+# psiCopy = bops.copyState(psi)
+# psiDagger = bops.copyState(psi, conj=True)
+# psiCopyDagger = bops.copyState(psiCopy, conj=True)
+# curr1 = bops.multiContraction(psi[A1[0]], psiDagger[A1[0]], [0], [0])
+# curr2 = bops.multiContraction(psiCopy[A1[0]], psiCopyDagger[A1[0]], [0], [0])
+# Rcurr = bops.copyState([R])[0]
+# curr = bops.multiContraction(bops.multiContraction(curr1, Rcurr, [0, 2], [0, 2]), curr2, [2, 3], [0, 2])
+# for i in range(A1[1], A1[-1]):
+#     curr = bops.multiContraction(curr, psi[i], [0], [0])
+#     curr = bops.multiContraction(curr, psiDagger[i], [0], [0])
+#     curr = bops.multiContraction(curr, psiCopy[i], [0], [0])
+#     curr = bops.multiContraction(curr, psiCopyDagger[i], [0], [0])
+#     Rcurr = bops.copyState([R])[0]
+#     curr = bops.multiContraction(curr, Rcurr, [0, 2, 4, 6], [0, 2, 1, 3])
+# for i in range(A2[0], A2[-1] - 1):
+#     curr = bops.multiContraction(curr, psi[i], [0], [0])
+#     curr = bops.multiContraction(curr, psiDagger[i], [0], [0])
+#     curr = bops.multiContraction(curr, psiCopy[i], [0, 4], [0, 1])
+#     curr = bops.multiContraction(curr, psiCopyDagger[i], [0, 1], [0, 1])
+# i = A2[-1]
+# curr = bops.multiContraction(curr, psi[i], [0], [0])
+# curr = bops.multiContraction(curr, psiDagger[i], [0, 4], [0, 2])
+# curr = bops.multiContraction(curr, psiCopy[i], [0, 3], [0, 1])
+# curr = bops.multiContraction(curr, psiCopyDagger[i], [0, 1, 2], [0, 1, 2])
+# b = 1
+
+psiP = bops.copyState(psi, conj=True)
 for i in A1 + A2:
     currU = trUnitary(i)
     psiP[i] = bops.permute(bops.multiContraction(psiP[i], currU, [1], [0]), [0, 2, 1])
-pt = getPartiallyTransposed(psiP, A1[0], A1[-1], A2[0], A2[-1])
-reg = getStraightDM(psi, A1[0], A1[-1], A2[0], A2[-1])
+psiConj = bops.copyState(psi, conj=True)
+curr = bops.multiContraction(psiP[A1[0]], psiConj[A1[0]], [0, 1], [0, 1])
+for i in range(A1[1], A2[-1]-1):
+    curr = bops.multiContraction(bops.multiContraction(curr, psiP[i], [0], [0]), psiConj[i], [0, 1], [0, 1])
+curr = bops.multiContraction(bops.multiContraction(curr, psiP[A2[-1]], [0], [0]), psiConj[A2[-1]], [0, 1, 2], [0, 1, 2])
+# pt = getPartiallyTransposed(psi, A1[0], A1[-1], A2[0], A2[-1])
+# reg = getStraightDM(psiP, A1[0], A1[-1], A2[0], A2[-1])
 b=1
 """ This does not give the same result as Poleman-Turner's paper! """
 

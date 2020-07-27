@@ -14,11 +14,11 @@ def getStartupState(n, d=2, mode='general'):
             baseLeftTensor[0, 1, 0] = -1
             baseLeftTensor[0, 0, 1] = 1
         elif d == 3:
-            baseLeftTensor = np.zeros((1, 3, 2), dtype=complex)
-            baseLeftTensor[0, 0, 1] = 1
-            baseLeftTensor[0, 1, 0] = 1 / math.sqrt(2)
-            baseLeftTensor[0, 1, 0] = -1 / math.sqrt(2)
-            baseLeftTensor[0, 2, 0] = -1
+            baseLeftTensor = np.zeros((2, 3, 2), dtype=complex)
+            baseLeftTensor[0, 0, 1] = np.sqrt(2/3)
+            baseLeftTensor[0, 1, 0] = -np.sqrt(1/3)
+            baseLeftTensor[1, 1, 1] = np.sqrt(1 / 3)
+            baseLeftTensor[1, 2, 0] = -np.sqrt(2/3)
             # baseLeftTensor[0, 2, 2] = -1
         psi[0] = tn.Node(baseLeftTensor, name='site0', axis_names=['v0', 's0', 'v1'], backend=None)
         if d == 2:
@@ -52,11 +52,11 @@ def getStartupState(n, d=2, mode='general'):
             baseRightTensor[0, 1, 0] = -1 / math.sqrt(2)
             baseRightTensor[1, 0, 0] = 1 / math.sqrt(2)
         elif d == 3:
-            baseRightTensor = np.zeros((2, 3, 1), dtype=complex)
-            baseRightTensor[1, 0, 0] = 1
-            baseRightTensor[1, 1, 0] = 1 / math.sqrt(2)
-            baseRightTensor[0, 1, 0] = -1 / math.sqrt(2)
-            baseRightTensor[0, 2, 0] = -1
+            baseRightTensor = np.zeros((2, 3, 2), dtype=complex)
+            baseRightTensor[0, 0, 1] = np.sqrt(2/3)
+            baseRightTensor[0, 1, 0] = -np.sqrt(1/3)
+            baseRightTensor[1, 1, 1] = np.sqrt(1 / 3)
+            baseRightTensor[1, 2, 0] = -np.sqrt(2/3)
             # baseRightTensor[2, 0, 0] = -1
         psi[n - 1] = tn.Node(baseRightTensor, name=('site' + str(n - 1)),
                                    axis_names=['v' + str(n - 1), 's' + str(n - 1), 'v' + str(n)],
