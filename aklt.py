@@ -22,9 +22,6 @@ sY = 1j * (np.matmul(sZ, sX) - np.matmul(sX, sZ))
 # sZsZ = np.kron(sZ, sZ)
 
 
-UtrBase = linalg.expm(1j * np.pi * sY)
-
-
 def getDistance(s, sP, N):
     sExplicit = [0] * N
     sPExplicit = [0] * N
@@ -105,9 +102,6 @@ output.close()
 output = open('A2Estimations' + attemptNumber + '.pkl', 'wb')
 pickle.dump(A2Estimations, output)
 output.close()
-# pkl_file = open('A1Estimations.pkl', 'rb')
-# tst = pickle.load(pkl_file)
-# b = 1
 
 
 
