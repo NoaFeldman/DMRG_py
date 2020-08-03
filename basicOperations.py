@@ -91,7 +91,20 @@ def getStartupState(n, d=2, mode='general'):
         norm = getOverlap(psi, psi)
         psi[n - 1] = multNode(psi[n - 1], 1 / np.sqrt(norm))
         return psi
-    elif mode=='pbc':
+    elif mode == 'aklt':
+        baseTensor = np.zeros((2, 3, 2), dtype=complex)
+        baseTensor[0, 0, 1] = np.sqrt(2 / 3)
+        baseTensor[0, 1, 0] = -np.sqrt(1 / 3)
+        baseTensor[1, 1, 1] = np.sqrt(1 / 3)
+        baseTensor[1, 2, 0] = -np.sqrt(2 / 3)
+        for i in range(n):
+            psi[i] = tn.Node(baseTensor, name=('site' + str(i)),
+                                 axis_names=['v' + str(i), 's' + str(i), 'v' + str(i + 1)],
+                                 backend=None)
+        norm = getOverlap(psi, psi)
+        psi[n - 1] = multNode(psi[n - 1], 1 / np.sqrt(norm))
+        return psi
+    elif mode == 'pbc':
         connectorsUnifierTensor = getLegsUnifierTensor(2, 2)
         physicalUnifierTensor = getLegsUnifierTensor(d, d)
         baseTensor = np.zeros((2, 3, 2), dtype=complex)
@@ -266,7 +279,7 @@ def svdTruncation(node: tn.Node, leftEdges: List[tn.Edge], rightEdges: List[tn.E
 def getRenyiEntropy(psi: List[tn.Node], n: int, AEnd: int, maxBondDim=256):
     psiCopy = copyState(psi)
     for k in [len(psiCopy) - 1 - i for i in range(len(psiCopy) - AEnd - 1)]:
-        psiCopy = shiftWorkingSite(psi, k, '<<')
+        psiCopy = shiftWorkingSite(psiCopy, k, '<<')
     psiCopy[k - 1][2] ^ psiCopy[k][0]
     M = tn.contract_between(psi[k - 1], psi[k])
 
@@ -384,4 +397,7 @@ def minusState(psi: List[tn.Node]):
     return psiCopy
 
 
+def applySingleSiteOp(psi: List[tn.Node], op: tn.Node, i: int):
+    psi[i][1] ^ op[1]
+    psi[i] = permute(tn.contract_between(psi[i], op), [0, 2, 1])
 
