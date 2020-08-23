@@ -77,7 +77,7 @@ A2Start = A1End
 A2End = 3 * N // 4
 lenA2 = A2End - A2Start
 psi = bops.getStartupState(N, d=d, mode='aklt')
-M = int(sys.argv[1])
+M = 10000 # int(sys.argv[1])
 A1Estimations = [[None for i in range(lenA1)] for m in range(M)]
 A2Estimations = [[None for i in range(lenA2)] for m in range(M)]
 
@@ -96,10 +96,10 @@ for m in range(M):
 
 import pickle
 attemptNumber = sys.argv[2]
-output = open('A1Estimations' + attemptNumber + '.pkl', 'wb')
+output = open('akltDMs/A1Estimations' + attemptNumber + '.pkl', 'wb')
 pickle.dump(A1Estimations, output)
 output.close()
-output = open('A2Estimations' + attemptNumber + '.pkl', 'wb')
+output = open('akltDMs/A2Estimations' + attemptNumber + '.pkl', 'wb')
 pickle.dump(A2Estimations, output)
 output.close()
 

@@ -201,9 +201,8 @@ def addNodes(node1, node2):
             return result
 
 def multNode(node, c):
-    result = copyState([node])[0]
-    result.set_tensor(result.get_tensor() * c)
-    return result
+    node.set_tensor(node.get_tensor() * c)
+    return node
 
 
 def getNodeNorm(node):
@@ -242,10 +241,12 @@ def permute(node: tn.Node, permutation):
     for i in range(len(permutation)):
         axisNames.append(node.edges[permutation[i]].name)
     result = tn.transpose(node, permutation, axis_names=axisNames)
-    result.add_axis_names(axisNames)
+    if len(set(axisNames)) == len(axisNames):
+        result.add_axis_names(axisNames)
     for i in range(len(axisNames)):
         result.get_edge(i).set_name(axisNames[i])
     result.set_name(node.name)
+    tn.remove_node(node)
     return result
 
 
