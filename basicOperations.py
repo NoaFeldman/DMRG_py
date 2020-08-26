@@ -251,7 +251,7 @@ def permute(node: tn.Node, permutation):
 
 
 def svdTruncation(node: tn.Node, leftEdges: List[tn.Edge], rightEdges: List[tn.Edge], \
-                  dir: str, maxBondDim=128, leftName='U', rightName='V',  edgeName=None):
+                  dir: str, maxBondDim=128, leftName='U', rightName='V',  edgeName='default'):
     maxBondDim = getAppropriateMaxBondDim(maxBondDim, leftEdges, rightEdges)
     if dir == '>>':
         leftEdgeName = edgeName
@@ -268,9 +268,28 @@ def svdTruncation(node: tn.Node, leftEdges: List[tn.Edge], rightEdges: List[tn.E
     if dir == '>>':
         l = copyState([U])[0]
         r = copyState([tn.contract_between(S, V, name=V.name)])[0]
-    else:
+    elif dir == '<<':
         l = copyState([tn.contract_between(U, S, name=U.name)])[0]
         r = copyState([V])[0]
+    elif dir == '><':
+        S.tensor = np.sqrt(S.tensor)
+        sCopy = copyState([S])[0]
+        vCopy = copyState([V])[0]
+        l = copyState([tn.contract_between(U, S, name=U.name)])[0]
+        sCopy[1] ^ vCopy[0]
+        r = tn.contract_between(sCopy, vCopy, name=V.name)
+    elif dir == '>*<':
+        v = V
+        V = copyState([V])[0]
+        tn.remove_node(v)
+        u = U
+        U = copyState([U])[0]
+        tn.remove_node(u)
+        s = S
+        S = copyState([S])[0]
+        tn.remove_node(s)
+        return [U, S, V, truncErr]
+
     tn.remove_node(U)
     tn.remove_node(S)
     tn.remove_node(V)

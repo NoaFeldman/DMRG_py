@@ -24,7 +24,7 @@ def getXXZHamiltonianMatrices(J, JDelta):
 
 
 # onsiteTerm = Omega * sigmaX
-# neighborTerm = C * kron(sigmaX, sigmaX)
+# neighborTerm = GammaC * kron(sigmaX, sigmaX)
 def getHAMatrices(N, C, Omega, delta):
     onsiteTerms = [Omega * sigmaX] * N
     for i in range(N):
