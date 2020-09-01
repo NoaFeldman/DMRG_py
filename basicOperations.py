@@ -263,6 +263,11 @@ def svdTruncation(node: tn.Node, leftEdges: List[tn.Edge], rightEdges: List[tn.E
     [U, S, V, truncErr] = tn.split_node_full_svd(node, leftEdges, rightEdges, max_singular_values=maxBondDim, \
                                        left_name=leftName, right_name=rightName, \
                                        left_edge_name=leftEdgeName, right_edge_name=rightEdgeName)
+    if dir == '><' or dir == '>*<':
+        meaningful = sum(np.round(np.diag(S.tensor), 8) / S.tensor[0, 0] > 0)
+        S.tensor = S.tensor[:meaningful, :meaningful]
+        U.tensor = np.transpose(np.transpose(U.tensor)[:meaningful])
+        V.tensor = V.tensor[:meaningful]
     for e in S.edges:
         e.name = edgeName
     if dir == '>>':
