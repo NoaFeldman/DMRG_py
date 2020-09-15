@@ -2,7 +2,6 @@ from typing import Optional
 
 from scipy import linalg
 import numpy as np
-from tensornetwork import AbstractNode
 
 import basicOperations as bops
 import randomMeasurements as rm
@@ -121,6 +120,8 @@ def largestEigenvector(M, dir):
     w, v = largest_eigs(m, k=1)
     vTensor = np.reshape(v, [dim, dim])
     vTensor = (vTensor + np.conj(np.transpose(vTensor))) / 2
+    # # TODO just cheking
+    # vTensor = np.real(vTensor)
     res = tn.Node(vTensor, backend=None)
     norm = np.sqrt(bops.multiContraction(res,res,'01', '01*').tensor)
     return bops.multNode(res, 1 / norm), w
@@ -130,8 +131,13 @@ def bmpsRowStep(GammaL, LambdaL, GammaR, LambdaR, envOp):
     oldGammaL, oldLambdaL, oldGammaR, oldLambdaR = GammaL, LambdaL, GammaR, LambdaR
     theta1 = getTheta1(GammaL, LambdaL, GammaR, LambdaR, envOp)
     Mx = bops.multiContraction(theta1, theta1, '1234', '1234*')
-    vR, wx = largestEigenvector(Mx, '>>')
-    xvals, ux = np.linalg.eigh(vR.get_tensor())
+    xvals = [-1]
+    while max(np.abs(xvals) - xvals) > 1e-12:
+        vR, wx = largestEigenvector(Mx, '>>')
+        xvals, ux = np.linalg.eigh(vR.get_tensor())
+        xvals = np.round(xvals, 15)
+        if xvals[0] < 0:
+            xvals = -xvals
     xvals_sqrt = np.sqrt(xvals + 0j)
     xTensor = np.matmul(ux, np.diag(xvals_sqrt))
     X = tn.Node(xTensor)
@@ -140,14 +146,20 @@ def bmpsRowStep(GammaL, LambdaL, GammaR, LambdaR, envOp):
     XInverse = tn.Node(xInverseTensor)
     theta2 = getTheta2(GammaL, LambdaL, GammaR, LambdaR, envOp)
     My = bops.multiContraction(theta2, theta2, '1234', '1234*')
-    vL, wy = largestEigenvector(My, '<<')
-    yvals, uy = np.linalg.eigh(vL.get_tensor())
+    yvals = [-1]
+    while max(np.abs(yvals) - yvals) > 1e-12:
+        vL, wy = largestEigenvector(My, '<<')
+        yvals, uy = np.linalg.eigh(vL.get_tensor())
     yvals_sqrt = np.sqrt(yvals + 0j)
     yTensor = np.matmul(uy, np.diag(yvals_sqrt))
     Yt = tn.Node(yTensor)
     yValsInverseTensor = np.diag([1 / val for val in yvals_sqrt])
     yInverseTensor = np.matmul(yValsInverseTensor, np.conj(np.transpose(uy)))
     YtInverse = tn.Node(yInverseTensor)
+    # yTensor = np.transpose(X.tensor)
+    # Yt = tn.Node(yTensor)
+    # yInverseTensor = np.transpose(XInverse.tensor)
+    # YtInverse = tn.Node(yInverseTensor)
     Yt[0] ^ LambdaR[0]
     LambdaR[1] ^ X[0]
     newLambda = tn.contract_between(tn.contract_between(Yt, LambdaR), X)

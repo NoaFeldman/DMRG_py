@@ -41,10 +41,10 @@ peps.checkCannonization(GammaC, LambdaC, GammaD, LambdaD)
 
 steps = 50
 cUp, cDown, dUp, dDown = peps.getBMPSRowOps(GammaC, LambdaC, GammaD, LambdaD, AEnv, BEnv, steps)
-# np.save('/home/dima/PycharmProjects/DMRG_py/cUp', cUp.tensor)
-# np.save('/home/dima/PycharmProjects/DMRG_py/cDown', cDown.tensor)
-# np.save('/home/dima/PycharmProjects/DMRG_py/dUp', dUp.tensor)
-# np.save('/home/dima/PycharmProjects/DMRG_py/dDown', dDown.tensor)
+np.save('/home/dima/PycharmProjects/DMRG_py/cUp', cUp.tensor)
+np.save('/home/dima/PycharmProjects/DMRG_py/cDown', cDown.tensor)
+np.save('/home/dima/PycharmProjects/DMRG_py/dUp', dUp.tensor)
+np.save('/home/dima/PycharmProjects/DMRG_py/dDown', dDown.tensor)
 
 cUpTensor = np.load('/home/dima/PycharmProjects/DMRG_py/cUp.npy')
 cUp = tn.Node(cUpTensor)
