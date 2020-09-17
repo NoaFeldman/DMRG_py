@@ -13,6 +13,15 @@ def getLegsUnifierTensor(dim1, dim2):
             unifier[i, j, i * dim2 + j] = 1
     return unifier
 
+
+# Assumes unified legs are in consecutive order
+def unifyLegs(node: tn.Node, leg1: int, leg2: int, cleanOriginal=True):
+    unifier = getLegsUnifierTensor(node[leg1].dimension, node[leg2].dimension)
+    new = multiContraction(node, tn.Node(unifier), [leg1, leg2], '01',
+                                    cleanOriginal1=cleanOriginal, cleanOriginal2=True)
+    return permute(new, list(range(leg1)) + [len(new.edges) - 1] + list(range(leg2 - 1, len(new.edges) - 1)))
+
+
 def getStartupState(n, d=2, mode='general'):
     psi = [None] * n
     if mode == 'general':
@@ -213,7 +222,7 @@ def getNodeNorm(node):
     return np.sqrt(tn.contract_between(copy, copyConj).get_tensor())
 
 
-def multiContraction(node1: tn.Node, node2: tn.Node, edges1, edges2, nodeName=None, cleanOriginals=False):
+def multiContraction(node1: tn.Node, node2: tn.Node, edges1, edges2, nodeName=None, cleanOriginal1=False, cleanOriginal2=False) -> tn.Node:
     if node1 is None or node2 is None:
         return None
     if edges1[len(edges1) - 1] == '*':
@@ -228,8 +237,9 @@ def multiContraction(node1: tn.Node, node2: tn.Node, edges1, edges2, nodeName=No
         copy2 = copyState([node2])[0]
     for i in range(len(edges1)):
         copy1[int(edges1[i])] ^ copy2[int(edges2[i])]
-    if cleanOriginals:
+    if cleanOriginal1:
         tn.remove_node(node1)
+    if cleanOriginal2:
         tn.remove_node(node2)
     return tn.contract_between(copy1, copy2, name=nodeName)
 
