@@ -6,20 +6,21 @@ from typing import Any, Dict, List, Optional, Set, Text, Tuple, Union, \
     Sequence, Iterable, Type
 
 
-def getLegsUnifierTensor(dim1, dim2):
-    unifier = np.zeros((dim1, dim2, dim1 * dim2))
+def getLegsSplitterTensor(dim1, dim2):
+    splitter = np.zeros((dim1, dim2, dim1 * dim2))
     for i in range(dim1):
         for j in range(dim2):
-            unifier[i, j, i * dim2 + j] = 1
-    return unifier
+            splitter[i, j, i * dim2 + j] = 1
+    return splitter
 
 
 # Assumes unified legs are in consecutive order
-def unifyLegs(node: tn.Node, leg1: int, leg2: int, cleanOriginal=True):
-    unifier = getLegsUnifierTensor(node[leg1].dimension, node[leg2].dimension)
-    new = multiContraction(node, tn.Node(unifier), [leg1, leg2], '01',
-                                    cleanOriginal1=cleanOriginal, cleanOriginal2=True)
-    return permute(new, list(range(leg1)) + [len(new.edges) - 1] + list(range(leg2 - 1, len(new.edges) - 1)))
+def unifyLegs(node: tn.Node, leg1: int, leg2: int, cleanOriginal=True) -> tn.Node:
+    shape = node.get_tensor().shape
+    newTensor = np.reshape(node.get_tensor(), list(shape[:leg1]) + [shape[leg1] * shape[leg2]] + list(shape[leg2 + 1:]))
+    if cleanOriginal:
+        tn.remove_node(node)
+    return tn.Node(newTensor)
 
 
 def getStartupState(n, d=2, mode='general'):
@@ -223,6 +224,10 @@ def getNodeNorm(node):
 
 
 def multiContraction(node1: tn.Node, node2: tn.Node, edges1, edges2, nodeName=None, cleanOriginal1=False, cleanOriginal2=False) -> tn.Node:
+    """
+
+    :rtype: object
+    """
     if node1 is None or node2 is None:
         return None
     if edges1[len(edges1) - 1] == '*':
@@ -244,7 +249,7 @@ def multiContraction(node1: tn.Node, node2: tn.Node, edges1, edges2, nodeName=No
     return tn.contract_between(copy1, copy2, name=nodeName)
 
 
-def permute(node: tn.Node, permutation):
+def permute(node: tn.Node, permutation) -> tn.Node:
     if node is None:
         return None
     axisNames = []

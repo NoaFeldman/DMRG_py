@@ -22,4 +22,4 @@ GammaTensor = np.zeros((d, d, d), dtype=complex)
 GammaTensor[0, 0, 1] = 1
 GammaTensor[1, 1, 0] = 1
 LambdaTensor = np.eye(2, dtype=complex)
-peps.getBMPSRowOps(tn.Node(GammaTensor), tn.Node(LambdaTensor), tn.Node(GammaTensor), tn.Node(LambdaTensor), AEnv, AEnv, 50)
+c, d, cA, dB = peps.getBMPSRowOps(tn.Node(GammaTensor), tn.Node(LambdaTensor), tn.Node(GammaTensor), tn.Node(LambdaTensor), AEnv, AEnv, 50)
