@@ -266,7 +266,7 @@ def permute(node: tn.Node, permutation) -> tn.Node:
 
 
 def svdTruncation(node: tn.Node, leftEdges: List[tn.Edge], rightEdges: List[tn.Edge], \
-                  dir: str, maxBondDim=128, leftName='U', rightName='V',  edgeName='default'):
+                  dir: str, maxBondDim=128, leftName='U', rightName='V',  edgeName='default', normalize=False, maxTrunc=8):
     maxBondDim = getAppropriateMaxBondDim(maxBondDim, leftEdges, rightEdges)
     if dir == '>>':
         leftEdgeName = edgeName
@@ -278,11 +278,14 @@ def svdTruncation(node: tn.Node, leftEdges: List[tn.Edge], rightEdges: List[tn.E
     [U, S, V, truncErr] = tn.split_node_full_svd(node, leftEdges, rightEdges, max_singular_values=maxBondDim, \
                                        left_name=leftName, right_name=rightName, \
                                        left_edge_name=leftEdgeName, right_edge_name=rightEdgeName)
-    if dir == '><' or dir == '>*<':
-        meaningful = sum(np.round(np.diag(S.tensor), 8) / S.tensor[0, 0] > 0)
+    norm = np.sqrt(sum(np.diag(S.tensor)**2))
+    if maxTrunc > 0:
+        meaningful = sum(np.round(np.diag(S.tensor) / norm, maxTrunc) / S.tensor[0, 0] > 0)
         S.tensor = S.tensor[:meaningful, :meaningful]
         U.tensor = np.transpose(np.transpose(U.tensor)[:meaningful])
         V.tensor = V.tensor[:meaningful]
+    if normalize:
+        S = multNode(S, 1 / norm)
     for e in S.edges:
         e.name = edgeName
     if dir == '>>':

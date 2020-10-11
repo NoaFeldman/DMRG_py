@@ -29,6 +29,8 @@ def getTheta(baseTheta, lambdaB, bmpsOption, thetaType) -> tn.Node:
         else:
             Theta = baseTheta
         Theta = bops.unifyLegs(bops.unifyLegs(Theta, 0, 1, cleanOriginal=False), 3, 4)
+        if 0 in Theta.tensor.shape:
+            b = 1
         return Theta
     elif bmpsOption == 'diagonal':
         # TODO
@@ -97,20 +99,18 @@ def lanczos(M, dir):
         res = curr
     return res
 
-
+from scipy.sparse.linalg import eigs as largest_eigs
 def largestEigenvector(M, dir):
-    from scipy.sparse.linalg import eigs as largest_eigs
-    dim = M.edges[0].dimension
     if dir == '>>':
+        dim = M[1].dimension
         transposeInds = [0, 2, 1, 3]
     else:
+        dim = M[0].dimension
         transposeInds = [1, 3, 0, 2]
-    m = np.reshape(np.transpose(M.tensor, transposeInds), [dim**2, dim**2])
+    m = np.reshape(np.transpose(M.tensor, transposeInds), [M[0].dimension * M[1].dimension, M[0].dimension * M[1].dimension])
     w, v = largest_eigs(m, k=1)
     vTensor = np.reshape(v, [dim, dim])
     vTensor = (vTensor + np.conj(np.transpose(vTensor))) / 2
-    # # TODO just cheking
-    # vTensor = np.real(vTensor)
     res = tn.Node(vTensor, backend=None)
     norm = np.sqrt(bops.multiContraction(res,res,'01', '01*').tensor)
     return bops.multNode(res, 1 / norm), w
@@ -122,7 +122,9 @@ def bmpsRowStep(GammaL, LambdaL, GammaR, LambdaR, envOp, option):
     theta1 = getTheta(baseTheta, LambdaR, option, thetaType=1)
     Mx = bops.multiContraction(theta1, theta1, '12', '12*')
     xvals = [-1]
-    while max(np.abs(xvals) - xvals) > 1e-12 or min(np.abs(xvals)) < 1e-8:
+    while max(np.abs(xvals) - xvals) > 1e-12:
+        mx = np.reshape(np.transpose(Mx.tensor, [0, 2, 1, 3]), [Mx[0].dimension**2, Mx[0].dimension**2])
+        v = np.sort(np.round(np.linalg.eigvals(mx), 4))
         vR, wx = largestEigenvector(Mx, '>>')
         xvals, ux = np.linalg.eigh(vR.get_tensor())
         xvals = np.round(xvals, 15)
@@ -141,10 +143,13 @@ def bmpsRowStep(GammaL, LambdaL, GammaR, LambdaR, envOp, option):
     while max(np.abs(yvals) - yvals) > 1e-12:
         vL, wy = largestEigenvector(My, '<<')
         yvals, uy = np.linalg.eigh(vL.get_tensor())
+        yvals = np.round(yvals, 15)
+        if yvals[0] < 0:
+            yvals = -yvals
     yvals_sqrt = np.sqrt(yvals + 0j)
     yTensor = np.matmul(uy, np.diag(yvals_sqrt))
     Yt = tn.Node(yTensor)
-    yValsInverseTensor = np.diag([1 / val for val in yvals_sqrt])
+    yValsInverseTensor = np.diag([1 / val if val > 1e-12 else 0 for val in yvals_sqrt])
     yInverseTensor = np.matmul(yValsInverseTensor, np.conj(np.transpose(uy)))
     YtInverse = tn.Node(yInverseTensor)
     splitterRight = tn.Node(bops.getLegsSplitterTensor(baseTheta[0].dimension, baseTheta[1].dimension))
@@ -189,24 +194,7 @@ def bmpsRowStep(GammaL, LambdaL, GammaR, LambdaR, envOp, option):
     return GammaL, LambdaL, GammaR, LambdaR
 
 
-def checkCannonization(GammaC, LambdaC, GammaD, LambdaD):
-    c = bops.multiContraction(GammaC, LambdaC, '2', '0')
-    id = np.round(bops.multiContraction(c, c, '12', '12*').tensor, 3)
-    if not (np.all(np.diag(np.diag(id)) == id) and set(np.diag(id)).issubset({0, 1})):
-        return False
-    c = bops.multiContraction(LambdaD, GammaC, '1', '0')
-    id = np.round(bops.multiContraction(c, c, '01', '01*').tensor, 3)
-    if not (np.all(np.diag(np.diag(id)) == id) and set(np.diag(id)).issubset({0, 1})):
-        return False
-    c = bops.multiContraction(GammaD, LambdaD, '2', '0')
-    id = np.round(bops.multiContraction(c, c, '12', '12*').tensor, 3)
-    if not (np.all(np.diag(np.diag(id)) == id) and set(np.diag(id)).issubset({0, 1})):
-        return False
-    c = bops.multiContraction(LambdaC, GammaD, '1', '0')
-    id = np.round(bops.multiContraction(c, c, '01', '01*').tensor, 3)
-    if not (np.all(np.diag(np.diag(id)) == id) and set(np.diag(id)).issubset({0, 1})):
-        return False
-    return True
+# TODO diagonal matrices -> vectors
 
 
 def myBmpsRowStep(gammaL, lambdaMid, gammaR, lambdaSide, envOp):
@@ -214,33 +202,39 @@ def myBmpsRowStep(gammaL, lambdaMid, gammaR, lambdaSide, envOp):
                 lambdaSide, gammaL, '1', '0'),
                 lambdaMid, '2', '0', cleanOriginal1=True, cleanOriginal2=True),
                 gammaR, '2', '0', cleanOriginal1=True, cleanOriginal2=True),
-                lambdaSide, '3', '0', cleanOriginal1=True, cleanOriginal2=True)
+                lambdaSide, '3', '0', cleanOriginal1=True)
     opRow = bops.permute(bops.multiContraction(row, envOp, '12', '01', cleanOriginal1=True), [0, 2, 4, 5, 1, 3])
-    opRow = bops.unifyLegs(bops.unifyLegs(opRow, 4, 5), 0, 1)
-    [U, lambdaSide, V, truncErr] = bops.svdTruncation(opRow, [opRow[0], opRow[1]], [opRow[2], opRow[3]], dir='>*<', maxBondDim=chi)
-    lambdaSide = bops.multNode(lambdaSide, 1 / np.sqrt(sum(np.power(np.diag(lambdaSide.tensor), 2))))
-    sV = bops.multiContraction(lambdaSide, V, '1', '0')
-    temp = bops.multiContraction(sV, sV, '01', '01*')
-    lambdaL = np.diag(np.sqrt(np.diag(temp.tensor + 0j)))
-    lambdaLInverse = np.diag(np.array([1 / v for v in np.diag(lambdaL)]))
-    gammaL = bops.multiContraction(V, tn.Node(lambdaLInverse), '2', '0', cleanOriginal1=True, cleanOriginal2=True)
-    uS = bops.multiContraction(U, lambdaSide, '2', '0')
-    temp2 = bops.multiContraction(uS, uS, '12', '12*')
-    lambdaR = np.diag(np.sqrt(np.diag(temp2.tensor + 0j)))
-    lambdaRInverse = np.diag(np.array([1 / v for v in np.diag(lambdaR)]))
-    gammaR = bops.multiContraction(tn.Node(lambdaRInverse), U, '1', '0', cleanOriginal1=True, cleanOriginal2=True)
-    lambdaMid = bops.multiContraction(tn.Node(lambdaR), tn.Node(lambdaL), '1', '0', cleanOriginal1=True, cleanOriginal2=True)
-    lambdaMid = bops.multNode(lambdaMid, 1 / np.sqrt(sum(np.power(np.diag(lambdaMid.tensor), 2))))
-    return gammaL, lambdaMid, gammaR, lambdaSide
+    [U, S, V, truncErr] = bops.svdTruncation(opRow, [opRow[0], opRow[1], opRow[2]], [opRow[3], opRow[4], opRow[5]], dir='>*<', maxBondDim=chi)
+    newLambdaMid = bops.multNode(S, 1 / np.sqrt(sum(np.diag(S.tensor)**2)))
+    lambdaSideInv = tn.Node(np.diag([1 / val if val > 1e-15 else 0 for val in np.diag(lambdaSide.tensor)]))
+    newGammaL = bops.multiContraction(lambdaSideInv, U, '1', '0', cleanOriginal2=True)
+    splitter = tn.Node(bops.getLegsSplitterTensor(newGammaL[0].dimension, newGammaL[1].dimension))
+    newGammaL = bops.unifyLegs(newGammaL, 0, 1)
+    newGammaR = bops.multiContraction(V, lambdaSideInv, '2', '0', cleanOriginal1=True, cleanOriginal2=True)
+    newGammaR = bops.unifyLegs(newGammaR, 2, 3)
+    newLambdaSide = bops.multiContraction(bops.multiContraction(lambdaSide, splitter, '1', '0', cleanOriginal1=True),
+                                          splitter, '01', '01', cleanOriginal1=True, cleanOriginal2=True)
+    return newGammaL, newLambdaMid, newGammaR, newLambdaSide
 
+def fidelity(rho, sigma):
+    if np.all(np.round(rho, 13) == np.round(sigma, 13)):
+        return 1
+    vals, u = np.linalg.eigh(rho)
+    vals = vals.astype('complex')
+    vals = np.sqrt(vals)
+    uSigmaU = np.matmul(np.conj(np.transpose(u)), np.matmul(sigma, u))
+    sqrtRhoSig = np.array([uSigmaU[i] * vals[i] for i in range(len(vals))])
+    toTrace = np.transpose(np.array([sqrtRhoSig[:, i] * vals[i] for i in range(len(vals))]))
+    vals = np.linalg.eigvalsh(toTrace)
+    return sum(np.sqrt(vals))**2
 
 
 def checkConvergence(oldGammaC, oldLambdaC, oldGammaD, oldLambdaD, GammaC, LambdaC, GammaD, LambdaD, d):
-    dmC = getRowDM(GammaC, LambdaC, GammaD, LambdaD, 1, d)
-    oldDmC = getRowDM(oldGammaC, oldLambdaC, oldGammaD, oldLambdaD, 1, d)
-    dmD = getRowDM(GammaD, LambdaD, GammaC, LambdaC, 1, d)
-    oldDmD = getRowDM(oldGammaD, oldLambdaD, oldGammaC, oldLambdaC, 1, d)
-    return max(map(max, dmC - oldDmC)) / max(map(max, dmC)), max(map(max, dmD - oldDmD)) / max(map(max, dmD))
+    dmC = np.round(getRowDM(GammaC, LambdaC, GammaD, LambdaD, 0, d), 16)
+    oldDmC = np.round(getRowDM(oldGammaC, oldLambdaC, oldGammaD, oldLambdaD, 0, d), 16)
+    dmD = np.round(getRowDM(GammaD, LambdaD, GammaC, LambdaC, 0, d), 16)
+    oldDmD = np.round(getRowDM(oldGammaD, oldLambdaD, oldGammaC, oldLambdaC, 0, d), 16)
+    return fidelity(dmC, oldDmC), fidelity(dmD, oldDmD)
 
 
 def getRowDM(GammaL, LambdaL, GammaR, LambdaR, sites, d):
@@ -252,119 +246,101 @@ def getRowDM(GammaL, LambdaL, GammaR, LambdaR, sites, d):
         row = bops.multiContraction(row, GammaR, [len(row.edges) - 1], [0])
         row = bops.multiContraction(row, LambdaR, [len(row.edges) - 1], [0])
     dm = bops.multiContraction(row, row, [0, len(row.edges) - 1], [0, len(row.edges) - 1, '*'])
-    return np.reshape(dm.tensor, [d**(2 + 2 * sites), d**(2 + 2 * sites)])
+    rho = np.reshape(dm.tensor, [d**(2 * (2 + 2 * sites)), d**(2 * (2 + 2 * sites))])
+    return rho / np.trace(rho)
 
 
-def getBMPSRowOps(GammaC, LambdaC, GammaD, LambdaD, AEnv, BEnv, steps, option='horizontal'):
+def getBMPSRowOps(GammaC, LambdaC, GammaD, LambdaD, AEnv, BEnv, steps, tilingOption='horizontal', sideOption='up'):
     convergence = []
-    if option == 'horizontal':
+    if tilingOption == 'horizontal':
         envOpAB = bops.permute(bops.multiContraction(AEnv, BEnv, '1', '3'), [0, 3, 2, 4, 1, 5])
-        # envOpBA = bops.permute(bops.multiContraction(BEnv, AEnv, '1', '3'), [0, 3, 2, 4, 1, 5])
-    for i in range(2 * steps):
+        envOpBA = bops.permute(bops.multiContraction(BEnv, AEnv, '1', '3'), [0, 3, 2, 4, 1, 5])
+        if sideOption == 'down':
+            envOpAB = bops.permute(envOpAB, [4, 5, 2, 3, 0, 1])
+            envOpBA = bops.permute(envOpBA, [4, 5, 2, 3, 0, 1])
+        if sideOption == 'up':
+            op = envOpAB
+        else:
+            op = envOpBA
+        b = 1
+    for i in range(steps):
         oldGammaC, oldLambdaC, oldGammaD, oldLambdaD = GammaC, LambdaC, GammaD, LambdaD
-        if option == 'horizontal':
-            GammaD, LambdaD, GammaC, LambdaC = myBmpsRowStep(GammaC, LambdaC, GammaD, LambdaD, envOpAB)
-            GammaC, LambdaC, GammaD, LambdaD = myBmpsRowStep(GammaD, LambdaD, GammaC, LambdaC, envOpAB)
-            # GammaC, LambdaC, GammaD, LambdaD = bmpsRowStep(GammaC, LambdaC, GammaD, LambdaD, envOpAB, option)
-            # GammaD, LambdaD, GammaC, LambdaC = bmpsRowStep(GammaD, LambdaD, GammaC, LambdaC, envOpAB, option)
-        elif option == 'diagonal':
-            GammaC, LambdaC, GammaD, LambdaD = bmpsRowStep(GammaC, LambdaC, GammaD, LambdaD, AEnv, option)
-            GammaD, LambdaD, GammaC, LambdaC = bmpsRowStep(GammaD, LambdaD, GammaC, LambdaC, BEnv, option)
+        if tilingOption == 'horizontal':
+            GammaC, LambdaC, GammaD, LambdaD = myBmpsRowStep(GammaC, LambdaC, GammaD, LambdaD, op)
+            GammaD, LambdaD, GammaC, LambdaC = myBmpsRowStep(GammaD, LambdaD, GammaC, LambdaC, op)
+        elif tilingOption == 'diagonal':
+            GammaC, LambdaC, GammaD, LambdaD = bmpsRowStep(GammaC, LambdaC, GammaD, LambdaD, AEnv, tilingOption)
+            GammaD, LambdaD, GammaC, LambdaC = bmpsRowStep(GammaD, LambdaD, GammaC, LambdaC, BEnv, tilingOption)
+        if i > 0:
+            convergence.append(
+                checkConvergence(oldGammaC, oldLambdaC, oldGammaD, oldLambdaD, GammaC, LambdaC, GammaD, LambdaD, 2))
         bops.removeState([oldGammaC, oldLambdaC, oldGammaD, oldLambdaD])
-        convergence.append(checkConvergence(oldGammaC, oldLambdaC, oldGammaD, oldLambdaD, GammaC, LambdaC, GammaD, LambdaD, 2))
 
     # TODO compare density matrices as a convergence step. Find a common way to do this for iMPS.
     # TODO (for toric code, did it manually and it works)
-    if option == 'diagonal':
+    if tilingOption == 'diagonal':
         cUp = bops.multiContraction(GammaD, LambdaD, '3', '0')
         dUp = bops.multiContraction(GammaC, LambdaC, '3', '0')
         oldGammaC, oldLambdaC, oldGammaD, oldLambdaD = GammaC, LambdaC, GammaD, LambdaD
-        GammaC, LambdaC, GammaD, LambdaD = bmpsRowStep(GammaC, LambdaC, GammaD, LambdaD, AEnv, option)
+        GammaC, LambdaC, GammaD, LambdaD = bmpsRowStep(GammaC, LambdaC, GammaD, LambdaD, AEnv, tilingOption)
         cDown = bops.multiContraction(GammaD, LambdaD, '3', '0')
         dDown = bops.multiContraction(GammaC, LambdaC, '3', '0')
         bops.removeState([GammaC, LambdaC, GammaD, LambdaD, oldGammaC, oldLambdaC, oldGammaD, oldLambdaD])
         return cUp, cDown, dUp, dDown
-    if option == 'horizontal':
-        c = bops.multiContraction(GammaC, LambdaC, '2', '0')
-        d = bops.multiContraction(GammaD, LambdaD, '2', '0')
-        GammaC, LambdaC, GammaD, LambdaD = bmpsRowStep(GammaC, LambdaC, GammaD, LambdaD, envOpAB, option)
-        cA = bops.multiContraction(GammaC, LambdaC, '2', '0')
-        dB = bops.multiContraction(GammaD, LambdaD, '2', '0')
+    if tilingOption == 'horizontal':
+        cUp = bops.multiContraction(GammaC, LambdaC, '2', '0')
+        dUp = bops.multiContraction(GammaD, LambdaD, '2', '0')
+        GammaC, LambdaC, GammaD, LambdaD = myBmpsRowStep(GammaC, LambdaC, GammaD, LambdaD, op)
+        cDown = bops.multiContraction(GammaC, LambdaC, '2', '0')
+        dDown = bops.multiContraction(GammaD, LambdaD, '2', '0')
         bops.removeState([GammaC, LambdaC, GammaD, LambdaD, oldGammaC, oldLambdaC, oldGammaD, oldLambdaD])
-        return c, d, cA, dB
+        return cUp, dUp, cDown, dDown
 
 # Start with a 2*2 DM, increase later
-def bmpsCols(c, d, cA, dB, AEnv, BEnv, steps):
+def bmpsCols(cUp: tn.Node, dUp: tn.Node, cDown: tn.Node, dDown: tn.Node, AEnv: tn.Node, BEnv: tn.Node, steps,
+                 option='right'):
     envOpAB = bops.permute(bops.multiContraction(AEnv, BEnv, '1', '3'), [0, 3, 2, 4, 1, 5])
     envOpBA = bops.permute(bops.multiContraction(BEnv, AEnv, '1', '3'), [0, 3, 2, 4, 1, 5])
-    row = bops.multiContraction(c, d, '2', '0') # C and D expect the reversed order of AB, but this is just some startup state anyway
+    upRow = bops.multiContraction(cUp, dUp, '2', '0')
+    downRow = bops.multiContraction(cDown, dDown, '2', '0')
+    if option == 'right':
+        X = tn.Node(np.ones((upRow[3].dimension, envOpAB[3].dimension, envOpBA[3].dimension, downRow[3].dimension),
+                            dtype=complex))
+    else:
+        X = tn.Node(np.ones((downRow[0].dimension, envOpBA[2].dimension, envOpAB[2].dimension, upRow[0].dimension),
+                            dtype=complex))
     for i in range(steps):
-        row = bops.multiContraction(bops.multiContraction(d, row, '2', '0', cleanOriginal1=True, cleanOriginal2=True),
-                                    c, '4', '0', cleanOriginal1=True, cleanOriginal2=True)
-        row = bops.permute(bops.multiContraction(row, envOpBA, '2314', '0123', cleanOriginal1=True, cleanOriginal2=True),
-                           [0, 2, 3, 1])
-        row = bops.multiContraction(bops.multiContraction(c, row, '2', '0', cleanOriginal1=True, cleanOriginal2=True),
-                                    d, '4', '0', cleanOriginal1=True, cleanOriginal2=True)
-        row = bops.permute(bops.multiContraction(row, envOpAB, '2314', '0123', cleanOriginal1=True, cleanOriginal2=True),
-                           [0, 2, 3, 1])
-        norm = np.sqrt(bops.multiContraction(row, row, '0123', '3210').tensor)
-        row = bops.multNode(row, 1 / norm)
-    return row
+        if option == 'right':
+            X = bops.multiContraction(upRow, X, '3', '0', cleanOriginal1=True, cleanOriginal2=True)
+            X = bops.multiContraction(X, downRow, '5', '3', cleanOriginal1=True, cleanOriginal2=True)
+            X = bops.multiContraction(X, envOpAB, '123', '013', cleanOriginal1=True)
+            X = bops.multiContraction(X, envOpBA, '67134', '01345', cleanOriginal1=True)
+            X = bops.permute(X, [0, 2, 3, 1])
+        else:
+            X = bops.multiContraction(downRow, X, '0', '0', cleanOriginal1=True, cleanOriginal2=True)
+            X = bops.multiContraction(X, upRow, '5', '0', cleanOriginal1=True, cleanOriginal2=True)
+            X = bops.multiContraction(X, envOpAB, '456', '201', cleanOriginal1=True)
+            X = bops.multiContraction(X, envOpBA, '67301', '01245')
+            X = bops.permute(X, [0, 3, 2, 1])
+        norm = np.sqrt(bops.multiContraction(X, X, '0123', '0123*').tensor)
+        X = bops.multNode(X, 1 / norm)
+    return X
 
 
-def bmpsDensityMatrix(c, d, cA, dB, AEnv, BEnv, A, B, steps):
-    upRow = bmpsCols(c, d, cA, dB, AEnv, BEnv, steps)
-    sideRow = bops.multiContraction(c, d, '2', '0')
-    LShape = bops.multiContraction(sideRow, upRow, '3', '0', cleanOriginal1=True, cleanOriginal2=True)
-    circle = bops.multiContraction(LShape, LShape, '05', '05', cleanOriginal1=True)
+def bmpsDensityMatrix(cUp, dUp, cDown, dDown, AEnv, BEnv, A, B, steps):
+    rightRow = bmpsCols(cUp, dUp, cDown, dDown, AEnv, BEnv, steps, 'right')
+    leftRow = bmpsCols(cUp, dUp, cDown, dDown, AEnv, BEnv, steps, 'left')
+    upRow = bops.multiContraction(cUp, dUp, '2', '0')
+    downRow = bops.multiContraction(cDown, dDown, '2', '0')
+    circle = bops.multiContraction(
+        bops.multiContraction(bops.multiContraction(leftRow, upRow, '3', '0'), rightRow, '5', '0'),
+        downRow, '07', '03')
     ABNet = bops.permute(bops.multiContraction(bops.multiContraction(B, A, '2', '4'),
                                   bops.multiContraction(A, B, '2', '4'), '28', '16', cleanOriginal2=True, cleanOriginal1=True),
-                         [1, 5, 6, 13, 14, 9, 10, 2, 0, 4, 8, 12, 3, 7, 11, 15])
-    dm = bops.multiContraction(circle, ABNet, '01234567', '01234567', cleanOriginal1=True, cleanOriginal2=True)
+                         [2, 10, 9, 13, 14, 5, 1, 6, 0, 4, 8, 12, 3, 7, 11, 15])
+    dm = bops.multiContraction(circle, ABNet, '23140567', '01234567', cleanOriginal1=True, cleanOriginal2=True)
+
+    ordered = np.round(np.reshape(dm.tensor, [16,  16]), 13)
+    ordered = ordered / np.trace(ordered)
     return dm
-
-
-
-# def bmpsColStepA(X, cUp, cDown, dUp, dDown, AEnv, BEnv):
-#     dx = bops.multiContraction(dUp, X, '3', '0')
-#     dxd = bops.multiContraction(dx, dDown, '5', '3')
-#     dxdB = bops.multiContraction(dxd, BEnv, '3467', '2367')
-#     cdxdB = bops.multiContraction(cUp, dxdB, '3', '0')
-#     cdxdBA = bops.multiContraction(cdxdB, AEnv, '123467', '012367')
-#     final = bops.multiContraction(cdxdBA, cDown, '123', '312')
-#     bops.removeState([dx, dxd, dxdB, cdxdB, cdxdBA])
-#     return final
-#
-#
-# def bmpsColStepB(X, cUp, cDown, dUp, dDown, AEnv, BEnv):
-#     cx = bops.multiContraction(cDown, X, '0', '0')
-#     cxc = bops.multiContraction(cx, cUp, '5', '0')
-#     cxcA = bops.multiContraction(cxc, AEnv, '3456', '4501')
-#     dcxcA = bops.multiContraction(dDown, cxcA, '0', '2')
-#     dcxcAB = bops.multiContraction(dcxcA, BEnv, '893401', '014567')
-#     final = bops.multiContraction(dcxcAB, dUp, '123', '012')
-#     bops.removeState([cx, cxc, cxcA, dcxcA, dcxcAB])
-#     return final
-#
-#
-# def getBMPSSiteOps(steps, Xa, Xb, cUp, cDown, dUp, dDown, AEnv, BEnv):
-#     xatests = [0] * steps
-#     xbtests = [0] * steps
-#     for i in range(steps):
-#         xbForm = Xb
-#         Xb = bmpsColStepB(Xb, cUp, cDown, dUp, dDown, AEnv, BEnv)
-#         xaForm = Xa
-#         Xa = bmpsColStepA(Xa, cUp, cDown, dUp, dDown, AEnv, BEnv)
-#         norm = np.sqrt(bops.multiContraction(Xa, Xb, '0123', '3120').tensor)
-#         Xa = bops.multNode(Xa, 1 / norm)
-#         Xb = bops.multNode(Xb, 1 / norm)
-#         xatests[i] = bops.multiContraction(xaForm, Xa, '0123', '0123*').tensor * 1
-#         xbtests[i] = bops.multiContraction(xbForm, Xb, '0123', '0123*').tensor * 1
-#         # dm = np.reshape(getDM(Xa, Xb).tensor, [4, 4])
-#         # dmForm = np.reshape(getDM(xaForm, xbForm).tensor, [4, 4])
-#         if i == steps - 2:
-#             b = 1
-#         tn.remove_node(xaForm)
-#         tn.remove_node(xbForm)
-#     return Xa, Xb
 
