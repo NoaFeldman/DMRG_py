@@ -109,14 +109,14 @@ b=1
 def applySwap(psi, psiP, startInd, endInd):
     psiDagger = bops.copyState(psi, conj=True)
     psiPDagger = bops.copyState(psi, conj=True)
-    curr = bops.multiContraction(psi[startInd], psiDagger[startInd], [0], [0], cleanOriginals=True)
-    currP = bops.multiContraction(psiP[startInd], psiPDagger[startInd], [0], [0], cleanOriginals=True)
+    curr = bops.multiContraction(psi[startInd], psiDagger[startInd], [0], [0])
+    currP = bops.multiContraction(psiP[startInd], psiPDagger[startInd], [0], [0])
     curr = bops.multiContraction(curr, currP, [2, 0], [0, 2])
     for i in range(startInd + 1, endInd + 1):
-        curr = bops.multiContraction(curr, psi[i], [0], [0], cleanOriginals=True)
-        curr = bops.multiContraction(curr, psiDagger[i], [0], [0], cleanOriginals=True)
-        curr = bops.multiContraction(curr, psiP[i], [0, 4], [0, 1], cleanOriginals=True)
-        curr = bops.multiContraction(curr, psiPDagger[i], [0, 1], [0, 1], cleanOriginals=True)
+        curr = bops.multiContraction(curr, psi[i], [0], [0])
+        curr = bops.multiContraction(curr, psiDagger[i], [0], [0])
+        curr = bops.multiContraction(curr, psiP[i], [0, 4], [0, 1])
+        curr = bops.multiContraction(curr, psiPDagger[i], [0, 1], [0, 1])
     bops.removeState(psiPDagger)
     bops.removeState(psiPDagger)
     return curr
@@ -131,17 +131,17 @@ def applyO(psi, psiP, startInd, endInd):
             OTensor[i * 3 + i, j * 3 + j] = 1
     OTensor = np.reshape(OTensor, [3, 3, 3, 3])
     O = tn.Node(OTensor, name='O', backend=None)
-    curr = bops.multiContraction(psi[endInd], psiDagger[endInd], [2], [2], cleanOriginals=True)
-    currP = bops.multiContraction(psiP[endInd], psiPDagger[endInd], [2], [2], cleanOriginals=True)
-    curr = bops.multiContraction(curr, O, [1, 3], [1, 3], cleanOriginals=True)
-    curr = bops.multiContraction(curr, currP, [2, 3], [1, 3], cleanOriginals=True)
+    curr = bops.multiContraction(psi[endInd], psiDagger[endInd], [2], [2])
+    currP = bops.multiContraction(psiP[endInd], psiPDagger[endInd], [2], [2])
+    curr = bops.multiContraction(curr, O, [1, 3], [1, 3])
+    curr = bops.multiContraction(curr, currP, [2, 3], [1, 3])
     for i in [endInd - j for j in range(1, endInd - startInd + 1)]:
         O = tn.Node(OTensor, name='O', backend=None)
-        curr = bops.multiContraction(curr, psi[i], [0], [2], cleanOriginals=True)
-        curr = bops.multiContraction(curr, psiDagger[i], [0], [2], cleanOriginals=True)
-        curr = bops.multiContraction(curr, O, [3, 5], [1, 3], cleanOriginals=True)
-        curr = bops.multiContraction(curr, psiP[i], [0, 4], [2, 1], cleanOriginals=True)
-        curr = bops.multiContraction(curr, psiPDagger[i], [0, 3], [2, 1], cleanOriginals=True)
+        curr = bops.multiContraction(curr, psi[i], [0], [2])
+        curr = bops.multiContraction(curr, psiDagger[i], [0], [2])
+        curr = bops.multiContraction(curr, O, [3, 5], [1, 3])
+        curr = bops.multiContraction(curr, psiP[i], [0, 4], [2, 1])
+        curr = bops.multiContraction(curr, psiPDagger[i], [0, 3], [2, 1])
     bops.removeState(psiPDagger)
     bops.removeState(psiPDagger)
     return curr
@@ -162,7 +162,7 @@ for m in range(M):
         psiPCopy[i] = bops.permute(tn.contract_between(psiPCopy[i], U), [0, 2, 1])
     swapped = applySwap(psiCopy, psiPCopy, A1[0], A1[-1])
     Oed = applyO(psi, psiP, A2[0], A2[-1])
-    mySamples[m] = bops.multiContraction(swapped, Oed, [0, 1, 2, 3], [0, 1, 2, 3], cleanOriginals=True).tensor
+    mySamples[m] = bops.multiContraction(swapped, Oed, [0, 1, 2, 3], [0, 1, 2, 3]).tensor
     bops.removeState(psiCopy)
     bops.removeState(psiPCopy)
 

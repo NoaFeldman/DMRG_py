@@ -31,8 +31,8 @@ def getDensityMatrix(psi, A1Start, A1End, A2Start, A2End):
     E2 = getEMatrix(psiCopy, A2Start, A2End)
     N2, N2bar = getNMatrices(E2, 2)
     N2bar.edges[0].name += '*'
-    res = bops.multiContraction(bops.multiContraction(N1, N1bar, [0], [1]),
-                                bops.multiContraction(N2, N2bar, [1], [2]), [0, 3], [0, 3])
+    res = bops.multiContraction(bops.multiContraction(N1, N1bar, [0], [1]), bops.multiContraction(N2, N2bar, [1], [2]),
+                                [0, 3], [0, 3])
     bops.removeState(psiCopy)
     return res
 

@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, Set, Text, Tuple, Union, \
 
 
 def getLegsSplitterTensor(dim1, dim2):
-    splitter = np.zeros((dim1, dim2, dim1 * dim2))
+    splitter = np.zeros((dim1, dim2, dim1 * dim2), dtype=complex)
     for i in range(dim1):
         for j in range(dim2):
             splitter[i, j, i * dim2 + j] = 1
@@ -184,7 +184,7 @@ def printNode(node):
     print(node.tensor.shape)
 
 
-def copyState(psi, conj=False):
+def copyState(psi, conj=False) -> List[tn.Node]:
     result = list(tn.copy(psi, conjugate=conj)[0].values())
     if conj:
         for node in result:
@@ -223,11 +223,8 @@ def getNodeNorm(node):
     return np.sqrt(tn.contract_between(copy, copyConj).get_tensor())
 
 
-def multiContraction(node1: tn.Node, node2: tn.Node, edges1, edges2, nodeName=None, cleanOriginal1=False, cleanOriginal2=False) -> tn.Node:
-    """
-
-    :rtype: object
-    """
+def multiContraction(node1: tn.Node, node2: tn.Node, edges1, edges2, nodeName=None,
+                     cleanOr1=False, cleanOr2=False, isDiag1=False, isDiag2=False) -> tn.Node:
     if node1 is None or node2 is None:
         return None
     if edges1[len(edges1) - 1] == '*':
@@ -240,13 +237,30 @@ def multiContraction(node1: tn.Node, node2: tn.Node, edges1, edges2, nodeName=No
         edges2 = edges2[0:len(edges2) - 1]
     else:
         copy2 = copyState([node2])[0]
+
+    if cleanOr1:
+        tn.remove_node(node1)
+    if cleanOr2:
+        tn.remove_node(node2)
+    if isDiag1 and isDiag2:
+        return tn.Node(copy1.tensor * copy2.tensor)
+    elif isDiag1 and not isDiag2:
+        return contractDiag(copy2, copy1.tensor, int(edges2[0]))
+    elif isDiag2 and not isDiag1:
+        return contractDiag(copy1, copy2.tensor, int(edges1[0]))
     for i in range(len(edges1)):
         copy1[int(edges1[i])] ^ copy2[int(edges2[i])]
-    if cleanOriginal1:
-        tn.remove_node(node1)
-    if cleanOriginal2:
-        tn.remove_node(node2)
     return tn.contract_between(copy1, copy2, name=nodeName)
+
+
+def contractDiag(node: tn.Node, diag: np.array, edgeNum: int):
+    node.tensor = np.transpose(node.tensor,
+                               [edgeNum] + [i for i in range(len(node.edges)) if i != edgeNum])
+    for i in range(node[0].dimension):
+        node.tensor[i] *= diag[i]
+    node.tensor = np.transpose(node.tensor,
+                               list(range(1, edgeNum + 1)) + [0] + list(range(edgeNum + 1, len(node.edges))))
+    return node
 
 
 def permute(node: tn.Node, permutation) -> tn.Node:
@@ -265,9 +279,10 @@ def permute(node: tn.Node, permutation) -> tn.Node:
     return result
 
 
-def svdTruncation(node: tn.Node, leftEdges: List[tn.Edge], rightEdges: List[tn.Edge], \
+def svdTruncation(node: tn.Node, leftEdges: List[int], rightEdges: List[int],
                   dir: str, maxBondDim=128, leftName='U', rightName='V',  edgeName='default', normalize=False, maxTrunc=8):
-    maxBondDim = getAppropriateMaxBondDim(maxBondDim, leftEdges, rightEdges)
+    maxBondDim = getAppropriateMaxBondDim(maxBondDim,
+                                          [node.edges[e] for e in leftEdges], [node.edges[e] for e in rightEdges])
     if dir == '>>':
         leftEdgeName = edgeName
         rightEdgeName = None
@@ -275,13 +290,17 @@ def svdTruncation(node: tn.Node, leftEdges: List[tn.Edge], rightEdges: List[tn.E
         leftEdgeName = None
         rightEdgeName = edgeName
 
-    [U, S, V, truncErr] = tn.split_node_full_svd(node, leftEdges, rightEdges, max_singular_values=maxBondDim, \
-                                       left_name=leftName, right_name=rightName, \
+    [U, S, V, truncErr] = tn.split_node_full_svd(node, [node.edges[e] for e in leftEdges],
+                                                 [node.edges[e] for e in rightEdges], max_singular_values=maxBondDim,
+                                       left_name=leftName, right_name=rightName,
                                        left_edge_name=leftEdgeName, right_edge_name=rightEdgeName)
-    norm = np.sqrt(sum(np.diag(S.tensor)**2))
+    s = S
+    S = tn.Node(np.diag(S.tensor))
+    tn.remove_node(s)
+    norm = np.sqrt(sum(S.tensor**2))
     if maxTrunc > 0:
-        meaningful = sum(np.round(np.diag(S.tensor) / norm, maxTrunc) / S.tensor[0, 0] > 0)
-        S.tensor = S.tensor[:meaningful, :meaningful]
+        meaningful = sum(np.round(S.tensor / norm, maxTrunc) > 0)
+        S.tensor = S.tensor[:meaningful]
         U.tensor = np.transpose(np.transpose(U.tensor)[:meaningful])
         V.tensor = V.tensor[:meaningful]
     if normalize:
@@ -290,17 +309,10 @@ def svdTruncation(node: tn.Node, leftEdges: List[tn.Edge], rightEdges: List[tn.E
         e.name = edgeName
     if dir == '>>':
         l = copyState([U])[0]
-        r = copyState([tn.contract_between(S, V, name=V.name)])[0]
+        r = multiContraction(S, V, '1', '0', cleanOr1=True, cleanOr2=True, isDiag1=True)
     elif dir == '<<':
-        l = copyState([tn.contract_between(U, S, name=U.name)])[0]
+        l = multiContraction(U, S, [len(U.edges) - 1], '0', cleanOr1=True, cleanOr2=True, isDiag2=True)
         r = copyState([V])[0]
-    elif dir == '><':
-        S.tensor = np.sqrt(S.tensor)
-        sCopy = copyState([S])[0]
-        vCopy = copyState([V])[0]
-        l = copyState([tn.contract_between(U, S, name=U.name)])[0]
-        sCopy[1] ^ vCopy[0]
-        r = tn.contract_between(sCopy, vCopy, name=V.name)
     elif dir == '>*<':
         v = V
         V = copyState([V])[0]
@@ -308,9 +320,6 @@ def svdTruncation(node: tn.Node, leftEdges: List[tn.Edge], rightEdges: List[tn.E
         u = U
         U = copyState([U])[0]
         tn.remove_node(u)
-        s = S
-        S = copyState([S])[0]
-        tn.remove_node(s)
         return [U, S, V, truncErr]
 
     tn.remove_node(U)

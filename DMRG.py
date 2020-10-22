@@ -191,7 +191,7 @@ def getIdentity(psi, k, dir):
 def getTridiagonal(HL, HR, H, k, psi, psiCompare=None):
     accuracy = 1e-10 # 1e-12
 
-    v = bops.multiContraction(psi[k], psi[k+1], '2', '0')
+    v = bops.multiContraction(psi[k], psi[k + 1], '2', '0')
     # Small innaccuracies ruin everything!
     v.set_tensor(v.get_tensor() / bops.getNodeNorm(v))
 
@@ -269,7 +269,7 @@ def applyHToM(HL, HR, H, M, k):
     # And I(Left) x h.identity(k1) x h.l2r(k2) x HR.openOp
     HK1R2L = bops.permute(bops.multiContraction(M, H.r2l[k1], '1', '0'), [0, 4, 3, 1, 2])
     Hv = bops.addNodes(Hv, \
-                      bops.multiContraction(HL.openOp, HK1R2L, '02', '01'))
+                       bops.multiContraction(HL.openOp, HK1R2L, '02', '01'))
     HK2L2R = bops.permute(bops.multiContraction(M, H.l2r[k2], '2', '0'), [0, 1, 3, 4, 2])
     Hv = bops.addNodes(Hv, \
                        bops.multiContraction(HK2L2R, HR.openOp, '43', '02'))
