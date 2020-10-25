@@ -69,17 +69,11 @@ def getRowDM(GammaL, LambdaL, GammaR, LambdaR, sites, d):
     return rho / np.trace(rho)
 
 
-def getBMPSRowOps(GammaC, LambdaC, GammaD, LambdaD, AEnv, BEnv, steps, sideOption='up'):
+def getBMPSRowOps(GammaC, LambdaC, GammaD, LambdaD, AEnv, BEnv, steps):
     convergence = []
     envOpAB = bops.permute(bops.multiContraction(AEnv, BEnv, '1', '3'), [0, 3, 2, 4, 1, 5])
     envOpBA = bops.permute(bops.multiContraction(BEnv, AEnv, '1', '3'), [0, 3, 2, 4, 1, 5])
-    if sideOption == 'down':
-        envOpAB = bops.permute(envOpAB, [4, 5, 2, 3, 0, 1])
-        envOpBA = bops.permute(envOpBA, [4, 5, 2, 3, 0, 1])
-    if sideOption == 'up':
-        op = envOpAB
-    else:
-        op = envOpBA
+    op = envOpAB
     for i in range(steps):
         oldGammaC, oldLambdaC, oldGammaD, oldLambdaD = GammaC, LambdaC, GammaD, LambdaD
         GammaC, LambdaC, GammaD, LambdaD = bmpsRowStep(GammaC, LambdaC, GammaD, LambdaD, op)
@@ -96,6 +90,30 @@ def getBMPSRowOps(GammaC, LambdaC, GammaD, LambdaD, AEnv, BEnv, steps, sideOptio
     dDown = bops.multiContraction(GammaD, LambdaD, '2', '0', isDiag2=True)
     bops.removeState([GammaC, LambdaC, GammaD, LambdaD, oldGammaC, oldLambdaC, oldGammaD, oldLambdaD])
     return cUp, dUp, cDown, dDown
+
+
+def bmpsSides(cUp: tn.Node, dUp: tn.Node, cDown: tn.Node, dDown: tn.Node, AEnv: tn.Node, BEnv: tn.Node, steps,
+                 option='right'):
+    envOpAB = bops.permute(bops.multiContraction(AEnv, BEnv, '1', '3'), [0, 3, 2, 4, 1, 5])
+    upRow = bops.multiContraction(cUp, dUp, '2', '0')
+    downRow = bops.multiContraction(cDown, dDown, '2', '0')
+    if option == 'right':
+        X = tn.Node(np.ones((upRow[3].dimension, envOpAB[3].dimension, downRow[3].dimension),
+                            dtype=complex))
+    else:
+        X = tn.Node(np.ones((upRow[0].dimension, envOpAB[2].dimension, downRow[0].dimension),
+                            dtype=complex))
+    for i in range(steps):
+        if option == 'right':
+            X = bops.multiContraction(bops.multiContraction(bops.multiContraction(
+                X, upRow, '0', '3'), envOpAB, '340', '013', cleanOr1=True), downRow, '034', '312')
+        else:
+            X = bops.multiContraction(bops.multiContraction(bops.multiContraction(
+                X, upRow, '0', '0'), envOpAB, '023', '201', cleanOr1=True), downRow, '034', '012', cleanOr1=True)
+        norm = np.sqrt(bops.multiContraction(X, X, '012', '012*').tensor)
+        X = bops.multNode(X, 1 / norm)
+    return X
+
 
 # Start with a 2*2 DM, increase later
 def bmpsCols(cUp: tn.Node, dUp: tn.Node, cDown: tn.Node, dDown: tn.Node, AEnv: tn.Node, BEnv: tn.Node, steps,
