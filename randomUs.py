@@ -4,6 +4,7 @@ import tensornetwork as tn
 import scipy
 import pickle
 import ising
+import time
 
 
 """A Random matrix distributed with Haar measure"""
@@ -47,8 +48,8 @@ def localDistance(s, sp):
     return bin(s ^ sp).count("1")
 
 
-
 def localUnitariesFull(l, M, A, xRight, xLeft, upRow, downRow, d, filename):
+    start = time.time()
     proj0Tensor = np.zeros((2, 2), dtype=complex)
     proj0Tensor[0, 0] = 1
     proj1Tensor = np.zeros((2, 2), dtype=complex)
@@ -73,11 +74,15 @@ def localUnitariesFull(l, M, A, xRight, xLeft, upRow, downRow, d, filename):
         avg = (avg * m + purity) / (m + 1)
         if m % M == M - 1:
             avgs.append(avg)
+    end = time.time()
     with open(filename + '_l_' + str(l) + '_M_' + str(M), 'wb') as f:
         pickle.dump(avgs, f)
+    with open(filename + '_time_l_' + str(l) + '_M_' + str(M), 'wb') as f:
+        pickle.dump(end - start, f)
 
 
 def exactPurity(d, l, xRight, xLeft, upRow, downRow, A, filename):
+    start = time.time()
     curr = xLeft
     pair = bops.permute(bops.multiContraction(A, A, '2', '4'), [1, 6, 3, 7, 2, 8, 0, 5, 4, 9])
     for i in range(int(l / 2)):
@@ -88,8 +93,11 @@ def exactPurity(d, l, xRight, xLeft, upRow, downRow, A, filename):
     dm = bops.multiContraction(curr, xRight, '012', '012')
     ordered = np.reshape(dm.tensor, [d**l, d**l]) / np.trace(np.reshape(dm.tensor, [d**l, d**l]))
     purity =  sum(np.linalg.eigvalsh(np.matmul(ordered, ordered)))
+    end = time.time()
     with open(filename + '_l_' + str(l), 'wb') as f:
         pickle.dump(purity, f)
+    with open(filename + '_time_l_' + str(l), 'wb') as f:
+        pickle.dump(end - start, f)
 
 
 M = 1e2
