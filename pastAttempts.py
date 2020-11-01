@@ -6,11 +6,6 @@ import toricCode as toric
 import randomUs
 from amtplotlib import pyplot as plt
 
-# https://journals.aps.org/pra/pdf/10.1103/PhysRevA.99.052323
-# This is an easy fix for a small DM, not the way it should really go in PEPS
-def localDistance(s, sp):
-    return bin(s ^ sp).count("1")
-
 
 def localUnitariesPurityEstimator(N, d, probabilities, option='allPairs'):
     if option == 'allPairs':

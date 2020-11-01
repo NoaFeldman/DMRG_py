@@ -269,7 +269,7 @@ def permute(node: tn.Node, permutation) -> tn.Node:
     axisNames = []
     for i in range(len(permutation)):
         axisNames.append(node.edges[permutation[i]].name)
-    result = tn.transpose(node, permutation, axis_names=axisNames)
+    result = tn.Node(np.transpose(node.tensor, permutation))
     if len(set(axisNames)) == len(axisNames):
         result.add_axis_names(axisNames)
     for i in range(len(axisNames)):
