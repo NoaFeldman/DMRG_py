@@ -79,10 +79,6 @@ opAB = np.reshape(np.transpose(currAB.tensor, [1, 2, 5, 6, 3, 7, 0, 4]), [16, 16
 
 openA = tn.Node(np.transpose(np.reshape(np.kron(A.tensor, A.tensor), [d**2, d**2, d**2, d**2, d, d]), [4, 0, 1, 2, 3, 5]))
 openB = tn.Node(np.transpose(np.reshape(np.kron(B.tensor, B.tensor), [d**2, d**2, d**2, d**2, d, d]), [4, 0, 1, 2, 3, 5]))
-ABNet = bops.permute(
-    bops.multiContraction(bops.multiContraction(openB, openA, '2', '4'), bops.multiContraction(openA, openB, '2', '4'),
-                          '28', '16', cleanOr1=True, cleanOr2=True),
-    [2, 10, 9, 13, 14, 5, 6, 1, 8, 12, 0, 4, 11, 15, 3, 7])
 
 rowTensor = np.zeros((11, 4, 4, 11), dtype=complex)
 rowTensor[0, 0, 0, 0] = 1
@@ -100,21 +96,66 @@ upRow = bops.unifyLegs(bops.unifyLegs(bops.unifyLegs(bops.unifyLegs(
     bops.permute(bops.multiContraction(row, tn.Node(currAB.tensor), '12', '04'), [0, 2, 3, 4, 7, 1, 5, 6]), 5, 6), 5, 6), 0, 1), 0, 1)
 [C, D, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>', normalize=True)
 upRow = bops.multiContraction(D, C, '2', '0')
-[Cup, Dup, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>', normalize=True)
-upRow = bops.multiContraction(Dup, Cup, '2', '0')
+[cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>', normalize=True)
 
-downRow = bops.unifyLegs(bops.unifyLegs(bops.unifyLegs(bops.unifyLegs(
-    bops.permute(bops.multiContraction(row, tn.Node(currBA.tensor), '12', '04'), [0, 2, 3, 4, 7, 1, 5, 6]), 5, 6), 5, 6), 0, 1), 0, 1)
-[C, D, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>', normalize=True)
-downRow = bops.multiContraction(D, C, '2', '0')
-[Cdown, Ddown, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>', normalize=True)
-downRow = bops.multiContraction(Ddown, Cdown, '2', '0')
+GammaC, LambdaC, GammaD, LambdaD = peps.getBMPSRowOps(cUp, tn.Node(np.ones(cUp[2].dimension)), dUp,
+                                            tn.Node(np.ones(dUp[2].dimension)), AEnv, BEnv, 50)
+cUp = bops.multiContraction(GammaC, LambdaC, '2', '0', isDiag2=True)
+dUp = bops.multiContraction(GammaD, LambdaD, '2', '0', isDiag2=True)
+upRow = bops.multiContraction(cUp, dUp, '2', '0')
+downRow = bops.copyState([upRow])[0]
+rightRow = peps.bmpsCols(upRow, downRow, AEnv, BEnv, 50, option='right', X=upRow)
+leftRow = peps.bmpsCols(upRow, downRow, AEnv, BEnv, 50, option='left', X=upRow)
 
-xLeft = peps.bmpsSides(Dup, Cup, Ddown, Cdown, AEnv, BEnv, 100, option='left')
-xRight = peps.bmpsSides(Dup, Cup, Ddown, Cdown, AEnv, BEnv, 100, option='right')
-
-pair = bops.permute(bops.multiContraction(openA, openB, '2', '4'), [1, 6, 3, 7, 2, 8, 0, 5, 4, 9])
-dm = bops.multiContraction(bops.multiContraction(bops.multiContraction(bops.multiContraction(
-    xLeft, tn.Node(upRow.tensor), '0', '0'), downRow, '1', '0'), pair, '01245', '20145'), xRight, '021', '012')
+circleU = bops.multiContraction(bops.multiContraction(bops.multiContraction(upRow, upRow, '3', '0'), upRow, '5', '0'), upRow, '70', '03')
+circle = bops.multiContraction(bops.multiContraction(bops.multiContraction(upRow, rightRow, '3', '0'), upRow, '5', '0'), leftRow, '70', '03')
+ABNet = bops.permute(
+        bops.multiContraction(bops.multiContraction(openB, openA, '2', '4'), bops.multiContraction(openA, openB, '2', '4'), '28', '16',
+                              cleanOr1=True, cleanOr2=True),
+        [1, 5, 6, 13, 14, 9, 10, 2, 0, 4, 8, 12, 3, 7, 11, 15])
+dm = bops.multiContraction(circle, ABNet, '01234567', '01234567')
+ordered = np.round(np.reshape(dm.tensor, [16, 16]), 14)
 b = 1
+
+# Make a 4*4 net of applied operators for applyLocalOperators below.
+def makeNet(openA, openB, ops):
+    openSites = [openB, openA, openA, openB]
+    sites = []
+    for i in range(4):
+        site = tn.Node(np.trace(bops.multiContraction(ops[i], openSites[i], '1', '0').tensor, axis1=0, axis2=5))
+        sites.append(site)
+    net = bops.permute(bops.multiContraction(bops.multiContraction(sites[0], sites[1], '0', '3'),
+                                 bops.multiContraction(sites[2], sites[3], '0', '3'), '15', '03', cleanOr1=True, cleanOr2=True),
+                        [0, 2, 3, 6, 7, 4, 5, 1])
+    bops.removeState(sites)
+    return net
+
+
+# Order of ops is square by square, as the DM in the commented out section below.
+# note that op is the operator acting on the traced DM, eg UPU^\dagger
+def applyLocalOperators(upRow, downRow, leftRow, rightRow, openA, openB, ops, l):
+    left = leftRow
+    for i in range(l):
+        leftC = bops.multiContraction(bops.multiContraction(downRow, left, '3', '0'), upRow, '5', '0')
+        net = makeNet(openA, openB, ops[i * 4: (i + 1) * 4])
+        left = bops.permute(bops.multiContraction(leftC, net, '123456', '456701'), [0, 3, 2, 1])
+    return bops.multiContraction(left, rightRow, '0123', '3210').tensor * 1
+
+l = 3
+norm = applyLocalOperators(upRow, downRow, leftRow, rightRow, openA, openB, [tn.Node(np.eye(d)) for i in range(l*4)], l)
+norm = applyLocalOperators(upRow, downRow, bops.multNode(leftRow, 1 / norm), rightRow, openA, openB, [tn.Node(np.eye(d)) for i in range(l*4)], l)
+b = 1
+
+
+# leftC = bops.multiContraction(bops.multiContraction(downRow, leftRow, '3', '0'), upRow, '5', '0')
+# left = bops.permute(bops.multiContraction(leftC, ABNet, '123456', '456701'), [0, 3, 2, 1, 4, 5, 6, 7, 8, 9, 10, 11])
+# rightC = bops.multiContraction(bops.multiContraction(upRow, rightRow, '3', '0'), downRow, '5', '0')
+# right = bops.permute(bops.multiContraction(rightC, ABNet, '123456', '012345'), [0, 3, 2, 1, 4, 5, 6, 7, 8, 9, 10, 11])
+# mid = bops.permute(bops.multiContraction(bops.multiContraction(upRow, ABNet, '12', '01'), downRow, '45', '12'),
+#                    [0, 5, 4, 15, 1, 2, 3, 14, 6, 7, 8, 9, 10, 11, 12, 13])
+# right = bops.permute(bops.multiContraction(mid, right, '4567', '0123'),
+#                      [0, 1, 2, 3, 4, 5, 6, 7, 12, 13, 14, 15, 8, 9, 10, 11, 16, 17, 18, 19])
+# dm = bops.permute(bops.multiContraction(left, right, '0123', '3210'), [0, 1, 2, 3, 8, 9, 10, 11, 4, 5, 6, 7, 12, 13, 14, 15])
+# ordered = np.round(np.reshape(dm.tensor, [2**8, 2**8]), 14)
+# b = 1
 
