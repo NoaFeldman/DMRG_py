@@ -141,10 +141,13 @@ def applyLocalOperators(upRow, downRow, leftRow, rightRow, openA, openB, ops, l)
         left = bops.permute(bops.multiContraction(leftC, net, '123456', '456701'), [0, 3, 2, 1])
     return bops.multiContraction(left, rightRow, '0123', '3210').tensor * 1
 
-l = 3
+l = 1
 norm = applyLocalOperators(upRow, downRow, leftRow, rightRow, openA, openB, [tn.Node(np.eye(d)) for i in range(l*4)], l)
 norm = applyLocalOperators(upRow, downRow, bops.multNode(leftRow, 1 / norm), rightRow, openA, openB, [tn.Node(np.eye(d)) for i in range(l*4)], l)
+
 b = 1
+
+
 
 
 # leftC = bops.multiContraction(bops.multiContraction(downRow, leftRow, '3', '0'), upRow, '5', '0')
