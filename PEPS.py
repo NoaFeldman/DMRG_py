@@ -73,7 +73,7 @@ def getBMPSRowOps(GammaC, LambdaC, GammaD, LambdaD, AEnv, BEnv, steps):
     convergence = []
     envOpAB = bops.permute(bops.multiContraction(AEnv, BEnv, '1', '3'), [0, 3, 2, 4, 1, 5])
     envOpBA = bops.permute(bops.multiContraction(BEnv, AEnv, '1', '3'), [0, 3, 2, 4, 1, 5])
-    op = envOpAB
+    op = envOpBA
     for i in range(steps):
         oldGammaC, oldLambdaC, oldGammaD, oldLambdaD = GammaC, LambdaC, GammaD, LambdaD
         GammaC, LambdaC, GammaD, LambdaD = bmpsRowStep(GammaC, LambdaC, GammaD, LambdaD, op)
@@ -83,13 +83,13 @@ def getBMPSRowOps(GammaC, LambdaC, GammaD, LambdaD, AEnv, BEnv, steps):
         #         checkConvergence(oldGammaC, oldLambdaC, oldGammaD, oldLambdaD, GammaC, LambdaC, GammaD, LambdaD, 2))
         bops.removeState([oldGammaC, oldLambdaC, oldGammaD, oldLambdaD])
 
-    cUp = bops.multiContraction(GammaC, LambdaC, '2', '0', isDiag2=True)
-    dUp = bops.multiContraction(GammaD, LambdaD, '2', '0', isDiag2=True)
-    GammaC, LambdaC, GammaD, LambdaD = bmpsRowStep(GammaC, LambdaC, GammaD, LambdaD, op)
-    cDown = bops.multiContraction(GammaC, LambdaC, '2', '0', isDiag2=True)
-    dDown = bops.multiContraction(GammaD, LambdaD, '2', '0', isDiag2=True)
+    # cUp = bops.multiContraction(GammaC, LambdaC, '2', '0', isDiag2=True)
+    # dUp = bops.multiContraction(GammaD, LambdaD, '2', '0', isDiag2=True)
+    # GammaC, LambdaC, GammaD, LambdaD = bmpsRowStep(GammaC, LambdaC, GammaD, LambdaD, op)
+    # cDown = bops.multiContraction(GammaC, LambdaC, '2', '0', isDiag2=True)
+    # dDown = bops.multiContraction(GammaD, LambdaD, '2', '0', isDiag2=True)
     bops.removeState([GammaC, LambdaC, GammaD, LambdaD, oldGammaC, oldLambdaC, oldGammaD, oldLambdaD])
-    return cUp, dUp, cDown, dDown
+    return GammaC, LambdaC, GammaD, LambdaD
 
 
 def bmpsSides(cUp: tn.Node, dUp: tn.Node, cDown: tn.Node, dDown: tn.Node, AEnv: tn.Node, BEnv: tn.Node, steps,
@@ -116,31 +116,28 @@ def bmpsSides(cUp: tn.Node, dUp: tn.Node, cDown: tn.Node, dDown: tn.Node, AEnv: 
 
 
 # Start with a 2*2 DM, increase later
-def bmpsCols(cUp: tn.Node, dUp: tn.Node, cDown: tn.Node, dDown: tn.Node, AEnv: tn.Node, BEnv: tn.Node, steps,
-                 option='right'):
+def bmpsCols(upRow: tn.Node, downRow: tn.Node, AEnv: tn.Node, BEnv: tn.Node, steps,
+                 option='right', X=None):
     envOpAB = bops.permute(bops.multiContraction(AEnv, BEnv, '1', '3'), [0, 3, 2, 4, 1, 5])
     envOpBA = bops.permute(bops.multiContraction(BEnv, AEnv, '1', '3'), [0, 3, 2, 4, 1, 5])
-    upRow = bops.multiContraction(cUp, dUp, '2', '0')
-    downRow = bops.multiContraction(cDown, dDown, '2', '0')
-    if option == 'right':
-        X = tn.Node(np.ones((upRow[3].dimension, envOpAB[3].dimension, envOpBA[3].dimension, downRow[3].dimension),
-                            dtype=complex))
-    else:
-        X = tn.Node(np.ones((downRow[0].dimension, envOpBA[2].dimension, envOpAB[2].dimension, upRow[0].dimension),
-                            dtype=complex))
+    if X is None:
+        if option == 'right':
+            X = tn.Node(np.ones((upRow[3].dimension, envOpBA[3].dimension, envOpAB[3].dimension, downRow[0].dimension),
+                                dtype=complex))
+        else:
+            X = tn.Node(np.ones((downRow[0].dimension, envOpAB[2].dimension, envOpBA[2].dimension, upRow[0].dimension),
+                                dtype=complex))
     for i in range(steps):
         if option == 'right':
-            X = bops.multiContraction(upRow, X, '3', '0', cleanOr1=True, cleanOr2=True)
-            X = bops.multiContraction(X, downRow, '5', '3', cleanOr1=True, cleanOr2=True)
-            X = bops.multiContraction(X, envOpAB, '123', '013', cleanOr1=True)
-            X = bops.multiContraction(X, envOpBA, '67134', '01345', cleanOr1=True)
-            X = bops.permute(X, [0, 2, 3, 1])
+            X = bops.multiContraction(upRow, X, '3', '0')
+            X = bops.multiContraction(X, envOpBA, '123', '013', cleanOr1=True)
+            X = bops.multiContraction(X, envOpAB, '451', '013', cleanOr1=True)
+            X = bops.multiContraction(X, downRow, '154', '012', cleanOr1=True)
         else:
-            X = bops.multiContraction(downRow, X, '0', '0', cleanOr1=True, cleanOr2=True)
-            X = bops.multiContraction(X, upRow, '5', '0', cleanOr1=True, cleanOr2=True)
-            X = bops.multiContraction(X, envOpAB, '456', '201', cleanOr1=True)
-            X = bops.multiContraction(X, envOpBA, '67301', '01245')
-            X = bops.permute(X, [0, 3, 2, 1])
+            X = bops.multiContraction(downRow, X, '3', '0')
+            X = bops.multiContraction(X, envOpAB, '321', '245', cleanOr1=True)
+            X = bops.multiContraction(X, envOpBA, '134', '245', cleanOr1=True)
+            X = bops.multiContraction(X, upRow, '134', '012', cleanOr1=True)
         norm = np.sqrt(bops.multiContraction(X, X, '0123', '0123*').tensor)
         X = bops.multNode(X, 1 / norm)
     return X

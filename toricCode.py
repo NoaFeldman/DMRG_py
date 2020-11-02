@@ -5,7 +5,7 @@ import PEPS as peps
 import scipy
 import math
 from matplotlib import pyplot as plt
-
+import randomUs as ru
 
 d = 2
 
@@ -115,6 +115,7 @@ ABNet = bops.permute(
         [1, 5, 6, 13, 14, 9, 10, 2, 0, 4, 8, 12, 3, 7, 11, 15])
 dm = bops.multiContraction(circle, ABNet, '01234567', '01234567')
 ordered = np.round(np.reshape(dm.tensor, [16, 16]), 14)
+ordered /= np.trace(ordered)
 b = 1
 
 # Make a 4*4 net of applied operators for applyLocalOperators below.
@@ -133,7 +134,7 @@ def makeNet(openA, openB, ops):
 
 # Order of ops is square by square, as the DM in the commented out section below.
 # note that op is the operator acting on the traced DM, eg UPU^\dagger
-def applyLocalOperators(upRow, downRow, leftRow, rightRow, openA, openB, ops, l):
+def applyLocalOperators(upRow, downRow, leftRow, rightRow, openA, openB, l, ops):
     left = leftRow
     for i in range(l):
         leftC = bops.multiContraction(bops.multiContraction(downRow, left, '3', '0'), upRow, '5', '0')
@@ -142,12 +143,28 @@ def applyLocalOperators(upRow, downRow, leftRow, rightRow, openA, openB, ops, l)
     return bops.multiContraction(left, rightRow, '0123', '3210').tensor * 1
 
 l = 1
-norm = applyLocalOperators(upRow, downRow, leftRow, rightRow, openA, openB, [tn.Node(np.eye(d)) for i in range(l*4)], l)
-norm = applyLocalOperators(upRow, downRow, bops.multNode(leftRow, 1 / norm), rightRow, openA, openB, [tn.Node(np.eye(d)) for i in range(l*4)], l)
+norm = applyLocalOperators(upRow, downRow, leftRow, rightRow, openA, openB, l, [tn.Node(np.eye(d)) for i in range(l*4)])
+leftRow = bops.multNode(leftRow, 1 / norm)
 
+
+proj0Tensor = np.zeros((2, 2), dtype=complex)
+proj0Tensor[0, 0] = 1
+proj1Tensor = np.zeros((2, 2), dtype=complex)
+proj1Tensor[1, 1] = 1
+projs = [proj0Tensor, proj1Tensor]
+def getProbability(s, us):
+    currUs = [tn.Node(np.eye(d)) for i in range(len(us))]
+    for i in range(len(us)):
+        currUs[i].tensor = np.matmul(np.matmul(us[i], projs[int(s & d ** i > 0)]), np.conj(np.transpose(us[i])))
+    return applyLocalOperators(upRow, downRow, leftRow, rightRow, openA, openB, l, currUs)
+
+
+M = 1000
+chi = 10
+for l in range(1, 10):
+    ru.localUnitariesFull(l * 4, M, applyLocalOperators, [upRow, downRow, leftRow, rightRow, openA, openB, l], 'toric_local_full')
+# ru.localUnitariesMC(l * 4, M, applyLocalOperators, [upRow, downRow, leftRow, rightRow, openA, openB, l], 'rutest', chi)
 b = 1
-
-
 
 
 # leftC = bops.multiContraction(bops.multiContraction(downRow, leftRow, '3', '0'), upRow, '5', '0')

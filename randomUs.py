@@ -3,8 +3,7 @@ import basicOperations as bops
 import tensornetwork as tn
 import scipy
 import pickle
-import ising
-import time
+from datetime import datetime
 
 
 def myGUE(n):
@@ -64,70 +63,70 @@ def localDistance(s, sp):
     return bin(s ^ sp).count("1")
 
 
+def wrapper(func, args): # without star
+    return func(*args)
+
+
 proj0Tensor = np.zeros((2, 2), dtype=complex)
 proj0Tensor[0, 0] = 1
 proj1Tensor = np.zeros((2, 2), dtype=complex)
 proj1Tensor[1, 1] = 1
 projs = [proj0Tensor, proj1Tensor]
-def getP(d, s, us, xRight, xLeft, upRow, downRow, A):
+def getP(d, s, us, estimateFunc, arguments):
     currUs = [tn.Node(np.eye(d)) for i in range(len(us))]
     for i in range(len(us)):
         currUs[i].tensor = np.matmul(np.matmul(us[i], projs[int(s & d ** i > 0)]), np.conj(np.transpose(us[i])))
-    return estimateOp(xRight, xLeft, upRow, downRow, A, currUs)
+    return wrapper(estimateFunc, arguments + [currUs])
 
 
-def localUnitariesFull(l, M, A, xRight, xLeft, upRow, downRow, filename, d=2):
-    start = time.time()
+def localUnitariesFull(N, M, estimateFunc, arguments, filename, d=2):
+    start = datetime.now()
     avg = 0
     avgs = []
-    for m in range(int(M * l**2)):
-        t = estimateOp(xRight, xLeft, upRow, downRow, A, [tn.Node(np.eye(2)) for i in range(l)])
-        xLeft = bops.multNode(xLeft, 1 / t)
-        us = [haar_measure(d) for i in range(l)]
-        ps = [0] * 2**l
+    for m in range(int(M * N**2)):
+        us = [haar_measure(d) for i in range(N)]
+        ps = [0] * d**N
         purity = 0
-        for s in range(2**l):
-            ps[s] = getP(d, s, us, xRight, xLeft, upRow, downRow, A)
-        for s in range(2**l):
-            for sp in range(2**l):
-                purity += d**l * (-d)**(-localDistance(s, sp)) * ps[s] * ps[sp]
+        for s in range(d**N):
+            ps[s] = getP(d, s, us, estimateFunc, arguments)
+        for s in range(d**N):
+            for sp in range(d**N):
+                purity += d**N * (-d)**(-localDistance(s, sp)) * ps[s] * ps[sp]
         avg = (avg * m + purity) / (m + 1)
         if m % M == M - 1:
             avgs.append(avg)
-    end = time.time()
-    with open(filename + '_l_' + str(l) + '_M_' + str(M), 'wb') as f:
+    end = datetime.now()
+    with open(filename + '_N_' + str(N) + '_M_' + str(M), 'wb') as f:
         pickle.dump(avgs, f)
-    with open(filename + '_time_l_' + str(l) + '_M_' + str(M), 'wb') as f:
-        pickle.dump(end - start, f)
+    with open(filename + '_time_N_' + str(N) + '_M_' + str(M), 'wb') as f:
+        pickle.dump((end - start).total_seconds(), f)
 
 
-def localUnitariesMC(l, M, A, xRight, xLeft, upRow, downRow, filename, chi, d=2):
-    start = time.time()
+def localUnitariesMC(N, M, estimateFunc, arguments, filename, chi, d=2):
+    start = datetime.now()
     avg = 0
     avgs = []
-    for m in range(int(M * l**2)):
-        t = estimateOp(xRight, xLeft, upRow, downRow, A, [tn.Node(np.eye(2)) for i in range(l)])
-        xLeft = bops.multNode(xLeft, 1 / t)
-        us = [haar_measure(d) for i in range(l)]
+    for m in range(int(M * N**2)):
+        us = [haar_measure(d) for i in range(N)]
         probabilities = {}
         estimation = 0
 
-        s = np.random.randint(0, 2**l)
-        probabilities[s] = getP(d, s, us, xRight, xLeft, upRow, downRow, A)
-        sp = np.random.randint(0, 2**l)
-        probabilities[sp] = getP(d, sp, us, xRight, xLeft, upRow, downRow, A)
+        s = np.random.randint(0, 2**N)
+        probabilities[s] = getP(d, s, us, estimateFunc, arguments)
+        sp = np.random.randint(0, 2**N)
+        probabilities[sp] = getP(d, sp, us, estimateFunc, arguments)
         for j in range(chi):
-            estimation += d**l * (-d)**(-localDistance(s, sp))
+            estimation += d**N * (-d)**(-localDistance(s, sp))
             # flip one random spin
-            newS = s ^ d**(np.random.randint(l))
+            newS = s ^ d**(np.random.randint(N))
             if newS not in probabilities.keys():
-                probabilities[newS] = getP(d, newS, us, xRight, xLeft, upRow, downRow, A)
+                probabilities[newS] = getP(d, newS, us, estimateFunc, arguments)
             takeStep = np.random.rand() < probabilities[newS] / probabilities[s]
             if takeStep:
                 s = newS
-            newSP = sp ^ d**(np.random.randint(l))
+            newSP = sp ^ d**(np.random.randint(N))
             if newSP not in probabilities.keys():
-                probabilities[newSP] = getP(d, newSP, us, xRight, xLeft, upRow, downRow, A)
+                probabilities[newSP] = getP(d, newSP, us, estimateFunc, arguments)
             takeStep = np.random.rand() < probabilities[newS] / probabilities[s]
             if takeStep:
                 s = newS
@@ -136,15 +135,14 @@ def localUnitariesMC(l, M, A, xRight, xLeft, upRow, downRow, filename, chi, d=2)
         avg = (avg * m + estimation) / (m + 1)
         if m % M == M - 1:
             avgs.append(avg)
-    end = time.time()
-    with open(filename + '_l_' + str(l) + '_M_' + str(M), 'wb') as f:
+    end = datetime.now()
+    with open(filename + '_N_' + str(N) + '_M_' + str(M), 'wb') as f:
         pickle.dump(avgs, f)
-    with open(filename + '_time_l_' + str(l) + '_M_' + str(M), 'wb') as f:
-        pickle.dump(end - start, f)
+    with open(filename + '_time_N_' + str(N) + '_M_' + str(M), 'wb') as f:
+        pickle.dump((end - start).total_seconds(), f)
 
 
 def exactPurity(l, xRight, xLeft, upRow, downRow, A, filename, d=2):
-    start = time.time()
     curr = xLeft
     pair = bops.permute(bops.multiContraction(A, A, '2', '4'), [1, 6, 3, 7, 2, 8, 0, 5, 4, 9])
     for i in range(int(l / 2)):
@@ -155,10 +153,7 @@ def exactPurity(l, xRight, xLeft, upRow, downRow, A, filename, d=2):
     dm = bops.multiContraction(curr, xRight, '012', '012')
     ordered = np.reshape(dm.tensor, [d**l, d**l]) / np.trace(np.reshape(dm.tensor, [d**l, d**l]))
     purity = sum(np.linalg.eigvalsh(np.matmul(ordered, ordered)))
-    end = time.time()
     with open(filename + '_l_' + str(l), 'wb') as f:
         pickle.dump(purity, f)
-    with open(filename + '_time_l_' + str(l), 'wb') as f:
-        pickle.dump(end - start, f)
     return purity
 
