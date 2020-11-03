@@ -12,7 +12,7 @@ M = int(sys.argv[1])
 l = int(sys.argv[2])
 dirname = sys.argv[3]
 
-with open('toricBoundaries', 'rb') as f:
+with open(dirname + 'toricBoundaries', 'rb') as f:
     [upRow, downRow, leftRow, rightRow, openA, openB] = pickle.load(f)
 
 norm = toricCode.applyLocalOperators(upRow, downRow, leftRow, rightRow, openA, openB, l,
