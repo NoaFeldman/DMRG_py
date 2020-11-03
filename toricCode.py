@@ -142,8 +142,8 @@ def applyLocalOperators(upRow, downRow, leftRow, rightRow, openA, openB, l, ops)
         left = bops.permute(bops.multiContraction(leftC, net, '123456', '456701'), [0, 3, 2, 1])
     return bops.multiContraction(left, rightRow, '0123', '3210').tensor * 1
 
-with open('toricBoundaries', 'rb') as f:
-    [upRow, downRow, leftRow, rightRow, openA, openB] = pickle.load(f)
+# with open('toricBoundaries', 'rb') as f:
+#     [upRow, downRow, leftRow, rightRow, openA, openB] = pickle.load(f)
 
 # circle = bops.multiContraction(bops.multiContraction(bops.multiContraction(upRow, rightRow, '3', '0'), upRow, '5', '0'), leftRow, '70', '03')
 # ABNet = bops.permute(
@@ -185,10 +185,10 @@ with open('toricBoundaries', 'rb') as f:
 
 
 
-M = 1000
-chi = 300
-for l in range(1, 2):
-    norm = applyLocalOperators(upRow, downRow, leftRow, rightRow, openA, openB, l,
-                               [tn.Node(np.eye(d)) for i in range(l * 4)])
-    leftRow = bops.multNode(leftRow, 1 / norm)
-    ru.localUnitariesFull(l * 4, M, applyLocalOperators, [upRow, downRow, leftRow, rightRow, openA, openB, l], 'toric_local_full')
+# M = 1000
+# chi = 300
+# for l in range(1, 2):
+#     norm = applyLocalOperators(upRow, downRow, leftRow, rightRow, openA, openB, l,
+#                                [tn.Node(np.eye(d)) for i in range(l * 4)])
+#     leftRow = bops.multNode(leftRow, 1 / norm)
+#     ru.localUnitariesFull(l * 4, M, applyLocalOperators, [upRow, downRow, leftRow, rightRow, openA, openB, l], 'toric_local_full')
