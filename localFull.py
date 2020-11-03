@@ -10,8 +10,7 @@ import basicOperations as bops
 d = 2
 M = int(sys.argv[1])
 l = int(sys.argv[2])
-chi = int(sys.argv[3])
-dirname = sys.argv[4]
+dirname = sys.argv[3]
 
 with open('toricBoundaries', 'rb') as f:
     [upRow, downRow, leftRow, rightRow, openA, openB] = pickle.load(f)
@@ -19,6 +18,6 @@ with open('toricBoundaries', 'rb') as f:
 norm = toricCode.applyLocalOperators(upRow, downRow, leftRow, rightRow, openA, openB, l,
                                [tn.Node(np.eye(d)) for i in range(l * 4)])
 leftRow = bops.multNode(leftRow, 1 / norm)
-ru.localUnitariesMC(l * 4, M, toricCode.applyLocalOperators, [upRow, downRow, leftRow, rightRow, openA, openB, l],
-                      dirname + 'toric_local_MC', chi)
+ru.localUnitariesFull(l * 4, M, toricCode.applyLocalOperators, [upRow, downRow, leftRow, rightRow, openA, openB, l],
+                      dirname + 'toric_local_full', chi)
 
