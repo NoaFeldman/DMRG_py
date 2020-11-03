@@ -19,5 +19,5 @@ norm = toricCode.applyLocalOperators(upRow, downRow, leftRow, rightRow, openA, o
                                [tn.Node(np.eye(d)) for i in range(l * 4)])
 leftRow = bops.multNode(leftRow, 1 / norm)
 ru.localUnitariesFull(l * 4, M, toricCode.applyLocalOperators, [upRow, downRow, leftRow, rightRow, openA, openB, l],
-                      dirname + 'toric_local_full', chi)
+                      dirname + 'toric_local_full')
 
