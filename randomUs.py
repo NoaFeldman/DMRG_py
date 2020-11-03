@@ -126,7 +126,7 @@ def localUnitariesMC(N, M, estimateFunc, arguments, filename, chi, d=2):
         probabilities[s] = getP(d, s, us, estimateFunc, arguments)
         sp = np.random.randint(0, 2**N)
         probabilities[sp] = getP(d, sp, us, estimateFunc, arguments)
-        for j in range(chi):
+        for j in range(chi * N**2):
             estimation += d**N * (-d)**(-localDistance(s, sp))
             s = mcStep(s, d, N, us, estimateFunc, arguments, probabilities)
             sp = mcStep(sp, d, N, us, estimateFunc, arguments, probabilities)
