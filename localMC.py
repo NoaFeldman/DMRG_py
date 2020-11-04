@@ -15,6 +15,8 @@ if len(sys.argv) == 5:
     dirname = sys.argv[4]
 else:
     dirname = ''
+M = 1000
+chi = 100
 with open(dirname + 'toricBoundaries', 'rb') as f:
     [upRow, downRow, leftRow, rightRow, openA, openB] = pickle.load(f)
 

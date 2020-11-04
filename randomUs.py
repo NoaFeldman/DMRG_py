@@ -68,7 +68,6 @@ def getP(d, s, us, estimateFunc, arguments):
 def localUnitariesFull(N, M, estimateFunc, arguments, filename, d=2):
     start = datetime.now()
     avg = 0
-    avgs = []
     for m in range(int(M * N**2)):
         us = [haar_measure(d) for i in range(N)]
         ps = [0] * d**N
@@ -80,10 +79,9 @@ def localUnitariesFull(N, M, estimateFunc, arguments, filename, d=2):
                 purity += d**N * (-d)**(-localDistance(s, sp)) * ps[s] * ps[sp]
         avg = (avg * m + purity) / (m + 1)
         if m % M == M - 1:
-            avgs.append(avg)
+            with open(filename + '_N_' + str(N) + '_M_' + str(M) + '_m_' + str(m), 'wb') as f:
+                pickle.dump(avg, f)
     end = datetime.now()
-    with open(filename + '_N_' + str(N) + '_M_' + str(M), 'wb') as f:
-        pickle.dump(avgs, f)
     with open(filename + '_time_N_' + str(N) + '_M_' + str(M), 'wb') as f:
         pickle.dump((end - start).total_seconds(), f)
 
@@ -102,7 +100,6 @@ def mcStep(s, d, N, us, estimateFunc, arguments, probabilities):
 def localUnitariesMC(N, M, estimateFunc, arguments, filename, chi, d=2):
     start = datetime.now()
     avg = 0
-    avgs = []
     for m in range(int(M * N**2)):
         us = [haar_measure(d) for i in range(N)]
         probabilities = {}
@@ -116,14 +113,13 @@ def localUnitariesMC(N, M, estimateFunc, arguments, filename, chi, d=2):
             estimation += d**N * (-d)**(-localDistance(s, sp))
             s = mcStep(s, d, N, us, estimateFunc, arguments, probabilities)
             sp = mcStep(sp, d, N, us, estimateFunc, arguments, probabilities)
-        estimation /= chi
+        estimation /= (chi * N **2)
 
         avg = (avg * m + estimation) / (m + 1)
         if m % M == M - 1:
-            avgs.append(avg)
+            with open(filename + '_N_' + str(N) + '_M_' + str(M) + '_m_' + str(m) + '_chi_' + str(chi), 'wb') as f:
+                pickle.dump(avg, f)
     end = datetime.now()
-    with open(filename + '_N_' + str(N) + '_M_' + str(M) + '_chi_' + str(chi), 'wb') as f:
-        pickle.dump(avgs, f)
     with open(filename + '_time_N_' + str(N) + '_M_' + str(M) + '_chi_' + str(chi), 'wb') as f:
         pickle.dump((end - start).total_seconds(), f)
 

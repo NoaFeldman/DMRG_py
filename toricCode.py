@@ -159,7 +159,7 @@ def applyGlobalUnitary(upRow, downRow, leftRow, rightRow, A, B, l, s, width=2, n
         AB = bops.unifyLegs(bops.unifyLegs(bops.unifyLegs(
             bops.permute(bops.multiContraction(A, B, '2', '0'), [0, 1, 4, 5, 6, 2, 3, 7]), 6, 7), 4, 5), 1, 2)
         dim = d**2
-    sites = [BA if i % 2 == 0 else AB for i in l]
+    sites = [BA if i % 2 == 0 else AB for i in range(l)]
     for layer in range(numberOfLayers):
         for site in list(range(l - 1)) + list(range(l-3, -1, -1)):
             pair = bops.multiContraction(sites[site], sites[site+1], '1', '3')
@@ -187,20 +187,26 @@ def applyGlobalUnitary(upRow, downRow, leftRow, rightRow, A, B, l, s, width=2, n
     return bops.multiContraction(curr, rightRow, '012', '210').tensor * 1
 
 
+def applyGlobalUnitary_symmetry(upRow, downRow, leftRow, rightRow, A, B, l, s, width=2, numberOfLayers=2):
+    b = 1
 
 
+with open('toricBoundaries', 'rb') as f:
+    [upRow, downRow, leftRow, rightRow, openA, openB] = pickle.load(f)
 
+M = 1000
+avg = 0
+l = 1
+[cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>')
+[cDown, dDown, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>')
 
-
-
-
-
-
-
-
-
-# with open('toricBoundaries', 'rb') as f:
-#     [upRow, downRow, leftRow, rightRow, openA, openB] = pickle.load(f)
+norm = applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, l,
+                               [tn.Node(np.eye(d)) for i in range(l * 4)])
+leftRow = bops.multNode(leftRow, 1 / norm)
+# for m in range(M):
+#     avg = (avg * m + applyGlobalUnitary(upRow, downRow, leftRow, rightRow, A, B, l, 0)) / (m + 1)
+print(avg)
+print(avg * 16 * 17 - 1)
 
 # circle = bops.multiContraction(bops.multiContraction(bops.multiContraction(upRow, rightRow, '3', '0'), upRow, '5', '0'), leftRow, '70', '03')
 # ABNet = bops.permute(
@@ -220,26 +226,6 @@ def applyGlobalUnitary(upRow, downRow, leftRow, rightRow, A, B, l, s, width=2, n
 # flip1to0 = np.zeros((2, 2))
 # flip1to0[0, 1] = 1
 #
-# norm = applyLocalOperators(upRow, downRow, leftRow, rightRow, openA, openB, 1,
-#                            [tn.Node(np.eye(d)) for i in range(1 * 4)])
-# leftRow = bops.multNode(leftRow, 1 / norm)
-#
-# recreated = np.zeros((16, 16))
-# for s in range(16):
-#     for sp in range(16):
-#         ops = []
-#         for i in range(4):
-#             if s & 2**i == 0 and sp & 2**i == 0:
-#                 ops.append(tn.Node(proj0))
-#             elif s & 2**i > 0 and sp & 2**i == 0:
-#                 ops.append(tn.Node(flip0to1))
-#             elif s & 2**i == 0 and sp & 2**i > 0:
-#                 ops.append(tn.Node(flip1to0))
-#             elif s & 2**i > 0 and sp & 2**i > 0:
-#                 ops.append(tn.Node(proj1))
-#         recreated[s, sp] = applyLocalOperators(upRow, downRow, leftRow, rightRow, openA, openB, 1, ops)
-# b = 1
-
 
 
 # M = 1000
