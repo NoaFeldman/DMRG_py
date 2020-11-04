@@ -191,22 +191,22 @@ def applyGlobalUnitary_symmetry(upRow, downRow, leftRow, rightRow, A, B, l, s, w
     b = 1
 
 
-with open('toricBoundaries', 'rb') as f:
-    [upRow, downRow, leftRow, rightRow, openA, openB] = pickle.load(f)
-
-M = 1000
-avg = 0
-l = 1
-[cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>')
-[cDown, dDown, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>')
-
-norm = applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, l,
-                               [tn.Node(np.eye(d)) for i in range(l * 4)])
-leftRow = bops.multNode(leftRow, 1 / norm)
-# for m in range(M):
-#     avg = (avg * m + applyGlobalUnitary(upRow, downRow, leftRow, rightRow, A, B, l, 0)) / (m + 1)
-print(avg)
-print(avg * 16 * 17 - 1)
+# with open('toricBoundaries', 'rb') as f:
+#     [upRow, downRow, leftRow, rightRow, openA, openB] = pickle.load(f)
+#
+# M = 1000
+# avg = 0
+# l = 1
+# [cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>')
+# [cDown, dDown, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>')
+#
+# norm = applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, l,
+#                                [tn.Node(np.eye(d)) for i in range(l * 4)])
+# leftRow = bops.multNode(leftRow, 1 / norm)
+# # for m in range(M):
+# #     avg = (avg * m + applyGlobalUnitary(upRow, downRow, leftRow, rightRow, A, B, l, 0)) / (m + 1)
+# print(avg)
+# print(avg * 16 * 17 - 1)
 
 # circle = bops.multiContraction(bops.multiContraction(bops.multiContraction(upRow, rightRow, '3', '0'), upRow, '5', '0'), leftRow, '70', '03')
 # ABNet = bops.permute(
