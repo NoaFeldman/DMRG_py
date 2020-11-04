@@ -191,4 +191,3 @@ def twoCopiesEntanglement(circle, A, B):
 
     p2 = bops.multiContraction(doubleCircle, ABNet, '01234567', '01234567').tensor
     return p2
-

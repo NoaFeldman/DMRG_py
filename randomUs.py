@@ -6,22 +6,6 @@ import pickle
 from datetime import datetime
 
 
-def myGUE(n):
-    z = np.random.randn(n, n) + 1j * np.random.randn(n, n)
-    for i in range(n):
-        for j in range(i):
-            z[i, j] = np.conj(z[j, i])
-        z[i, i] = np.sqrt(2) * np.real(z[i, i])
-    # z = (z + np.conj(np.transpose(z))) / 2
-    return z / np.sqrt(2)
-
-def nearestNeighborsGUE(N, d=2):
-    res = np.eye(d**N)
-    for i in range(N - 1):
-        res = np.matmul(res, np.kron(np.eye(d**i), np.kron(myGUE(d**2), np.eye(d**(N - i - 2)))))
-    return res
-
-
 """A Random matrix distributed with Haar measure"""
 def haar_measure(n):
     z = (np.random.randn(n, n) + 1j * np.random.randn(n, n)) / np.sqrt(2.0)
@@ -32,18 +16,18 @@ def haar_measure(n):
     return q
 
 
+def nearestNeighborsCUE(N, d=2):
+    res = np.eye(d**N)
+    for i in list(range(N - 1)) + list(range(N-3, -1, -1)):
+        res = np.matmul(res, np.kron(np.eye(d**i), np.kron(haar_measure(d**2), np.eye(d**(N - i - 2)))))
+    return res
+
+
 # create a global unitary from 2 layers of nearest neighbor unitaries
-def globalUnitary(N, d, numberOfLayers=2):
+def globalUnitary(N, d=2, numberOfLayers=2):
     U = np.eye(d**N)
     for i in range(numberOfLayers):
-        u01 = np.kron(haar_measure(d**2), np.eye(d**2, dtype=complex))
-        u02 = np.reshape(
-            np.transpose(np.reshape(np.kron(haar_measure(d ** 2), np.eye(d ** 2, dtype=complex)), [d] * 2 * N),
-                         [0, 2, 1, 3, 4, 6, 5, 7]), [d ** N, d ** N])
-        u23 = np.kron(np.eye(d**2, dtype=complex), haar_measure(d**2))
-        u13 = np.reshape(np.transpose(np.reshape(np.kron(haar_measure(d**2), np.eye(d**2, dtype=complex)), [d] * 2 * N),
-                                      [2, 0, 3, 1, 6, 4, 7, 5]), [d**N, d**N])
-        U = np.matmul(U, np.matmul(u01, np.matmul(u02, np.matmul(u23, u13))))
+        U = np.matmul(U, nearestNeighborsCUE(N, d))
     return U
 
 
@@ -76,7 +60,9 @@ def getP(d, s, us, estimateFunc, arguments):
     currUs = [tn.Node(np.eye(d)) for i in range(len(us))]
     for i in range(len(us)):
         currUs[i].tensor = np.matmul(np.matmul(us[i], projs[int(s & d ** i > 0)]), np.conj(np.transpose(us[i])))
-    return wrapper(estimateFunc, arguments + [currUs])
+    result =  wrapper(estimateFunc, arguments + [currUs])
+    bops.removeState(currUs)
+    return result
 
 
 def localUnitariesFull(N, M, estimateFunc, arguments, filename, d=2):

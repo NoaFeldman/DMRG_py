@@ -7,7 +7,6 @@ import pickle
 
 d = 2
 
-
 def expectedDensityMatrix(height, width=2):
     if width != 2:
         # TODO
@@ -44,10 +43,13 @@ A = tn.Node(ABTensor)
 B = tn.Node(np.transpose(ABTensor, [1, 2, 3, 0, 4]))
 
 
-AEnv = bops.permute(bops.multiContraction(A, A, '4', '4*'), [0, 4, 1, 5, 2, 6, 3, 7])
-AEnv = bops.unifyLegs(bops.unifyLegs(bops.unifyLegs(bops.unifyLegs(AEnv, 6, 7), 4, 5), 2, 3), 0, 1)
-BEnv = bops.permute(bops.multiContraction(B, B, '4', '4*'), [0, 4, 1, 5, 2, 6, 3, 7])
-BEnv = bops.unifyLegs(bops.unifyLegs(bops.unifyLegs(bops.unifyLegs(BEnv, 6, 7), 4, 5), 2, 3), 0, 1)
+def toEnvOperator(op):
+    result = bops.unifyLegs(bops.unifyLegs(bops.unifyLegs(bops.unifyLegs(
+        bops.permute(op, [0, 4, 1, 5, 2, 6, 3, 7]), 6, 7), 4, 5), 2, 3), 0, 1)
+    tn.remove_node(op)
+    return result
+AEnv = toEnvOperator(bops.multiContraction(A, A, '4', '4*'))
+BEnv = toEnvOperator(bops.multiContraction(B, B, '4', '4*'))
 chi = 32
 nonPhysicalLegs = 1
 GammaTensor = np.ones((nonPhysicalLegs, d**2, nonPhysicalLegs), dtype=complex)
@@ -55,6 +57,7 @@ GammaC = tn.Node(GammaTensor, name='GammaC', backend=None)
 LambdaC = tn.Node(np.eye(nonPhysicalLegs) / np.sqrt(nonPhysicalLegs), backend=None)
 GammaD = tn.Node(GammaTensor, name='GammaD', backend=None)
 LambdaD = tn.Node(np.eye(nonPhysicalLegs) / np.sqrt(nonPhysicalLegs), backend=None)
+
 
 steps = 50
 
@@ -118,29 +121,83 @@ envOpBA = bops.permute(bops.multiContraction(BEnv, AEnv, '1', '3'), [0, 3, 2, 4,
 # with open('toricBoundaries', 'wb') as f:
 #     pickle.dump([upRow, downRow, leftRow, rightRow, openA, openB], f)
 #
-# Make a 4*4 net of applied operators for applyLocalOperators below.
-def makeNet(openA, openB, ops):
-    openSites = [openB, openA, openA, openB]
-    sites = []
-    for i in range(4):
-        site = tn.Node(np.trace(bops.multiContraction(ops[i], openSites[i], '1', '0').tensor, axis1=0, axis2=5))
-        sites.append(site)
-    net = bops.permute(bops.multiContraction(bops.multiContraction(sites[0], sites[1], '1', '3'),
-                                 bops.multiContraction(sites[2], sites[3], '1', '3'), '15', '03', cleanOr1=True, cleanOr2=True),
-                        [0, 2, 3, 6, 7, 4, 5, 1])
-    bops.removeState(sites)
-    return net
 
 
-# Order of ops is square by square, as the DM in the commented out section below.
-# note that op is the operator acting on the traced DM, eg UPU^\dagger
-def applyLocalOperators(upRow, downRow, leftRow, rightRow, openA, openB, l, ops):
+def applyOpTosite(site, op):
+    return toEnvOperator(bops.multiContraction(bops.multiContraction(site, op, '4', '1'), site, '4', '4*'))
+
+
+def applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, l, ops):
     left = leftRow
     for i in range(l):
-        leftC = bops.multiContraction(bops.multiContraction(downRow, left, '3', '0'), upRow, '5', '0')
-        net = makeNet(openA, openB, ops[i * 4: (i + 1) * 4])
-        left = bops.permute(bops.multiContraction(leftC, net, '123456', '456701'), [0, 3, 2, 1])
+        left = bops.multiContraction(left, cUp, '3', '0', cleanOr1=True)
+        lu = applyOpTosite(B, ops[i * 4])
+        ld = applyOpTosite(A, ops[i * 4 + 2])
+        left = bops.multiContraction(left, lu, '23', '30', cleanOr1=True)
+        left = bops.multiContraction(left, ld, '14', '30', cleanOr1=True)
+        left = bops.permute(bops.multiContraction(left, dDown, '04', '21', cleanOr1=True), [3, 2, 1, 0])
+
+        left = bops.multiContraction(left, dUp, '3', '0', cleanOr1=True)
+        ru = applyOpTosite(A, ops[i * 4 + 1])
+        rd = applyOpTosite(B, ops[i * 4 + 3])
+        left = bops.multiContraction(left, ru, '23', '30', cleanOr1=True)
+        left = bops.multiContraction(left, rd, '14', '30', cleanOr1=True)
+        left = bops.permute(bops.multiContraction(left, cDown, '04', '21', cleanOr1=True), [3, 2, 1, 0])
+
+        bops.removeState([lu, ld, rd, ru])
+
     return bops.multiContraction(left, rightRow, '0123', '3210').tensor * 1
+
+
+def applyGlobalUnitary(upRow, downRow, leftRow, rightRow, A, B, l, s, width=2, numberOfLayers=2):
+    dim = d
+    if width == 2:
+        leftRow = bops.unifyLegs(leftRow, 1, 2)
+        rightRow = bops.unifyLegs(rightRow, 1, 2)
+        BA = bops.unifyLegs(bops.unifyLegs(bops.unifyLegs(
+            bops.permute(bops.multiContraction(B, A, '2', '0'), [0, 1, 4, 5, 6, 2, 3, 7]), 6, 7), 4, 5), 1, 2)
+        AB = bops.unifyLegs(bops.unifyLegs(bops.unifyLegs(
+            bops.permute(bops.multiContraction(A, B, '2', '0'), [0, 1, 4, 5, 6, 2, 3, 7]), 6, 7), 4, 5), 1, 2)
+        dim = d**2
+    sites = [BA if i % 2 == 0 else AB for i in l]
+    for layer in range(numberOfLayers):
+        for site in list(range(l - 1)) + list(range(l-3, -1, -1)):
+            pair = bops.multiContraction(sites[site], sites[site+1], '1', '3')
+            u = tn.Node(np.reshape(ru.haar_measure(dim**2), [dim, dim, dim, dim]))
+            pair = bops.permute(bops.multiContraction(pair, u, '37', '23', cleanOr1=True, cleanOr2=True),
+                                [0, 1, 2, 6, 3, 4, 5, 7])
+            [left, right, te] = bops.svdTruncation(pair, [0, 1, 2, 3], [4, 5, 6, 7], '>>')
+            sites[site] = bops.permute(left, [0, 4, 1, 2, 3])
+            sites[site + 1] = bops.permute(right, [1, 2, 3, 0, 4])
+    sExplicit = [(s & ((2**width - 1) * 2**i)) / 2**i for i in range(l)]
+    projectors = [tn.Node(np.zeros((dim, dim))) for i in range(dim)]
+    for i in range(dim):
+        projectors[i].tensor[i, i] = 1
+    for site in range(len(sites)):
+        sites[site] = bops.multiContraction(sites[site], projectors[sExplicit[site]], '4', '1', cleanOr1=True)
+        sites[site] = bops.permute(bops.multiContraction(sites[site], sites[site], '4', '4*', cleanOr1=True),
+                                   [0, 4, 1, 5, 2, 6, 3, 7])
+    curr = leftRow
+    for i in range(int(l/2)):
+        currC = bops.multiContraction(bops.multiContraction(downRow, curr, '3', '0', cleanOr2=True), upRow, '4', '0')
+        pair = bops.permute(sites[i * 2], sites[i * 2 + 1], '1', '3')
+        curr = bops.permute(bops.multiContraction(currC, pair, '12345', '51203', cleanOr1=True, cleanOr2=True),
+                            [0, 2, 1])
+    bops.removeState(sites)
+    return bops.multiContraction(curr, rightRow, '012', '210').tensor * 1
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # with open('toricBoundaries', 'rb') as f:
 #     [upRow, downRow, leftRow, rightRow, openA, openB] = pickle.load(f)
