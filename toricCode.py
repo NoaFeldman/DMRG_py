@@ -149,27 +149,57 @@ def applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, l, ops)
     return bops.multiContraction(left, rightRow, '0123', '3210').tensor * 1
 
 
-def applyGlobalUnitary(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, l, s, numberOfLayers=2):
-    
-
-
-
 with open('toricBoundaries', 'rb') as f:
     [upRow, downRow, leftRow, rightRow, openA, openB] = pickle.load(f)
 
+upRow = tn.Node(upRow)
+downRow = tn.Node(downRow)
+leftRow = tn.Node(leftRow)
+rightRow = tn.Node(rightRow)
+openA = tn.Node(openA)
+openB = tn.Node(openB)
+
 M = 1000
 avg = 0
-l = 1
-[cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>')
-[cDown, dDown, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>')
+l = 3
+# [cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>')
+# [cDown, dDown, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>')
+#
+# norm = applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, l,
+#                                [tn.Node(np.eye(d)) for i in range(l * 4)])
+# leftRow = bops.multNode(leftRow, 1 / norm)
 
-norm = applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, l,
-                               [tn.Node(np.eye(d)) for i in range(l * 4)])
-leftRow = bops.multNode(leftRow, 1 / norm)
-for m in range(M):
-    avg = (avg * m + applyGlobalUnitary(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, l, 0)) / (m + 1)
-print(avg)
-print(avg * 16 * 17 - 1)
+circle = bops.multiContraction(bops.multiContraction(bops.multiContraction(upRow, rightRow, '3', '0'), upRow, '5', '0'), leftRow, '70', '03')
+ABNet = bops.permute(
+        bops.multiContraction(bops.multiContraction(openB, openA, '2', '4'), bops.multiContraction(openA, openB, '2', '4'), '28', '16',
+                              cleanOr1=True, cleanOr2=True),
+        [1, 5, 6, 13, 14, 9, 10, 2, 0, 4, 8, 12, 3, 7, 11, 15])
+ab = np.reshape(ABNet.tensor, [4**2, 4**2, 4**2, 4**2, 2**4, 2**4])
+for i0 in range(4**2):
+    for i1 in range(4**2):
+        for i2 in range(4**2):
+            for i3 in range(4**2):
+                for j in range(8):
+                    expected = np.zeros((16, 16))
+                    expected[j, j] = 1
+                    expected[j, j^15] = 1
+                    expected[j^15, j] = 1
+                    expected[j^15, j^15] = 1
+                if np.all(expected > 0, ab[i0, i1, i2, i3] > 0):
+                    b = 1
+dm = bops.multiContraction(circle, ABNet, '01234567', '01234567')
+ordered = np.round(np.reshape(dm.tensor, [16, 16]), 14)
+ordered /= np.trace(ordered)
+b = 1
+left = bops.multiContraction(circle, ABNet, '123456', '456701')
+circle = bops.multiContraction(bops.multiContraction(downRow, left, '3', '0'), upRow, '3', '0')
+left = bops.permute(bops.multiContraction(circle, ABNet, [1, 2, 4, 3, 13, 14], '456701'),
+                    [0, 9, 10, 11, 1, 2, 3, 4, 5, 6, 7, 8, 12, 13, 14, 15, 16, 17, 18, 19])
+dm = bops.permute(bops.multiContraction(left, rightRow, '1230', '0123'),
+                  [0, 1, 2, 3, 8, 9, 10, 11, 4, 5, 6, 7, 12, 13, 14, 15])
+ordered = np.reshape(dm.tensor, [2**8, 2**8]) / np.trace(np.reshape(dm.tensor, [2**8, 2**8]))
+b = 1
+
 
 # circle = bops.multiContraction(bops.multiContraction(bops.multiContraction(upRow, rightRow, '3', '0'), upRow, '5', '0'), leftRow, '70', '03')
 # ABNet = bops.permute(
