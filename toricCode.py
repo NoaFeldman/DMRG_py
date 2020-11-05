@@ -149,64 +149,27 @@ def applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, l, ops)
     return bops.multiContraction(left, rightRow, '0123', '3210').tensor * 1
 
 
-def applyGlobalUnitary(upRow, downRow, leftRow, rightRow, A, B, l, s, width=2, numberOfLayers=2):
-    dim = d
-    if width == 2:
-        leftRow = bops.unifyLegs(leftRow, 1, 2)
-        rightRow = bops.unifyLegs(rightRow, 1, 2)
-        BA = bops.unifyLegs(bops.unifyLegs(bops.unifyLegs(
-            bops.permute(bops.multiContraction(B, A, '2', '0'), [0, 1, 4, 5, 6, 2, 3, 7]), 6, 7), 4, 5), 1, 2)
-        AB = bops.unifyLegs(bops.unifyLegs(bops.unifyLegs(
-            bops.permute(bops.multiContraction(A, B, '2', '0'), [0, 1, 4, 5, 6, 2, 3, 7]), 6, 7), 4, 5), 1, 2)
-        dim = d**2
-    sites = [BA if i % 2 == 0 else AB for i in range(l)]
-    for layer in range(numberOfLayers):
-        for site in list(range(l - 1)) + list(range(l-3, -1, -1)):
-            pair = bops.multiContraction(sites[site], sites[site+1], '1', '3')
-            u = tn.Node(np.reshape(ru.haar_measure(dim**2), [dim, dim, dim, dim]))
-            pair = bops.permute(bops.multiContraction(pair, u, '37', '23', cleanOr1=True, cleanOr2=True),
-                                [0, 1, 2, 6, 3, 4, 5, 7])
-            [left, right, te] = bops.svdTruncation(pair, [0, 1, 2, 3], [4, 5, 6, 7], '>>')
-            sites[site] = bops.permute(left, [0, 4, 1, 2, 3])
-            sites[site + 1] = bops.permute(right, [1, 2, 3, 0, 4])
-    sExplicit = [(s & ((2**width - 1) * 2**i)) / 2**i for i in range(l)]
-    projectors = [tn.Node(np.zeros((dim, dim))) for i in range(dim)]
-    for i in range(dim):
-        projectors[i].tensor[i, i] = 1
-    for site in range(len(sites)):
-        sites[site] = bops.multiContraction(sites[site], projectors[sExplicit[site]], '4', '1', cleanOr1=True)
-        sites[site] = bops.permute(bops.multiContraction(sites[site], sites[site], '4', '4*', cleanOr1=True),
-                                   [0, 4, 1, 5, 2, 6, 3, 7])
-    curr = leftRow
-    for i in range(int(l/2)):
-        currC = bops.multiContraction(bops.multiContraction(downRow, curr, '3', '0', cleanOr2=True), upRow, '4', '0')
-        pair = bops.permute(sites[i * 2], sites[i * 2 + 1], '1', '3')
-        curr = bops.permute(bops.multiContraction(currC, pair, '12345', '51203', cleanOr1=True, cleanOr2=True),
-                            [0, 2, 1])
-    bops.removeState(sites)
-    return bops.multiContraction(curr, rightRow, '012', '210').tensor * 1
+def applyGlobalUnitary(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, l, s, numberOfLayers=2):
+    
 
 
-def applyGlobalUnitary_symmetry(upRow, downRow, leftRow, rightRow, A, B, l, s, width=2, numberOfLayers=2):
-    b = 1
 
+with open('toricBoundaries', 'rb') as f:
+    [upRow, downRow, leftRow, rightRow, openA, openB] = pickle.load(f)
 
-# with open('toricBoundaries', 'rb') as f:
-#     [upRow, downRow, leftRow, rightRow, openA, openB] = pickle.load(f)
-#
-# M = 1000
-# avg = 0
-# l = 1
-# [cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>')
-# [cDown, dDown, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>')
-#
-# norm = applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, l,
-#                                [tn.Node(np.eye(d)) for i in range(l * 4)])
-# leftRow = bops.multNode(leftRow, 1 / norm)
-# # for m in range(M):
-# #     avg = (avg * m + applyGlobalUnitary(upRow, downRow, leftRow, rightRow, A, B, l, 0)) / (m + 1)
-# print(avg)
-# print(avg * 16 * 17 - 1)
+M = 1000
+avg = 0
+l = 1
+[cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>')
+[cDown, dDown, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>')
+
+norm = applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, l,
+                               [tn.Node(np.eye(d)) for i in range(l * 4)])
+leftRow = bops.multNode(leftRow, 1 / norm)
+for m in range(M):
+    avg = (avg * m + applyGlobalUnitary(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, l, 0)) / (m + 1)
+print(avg)
+print(avg * 16 * 17 - 1)
 
 # circle = bops.multiContraction(bops.multiContraction(bops.multiContraction(upRow, rightRow, '3', '0'), upRow, '5', '0'), leftRow, '70', '03')
 # ABNet = bops.permute(
