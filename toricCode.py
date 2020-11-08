@@ -162,69 +162,64 @@ openB = tn.Node(openB)
 M = 1000
 avg = 0
 l = 3
-# [cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>')
-# [cDown, dDown, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>')
-#
-# norm = applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, l,
-#                                [tn.Node(np.eye(d)) for i in range(l * 4)])
-# leftRow = bops.multNode(leftRow, 1 / norm)
+[cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>')
+[cDown, dDown, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>')
 
-circle = bops.multiContraction(bops.multiContraction(bops.multiContraction(upRow, rightRow, '3', '0'), upRow, '5', '0'), leftRow, '70', '03')
+norm = applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, l,
+                               [tn.Node(np.eye(d)) for i in range(l * 4)])
+leftRow = bops.multNode(leftRow, 1 / norm)
+norm = applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, l,
+                               [tn.Node(np.eye(d)) for i in range(l * 4)])
+
 ABNet = bops.permute(
-        bops.multiContraction(bops.multiContraction(openB, openA, '2', '4'), bops.multiContraction(openA, openB, '2', '4'), '28', '16',
+        bops.multiContraction(bops.multiContraction(B, A, '1', '3'), bops.multiContraction(A, B, '1', '3'), '16', '04',
                               cleanOr1=True, cleanOr2=True),
-        [1, 5, 6, 13, 14, 9, 10, 2, 0, 4, 8, 12, 3, 7, 11, 15])
-ab = np.reshape(ABNet.tensor, [4**2, 4**2, 4**2, 4**2, 2**4, 2**4])
-for i0 in range(4**2):
-    for i1 in range(4**2):
-        for i2 in range(4**2):
-            for i3 in range(4**2):
-                for j in range(8):
-                    expected = np.zeros((16, 16))
-                    expected[j, j] = 1
-                    expected[j, j^15] = 1
-                    expected[j^15, j] = 1
-                    expected[j^15, j^15] = 1
-                if np.all(expected > 0, ab[i0, i1, i2, i3] > 0):
-                    b = 1
-dm = bops.multiContraction(circle, ABNet, '01234567', '01234567')
-ordered = np.round(np.reshape(dm.tensor, [16, 16]), 14)
-ordered /= np.trace(ordered)
+        [0, 3, 4, 9, 10, 6, 7, 1, 2, 5, 8, 11])
+ABNet = tn.Node(np.reshape(ABNet.tensor, [d**2, d**2, d**2, d**2, d**4]))
+numOfCharges = int(d**4 / 2)
+chargeInds = [[c, c ^ 15] for c in range(numOfCharges)]
+sites = [bops.copyState([ABNet])[0] for i in range(l)]
+for i in list(range(l - 1)) + list(range(l-3, -1, -1)):
+    pair = bops.permute(bops.multiContraction(sites[i], sites[i + 1], '1', '3'), [0, 1, 2, 4, 5, 6, 3, 7])
+    copy = bops.copyState([pair])[0]
+    for c in range(numOfCharges):
+        for cp in range(numOfCharges):
+            curr = tn.Node(pair.tensor[:, :, :, :, :, :, chargeInds[c][:]][:, :, :, :, :, :, :, chargeInds[cp][:]])
+            U = tn.Node(np.reshape(np.eye(4), [2, 2, 2, 2])) # tn.Node(np.reshape(ru.haar_measure(4), [2, 2, 2, 2]))
+            curr = bops.multiContraction(curr, U, '67', '01', cleanOr2=True, cleanOr1=True)
+            pair.tensor[:, :, :, :, :, :, chargeInds[c][:]][:, :, :, :, :, :, :, chargeInds[cp][:]] = curr.tensor
+            tn.remove_node(curr)
+    [sites[i], sites[i + 1], te] = bops.svdTruncation(pair, [0, 1, 2, 6], [3, 4, 5, 7], '>>')
+    sites[i] = bops.permute(sites[i], [0, 4, 1, 2, 3])
+    sites[i + 1] = bops.permute(sites[i + 1], [1, 2, 3, 0, 4])
+    b = 1
+
+leftRow = tn.Node(np.reshape(leftRow.tensor, [leftRow[0].dimension, d**4, leftRow[3].dimension]))
+rightRow = tn.Node(np.reshape(rightRow.tensor, [rightRow[0].dimension, d**4, rightRow[3].dimension]))
+upRow = tn.Node(np.reshape(upRow.tensor, [upRow[0].dimension, d**4, upRow[3].dimension]))
+downRow = tn.Node(np.reshape(downRow.tensor, [downRow[0].dimension, d**4, downRow[3].dimension]))
+left = leftRow
+sites = [bops.copyState([ABNet])[0] for i in range(l)]
+for i in range(l):
+    site = toEnvOperator(bops.multiContraction(sites[i], sites[i], '4', '4*', cleanOr1=True))
+    left = bops.multiContraction(downRow, left, '2', '0', cleanOr2=True)
+    left = bops.multiContraction(left, site, '12', '23', cleanOr1=True, cleanOr2=True)
+    left = bops.multiContraction(left, upRow, '12', '01', cleanOr1=True)
+res = bops.multiContraction(left, rightRow, '012', '210').tensor * 1
+ru = applyOpTosite(A, tn.Node(np.eye(d)))
+ld = applyOpTosite(A, tn.Node(np.eye(d)))
+rd = applyOpTosite(B, tn.Node(np.eye(d)))
+lu = applyOpTosite(B, tn.Node(np.eye(d)))
+t = bops.multiContraction(bops.multiContraction(lu, ru, '1', '3'), bops.multiContraction(ld, rd, '1', '3'), '15', '03')
+t = bops.permute(t, [0, 2, 3, 6, 7, 4, 5, 1])
+
+# TODO found the problem - in ABNet1... the nonphysical legs are up, dpwn, up, down and in ABNet... they are up, up, down, down.
+ABNet1 = bops.permute(
+        bops.multiContraction(bops.multiContraction(B, A, '1', '3'), bops.multiContraction(A, B, '1', '3'), '16', '04',
+                              cleanOr1=True, cleanOr2=True),
+        [0, 3, 4, 9, 10, 6, 7, 1, 2, 5, 8, 11])
+ABNet1 = tn.Node(np.reshape(ABNet.tensor, [d**2, d**2, d**2, d**2, d**4]))
+np.reshape(bops.permute(bops.multiContraction(ABNet1, ABNet1, [8, 9, 10, 11], [8, 9, 10, 11, '*']), [0, 8, 1, 9, 2, 10, 3, 11, 4, 12, 5, 13, 6, 14, 7, 15]).tensor, [4, 4, 4, 4, 4, 4, 4, 4]) - \
+    bops.permute(bops.multiContraction(ABNet, ABNet, '4', '4*'), [0, 4, 1, 5, 2, 6, 3, 7]).tensor
+
 b = 1
-left = bops.multiContraction(circle, ABNet, '123456', '456701')
-circle = bops.multiContraction(bops.multiContraction(downRow, left, '3', '0'), upRow, '3', '0')
-left = bops.permute(bops.multiContraction(circle, ABNet, [1, 2, 4, 3, 13, 14], '456701'),
-                    [0, 9, 10, 11, 1, 2, 3, 4, 5, 6, 7, 8, 12, 13, 14, 15, 16, 17, 18, 19])
-dm = bops.permute(bops.multiContraction(left, rightRow, '1230', '0123'),
-                  [0, 1, 2, 3, 8, 9, 10, 11, 4, 5, 6, 7, 12, 13, 14, 15])
-ordered = np.reshape(dm.tensor, [2**8, 2**8]) / np.trace(np.reshape(dm.tensor, [2**8, 2**8]))
-b = 1
-
-
-# circle = bops.multiContraction(bops.multiContraction(bops.multiContraction(upRow, rightRow, '3', '0'), upRow, '5', '0'), leftRow, '70', '03')
-# ABNet = bops.permute(
-#         bops.multiContraction(bops.multiContraction(openB, openA, '2', '4'), bops.multiContraction(openA, openB, '2', '4'), '28', '16',
-#                               cleanOr1=True, cleanOr2=True),
-#         [1, 5, 6, 13, 14, 9, 10, 2, 0, 4, 8, 12, 3, 7, 11, 15])
-# dm = bops.multiContraction(circle, ABNet, '01234567', '01234567')
-# ordered = np.round(np.reshape(dm.tensor, [16, 16]), 14)
-# ordered /= np.trace(ordered)
-#
-# proj0 = np.zeros((2, 2))
-# proj0[0, 0] = 1
-# proj1 = np.zeros((2, 2))
-# proj1[1, 1] = 1
-# flip0to1 = np.zeros((2, 2))
-# flip0to1[1, 0] = 1
-# flip1to0 = np.zeros((2, 2))
-# flip1to0[0, 1] = 1
-#
-
-
-# M = 1000
-# chi = 300
-# for l in range(1, 2):
-#     norm = applyLocalOperators(upRow, downRow, leftRow, rightRow, openA, openB, l,
-#                                [tn.Node(np.eye(d)) for i in range(l * 4)])
-#     leftRow = bops.multNode(leftRow, 1 / norm)
-#     ru.localUnitariesFull(l * 4, M, applyLocalOperators, [upRow, downRow, leftRow, rightRow, openA, openB, l], 'toric_local_full')

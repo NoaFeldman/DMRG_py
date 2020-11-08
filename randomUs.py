@@ -16,6 +16,13 @@ def haar_measure(n):
     return q
 
 
+def layers(l, d=16, numOfLayers=2):
+    U = np.eye(d**l)
+    for i in list(range(l - 1)) + list(range(l-3, -1, -1)):
+        U = np.matmul(U, np.kron(np.eye(d**i), np.kron(haar_measure(d**2), np.eye(d**(l - (i  +2))))))
+    return U
+
+
 def nearestNeighborsCUE(N, d=2):
     res = np.eye(d**N)
     for i in list(range(N - 1)) + list(range(N-3, -1, -1)):
