@@ -149,15 +149,6 @@ def applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, l, ops)
     return bops.multiContraction(left, rightRow, '0123', '3210').tensor * 1
 
 
-with open('toricBoundaries', 'rb') as f:
-    [upRow, downRow, leftRow, rightRow, openA, openB] = pickle.load(f)
-
-upRow = tn.Node(upRow)
-downRow = tn.Node(downRow)
-leftRow = tn.Node(leftRow)
-rightRow = tn.Node(rightRow)
-openA = tn.Node(openA)
-openB = tn.Node(openB)
 
 def horizontalPair(leftSite, rightSite, cleanLeft=True, cleanRight=False):
     pair = bops.multiContraction(leftSite, rightSite, '1', '3', cleanOr1=cleanLeft, cleanOr2=cleanRight)
@@ -175,6 +166,18 @@ def verticalPair(topSite, bottomSite, cleanTop, cleanBottom):
 
 
 def getPurity():
+    with open('toricBoundaries', 'rb') as f:
+        [upRow, downRow, leftRow, rightRow, openA, openB] = pickle.load(f)
+
+    upRow = tn.Node(upRow)
+    downRow = tn.Node(downRow)
+    leftRow = tn.Node(leftRow)
+    rightRow = tn.Node(rightRow)
+    openA = tn.Node(openA)
+    openB = tn.Node(openB)
+    [cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>')
+    [cDown, dDown, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>')
+
     norm = applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, 2,
                                    [tn.Node(np.eye(d)) for i in range(l * 4)])
     leftRow = bops.multNode(leftRow, 1 / norm)
