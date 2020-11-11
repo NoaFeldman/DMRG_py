@@ -3,12 +3,14 @@ from matplotlib import pyplot as plt
 import numpy as np
 
 
-ls = [6, 8, 10]
-M = 30
-for l in ls:
-    with open('localMC_l_' + str(l) + '_M_' + str(M) + '_l_' + str(l) + '_M_' + str(M), 'rb') as f:
-        mc = pickle.load(f)
-    with open('exact_l_' + str(l), 'rb') as f:
-        exact = pickle.load(f)
-    plt.plot([(i + M-1) / l**2 for i in range(l**2)], np.abs(mc - exact) / exact)
+M = 1000
+Ns = [4, 8]
+for N in Ns:
+    result = [0] * N**2
+    purity = 1 / (8 + 6 * (N - 4))
+    for m in range(N**2):
+        with open('results/toric_local_full_N_' + str(N) + '_M_' + str(M) + '_m_' + str(m * M + M - 1), 'rb') as f:
+            result[m] = pickle.load(f)
+    plt.plot([(m * M + M - 1) / N**2 for m in range(N**2)], np.abs(np.array(result) - purity) / purity)
+    print(result)
 plt.show()

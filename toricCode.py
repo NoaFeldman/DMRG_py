@@ -131,20 +131,20 @@ def applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, l, ops)
     left = leftRow
     for i in range(l):
         left = bops.multiContraction(left, cUp, '3', '0', cleanOr1=True)
-        lu = applyOpTosite(B, ops[i * 4])
-        ld = applyOpTosite(A, ops[i * 4 + 2])
-        left = bops.multiContraction(left, lu, '23', '30', cleanOr1=True)
-        left = bops.multiContraction(left, ld, '14', '30', cleanOr1=True)
+        leftUp = applyOpTosite(B, ops[i * 4])
+        leftDown = applyOpTosite(A, ops[i * 4 + 2])
+        left = bops.multiContraction(left, leftUp, '23', '30', cleanOr1=True)
+        left = bops.multiContraction(left, leftDown, '14', '30', cleanOr1=True)
         left = bops.permute(bops.multiContraction(left, dDown, '04', '21', cleanOr1=True), [3, 2, 1, 0])
 
         left = bops.multiContraction(left, dUp, '3', '0', cleanOr1=True)
-        ru = applyOpTosite(A, ops[i * 4 + 1])
-        rd = applyOpTosite(B, ops[i * 4 + 3])
-        left = bops.multiContraction(left, ru, '23', '30', cleanOr1=True)
-        left = bops.multiContraction(left, rd, '14', '30', cleanOr1=True)
+        rightUp = applyOpTosite(A, ops[i * 4 + 1])
+        rightDown = applyOpTosite(B, ops[i * 4 + 3])
+        left = bops.multiContraction(left, rightUp, '23', '30', cleanOr1=True)
+        left = bops.multiContraction(left, rightDown, '14', '30', cleanOr1=True)
         left = bops.permute(bops.multiContraction(left, cDown, '04', '21', cleanOr1=True), [3, 2, 1, 0])
 
-        bops.removeState([lu, ld, rd, ru])
+        bops.removeState([leftUp, leftDown, rightDown, rightUp])
 
     return bops.multiContraction(left, rightRow, '0123', '3210').tensor * 1
 
@@ -159,67 +159,34 @@ rightRow = tn.Node(rightRow)
 openA = tn.Node(openA)
 openB = tn.Node(openB)
 
-M = 1000
-avg = 0
-l = 3
-[cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>')
-[cDown, dDown, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>')
+def horizontalPair(leftSite, rightSite, cleanLeft=True, cleanRight=False):
+    pair = bops.multiContraction(leftSite, rightSite, '1', '3', cleanOr1=cleanLeft, cleanOr2=cleanRight)
+    pair = bops.multiContraction(pair, ru.getPairUnitary(d), '37', '01')
+    [left, right, te] = bops.svdTruncation(pair, [0, 1, 2, 6], [3, 4, 5, 7], '>>')
+    return bops.permute(left, [0, 4, 1, 2, 3]), bops.permute(right, [1, 2, 3, 0, 4])
 
-norm = applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, l,
-                               [tn.Node(np.eye(d)) for i in range(l * 4)])
-leftRow = bops.multNode(leftRow, 1 / norm)
-norm = applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, l,
-                               [tn.Node(np.eye(d)) for i in range(l * 4)])
 
-ABNet = bops.permute(
-        bops.multiContraction(bops.multiContraction(B, A, '1', '3'), bops.multiContraction(A, B, '1', '3'), '16', '04',
-                              cleanOr1=True, cleanOr2=True),
-        [0, 3, 4, 9, 10, 6, 7, 1, 2, 5, 8, 11])
-ABNet = tn.Node(np.reshape(ABNet.tensor, [d**2, d**2, d**2, d**2, d**4]))
-numOfCharges = int(d**4 / 2)
-chargeInds = [[c, c ^ 15] for c in range(numOfCharges)]
-sites = [bops.copyState([ABNet])[0] for i in range(l)]
-for i in list(range(l - 1)) + list(range(l-3, -1, -1)):
-    pair = bops.permute(bops.multiContraction(sites[i], sites[i + 1], '1', '3'), [0, 1, 2, 4, 5, 6, 3, 7])
-    copy = bops.copyState([pair])[0]
-    for c in range(numOfCharges):
-        for cp in range(numOfCharges):
-            curr = tn.Node(pair.tensor[:, :, :, :, :, :, chargeInds[c][:]][:, :, :, :, :, :, :, chargeInds[cp][:]])
-            U = tn.Node(np.reshape(np.eye(4), [2, 2, 2, 2])) # tn.Node(np.reshape(ru.haar_measure(4), [2, 2, 2, 2]))
-            curr = bops.multiContraction(curr, U, '67', '01', cleanOr2=True, cleanOr1=True)
-            pair.tensor[:, :, :, :, :, :, chargeInds[c][:]][:, :, :, :, :, :, :, chargeInds[cp][:]] = curr.tensor
-            tn.remove_node(curr)
-    [sites[i], sites[i + 1], te] = bops.svdTruncation(pair, [0, 1, 2, 6], [3, 4, 5, 7], '>>')
-    sites[i] = bops.permute(sites[i], [0, 4, 1, 2, 3])
-    sites[i + 1] = bops.permute(sites[i + 1], [1, 2, 3, 0, 4])
-    b = 1
+def verticalPair(topSite, bottomSite, cleanTop, cleanBottom):
+    pair = bops.multiContraction(topSite, bottomSite, '2', '0', cleanOr1=cleanTop, cleanOr2=cleanBottom)
+    pair = bops.multiContraction(pair, ru.getPairUnitary(d), '37', '01',
+                                 cleanOr1=True, cleanOr2=True)
+    [top, bottom, te] = bops.svdTruncation(pair, [0, 1, 2, 6], [3, 4, 5, 7], '>>')
+    return bops.permute(top, [0, 1, 4, 2, 3]), bottom
 
-leftRow = tn.Node(np.reshape(leftRow.tensor, [leftRow[0].dimension, d**4, leftRow[3].dimension]))
-rightRow = tn.Node(np.reshape(rightRow.tensor, [rightRow[0].dimension, d**4, rightRow[3].dimension]))
-upRow = tn.Node(np.reshape(upRow.tensor, [upRow[0].dimension, d**4, upRow[3].dimension]))
-downRow = tn.Node(np.reshape(downRow.tensor, [downRow[0].dimension, d**4, downRow[3].dimension]))
-left = leftRow
-sites = [bops.copyState([ABNet])[0] for i in range(l)]
-for i in range(l):
-    site = toEnvOperator(bops.multiContraction(sites[i], sites[i], '4', '4*', cleanOr1=True))
-    left = bops.multiContraction(downRow, left, '2', '0', cleanOr2=True)
-    left = bops.multiContraction(left, site, '12', '23', cleanOr1=True, cleanOr2=True)
-    left = bops.multiContraction(left, upRow, '12', '01', cleanOr1=True)
-res = bops.multiContraction(left, rightRow, '012', '210').tensor * 1
-ru = applyOpTosite(A, tn.Node(np.eye(d)))
-ld = applyOpTosite(A, tn.Node(np.eye(d)))
-rd = applyOpTosite(B, tn.Node(np.eye(d)))
-lu = applyOpTosite(B, tn.Node(np.eye(d)))
-t = bops.multiContraction(bops.multiContraction(lu, ru, '1', '3'), bops.multiContraction(ld, rd, '1', '3'), '15', '03')
-t = bops.permute(t, [0, 2, 3, 6, 7, 4, 5, 1])
 
-# TODO found the problem - in ABNet1... the nonphysical legs are up, dpwn, up, down and in ABNet... they are up, up, down, down.
-ABNet1 = bops.permute(
-        bops.multiContraction(bops.multiContraction(B, A, '1', '3'), bops.multiContraction(A, B, '1', '3'), '16', '04',
-                              cleanOr1=True, cleanOr2=True),
-        [0, 3, 4, 9, 10, 6, 7, 1, 2, 5, 8, 11])
-ABNet1 = tn.Node(np.reshape(ABNet.tensor, [d**2, d**2, d**2, d**2, d**4]))
-np.reshape(bops.permute(bops.multiContraction(ABNet1, ABNet1, [8, 9, 10, 11], [8, 9, 10, 11, '*']), [0, 8, 1, 9, 2, 10, 3, 11, 4, 12, 5, 13, 6, 14, 7, 15]).tensor, [4, 4, 4, 4, 4, 4, 4, 4]) - \
-    bops.permute(bops.multiContraction(ABNet, ABNet, '4', '4*'), [0, 4, 1, 5, 2, 6, 3, 7]).tensor
-
-b = 1
+def getPurity():
+    norm = applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, 2,
+                                   [tn.Node(np.eye(d)) for i in range(l * 4)])
+    leftRow = bops.multNode(leftRow, 1 / norm)
+    ABNet = bops.permute(
+            bops.multiContraction(bops.multiContraction(openB, openA, '2', '4'), bops.multiContraction(openA, openB, '2', '4'), '28', '16',
+                                  cleanOr1=True, cleanOr2=True),
+            [1, 5, 6, 13, 14, 9, 10, 2, 0, 4, 8, 12, 3, 7, 11, 15])
+    s1 = bops.permute(bops.multiContraction(bops.multiContraction(bops.multiContraction(
+        downRow, leftRow, '3', '0'), upRow, '5', '0'), ABNet, '123456', '456701'), [0, 3, 2, 1, 4, 5, 6, 7, 8, 9, 10, 11])
+    s2 = bops.multiContraction(bops.multiContraction(bops.multiContraction(bops.multiContraction(
+        downRow, s1, '3', '0'), upRow, '5', '0'), ABNet, [1, 2, 3, 4, 13, 14], '456701'), rightRow, [9, 10, 11, 0], '0123')
+    s3 = np.reshape(bops.permute(s2, [0, 1, 2, 3, 8, 9, 10, 11, 4, 5, 6, 7, 12, 13, 14, 15]).tensor, [2**8, 2**8])
+    purity = sum(np.linalg.eigvalsh(s3)**2)
+    print(purity)
+    print(1 / purity)

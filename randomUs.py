@@ -146,3 +146,6 @@ def exactPurity(l, xRight, xLeft, upRow, downRow, A, filename, d=2):
         pickle.dump(purity, f)
     return purity
 
+
+def getPairUnitary(d):
+    return tn.Node(np.reshape(haar_measure(d ** 2), [d] * 4))
