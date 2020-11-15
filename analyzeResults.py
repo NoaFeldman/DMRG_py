@@ -13,16 +13,21 @@ for i in range(len(Ns)):
     spaceSize = d**N
     m = M - 1
     estimation = []
+    estimation2 = []
     legends.append('N = ' + str(N))
-    while os.path.isfile('./results/global/global_p2_N_' + str(N) + '_M_' + str(M) + '_m_' + str(m)):
+    while os.path.isfile('./results/global/global_p1_N_' + str(N) + '_M_' + str(M) + '_m_' + str(m)):
         with open('./results/global/global_p2_N_' + str(N) + '_M_' + str(M) + '_m_' + str(m), 'rb') as f:
             curr = pickle.load(f)
-            estimation.append(curr) # * spaceSize * (spaceSize + 1) - 1)
+            estimation2.append(curr)
+        with open('./results/global/global_p1_N_' + str(N) + '_M_' + str(M) + '_m_' + str(m), 'rb') as f:
+            curr = pickle.load(f)
+            estimation.append(curr)
         m += M
     plt.plot([(m * M + M - 1) / (d**N) for m in range(len(estimation))],
              np.abs(np.array(estimation) - toricCode.getPurity(i + 1)) / toricCode.getPurity(i + 1))
     print(N)
     estimation = np.array(estimation)
+    estimation2 = np.array(estimation2)
     b = 1
     print(np.round(estimation, 3))
 plt.legend(legends)

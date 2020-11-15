@@ -29,26 +29,40 @@ sites = [[0] * 2 * l, [0] * 2 * l]
 mysum = 0
 mysum2 = 0
 mysum3 = 0
+layers = 4
 for m in range(M * d**(4 * l)):
     sites[0][0], sites[1][0] = toricCode.verticalPair(toricCode.B, toricCode.A, cleanTop=False, cleanBottom=False)
-    for i in range(l):
-        sites[0][i * 2], sites[0][i * 2 + 1] = toricCode.horizontalPair(sites[0][i * 2], toricCode.A)
-        sites[1][i * 2], sites[1][i * 2 + 1] = toricCode.horizontalPair(sites[1][i * 2], toricCode.B)
-        if i < l - 1:
-            sites[0][i * 2 + 1], sites[0][i * 2 + 2] = toricCode.horizontalPair(sites[0][i * 2 + 1], toricCode.B)
-            sites[1][i * 2 + 1], sites[1][i * 2 + 2] = toricCode.horizontalPair(sites[1][i * 2 + 1], toricCode.A)
-    sites[0][-1], sites[1][-1] = toricCode.verticalPair(sites[0][-1], sites[1][-1], cleanTop=True, cleanBottom=True)
-    for i in range(l-1, -1, -1):
-        sites[0][2 * i], sites[0][2 * i + 1] = \
-            toricCode.horizontalPair(sites[0][2 * i], sites[0][2 * i + 1], cleanRight=True)
-        sites[1][2 * i], sites[1][2 * i + 1] = \
-            toricCode.horizontalPair(sites[1][2 * i], sites[1][2 * i + 1], cleanRight=True)
-        if i > 0:
-            sites[0][2 * i - 1], sites[0][2 * i] = \
-                toricCode.horizontalPair(sites[0][2 * i - 1], sites[0][2 * i], cleanRight=True)
-            sites[1][2 * i - 1], sites[1][2 * i] = \
-                toricCode.horizontalPair(sites[1][2 * i - 1], sites[1][2 * i], cleanRight=True)
-    sites[0][0], sites[1][0] = toricCode.verticalPair(sites[0][0], sites[1][0], cleanTop=True, cleanBottom=True)
+    for layer in range(layers):
+        for i in range(l):
+            if layer == 0:
+                rightSiteUp = toricCode.A
+                rightSiteDown = toricCode.B
+            else:
+                rightSiteUp = sites[0][i * 2 + 1]
+                rightSiteDown = sites[1][i * 2 + 1]
+            sites[0][i * 2], sites[0][i * 2 + 1] = toricCode.horizontalPair(sites[0][i * 2], rightSiteUp)
+            sites[1][i * 2], sites[1][i * 2 + 1] = toricCode.horizontalPair(sites[1][i * 2], rightSiteDown)
+            if i < l - 1:
+                if layer == 0:
+                    rightSiteUp = toricCode.B
+                    rightSiteDown = toricCode.A
+                else:
+                    rightSiteUp = sites[0][i * 2 + 2]
+                    rightSiteDown = sites[1][i * 2 + 2]
+                sites[0][i * 2 + 1], sites[0][i * 2 + 2] = toricCode.horizontalPair(sites[0][i * 2 + 1], rightSiteUp)
+                sites[1][i * 2 + 1], sites[1][i * 2 + 2] = toricCode.horizontalPair(sites[1][i * 2 + 1], rightSiteDown)
+        sites[0][-1], sites[1][-1] = toricCode.verticalPair(sites[0][-1], sites[1][-1], cleanTop=True, cleanBottom=True)
+        for i in range(l-1, -1, -1):
+            sites[0][2 * i], sites[0][2 * i + 1] = \
+                toricCode.horizontalPair(sites[0][2 * i], sites[0][2 * i + 1], cleanRight=True)
+            sites[1][2 * i], sites[1][2 * i + 1] = \
+                toricCode.horizontalPair(sites[1][2 * i], sites[1][2 * i + 1], cleanRight=True)
+            if i > 0:
+                sites[0][2 * i - 1], sites[0][2 * i] = \
+                    toricCode.horizontalPair(sites[0][2 * i - 1], sites[0][2 * i], cleanRight=True)
+                sites[1][2 * i - 1], sites[1][2 * i] = \
+                    toricCode.horizontalPair(sites[1][2 * i - 1], sites[1][2 * i], cleanRight=True)
+        sites[0][0], sites[1][0] = toricCode.verticalPair(sites[0][0], sites[1][0], cleanTop=True, cleanBottom=True)
     left = leftRow
     for i in range(l):
         left = bops.multiContraction(left, cUp, '3', '0', cleanOr1=True)
@@ -71,9 +85,9 @@ for m in range(M * d**(4 * l)):
     mysum2 += res ** 2
     mysum3 += res ** 3
     if m % M == M - 1:
-        with open(dirname + 'global_p1_N_' + str(l * 4) + '_M_' + str(M) + '_m_' + str(m), 'wb') as f:
+        with open(dirname + 'global_p1_N_' + str(l * 4) + '_M_' + str(M) + '_m_' + str(m) + '_layers_' + str(layers), 'wb') as f:
             pickle.dump(mysum / (m + 1), f)
-        with open(dirname + 'global_p2_N_' + str(l * 4) + '_M_' + str(M) + '_m_' + str(m), 'wb') as f:
+        with open(dirname + 'global_p2_N_' + str(l * 4) + '_M_' + str(M) + '_m_' + str(m) + '_layers_' + str(layers), 'wb') as f:
             pickle.dump(mysum2 / (m + 1), f)
-        with open(dirname + 'global_p3_N_' + str(l * 4) + '_M_' + str(M) + '_m_' + str(m), 'wb') as f:
+        with open(dirname + 'global_p3_N_' + str(l * 4) + '_M_' + str(M) + '_m_' + str(m) + '_layers_' + str(layers), 'wb') as f:
             pickle.dump(mysum3 / (m + 1), f)
