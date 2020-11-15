@@ -190,6 +190,3 @@ def getPurity(l):
     purity = N * res
     print(res * d**(l * 4) / 2**(l - 1))
     return purity
-
-for l in range(1, 6):
-    getPurity(l)
