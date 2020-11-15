@@ -26,6 +26,7 @@ leftRow = bops.multNode(leftRow, 1 / norm)
 
 proj = tn.Node(ru.proj0Tensor)
 sites = [[0] * 2 * l, [0] * 2 * l]
+mysum = 0
 mysum2 = 0
 mysum3 = 0
 for m in range(M * d**(4 * l)):
@@ -66,9 +67,12 @@ for m in range(M * d**(4 * l)):
 
         bops.removeState([leftUp, leftDown, rightDown, rightUp])
     res = bops.multiContraction(left, rightRow, '0123', '3210').tensor * 1
+    mysum += res
     mysum2 += res ** 2
     mysum3 += res ** 3
     if m % M == M - 1:
+        with open(dirname + 'global_p1_N_' + str(l * 4) + '_M_' + str(M) + '_m_' + str(m), 'wb') as f:
+            pickle.dump(mysum / (m + 1), f)
         with open(dirname + 'global_p2_N_' + str(l * 4) + '_M_' + str(M) + '_m_' + str(m), 'wb') as f:
             pickle.dump(mysum2 / (m + 1), f)
         with open(dirname + 'global_p3_N_' + str(l * 4) + '_M_' + str(M) + '_m_' + str(m), 'wb') as f:
