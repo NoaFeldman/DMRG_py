@@ -1,17 +1,57 @@
 import pickle
 from matplotlib import pyplot as plt
 import numpy as np
+import os.path
+import toricCode
+
+M = 100
+d = 2
+Ns = [4, 8, 12, 16, 20]
+legends = []
+for i in range(len(Ns)):
+    N = Ns[i]
+    spaceSize = d**N
+    m = M - 1
+    estimation = []
+    legends.append('N = ' + str(N))
+    while os.path.isfile('./results/global/global_p2_N_' + str(N) + '_M_' + str(M) + '_m_' + str(m)):
+        with open('./results/global/global_p2_N_' + str(N) + '_M_' + str(M) + '_m_' + str(m), 'rb') as f:
+            curr = pickle.load(f)
+            estimation.append(curr) # * spaceSize * (spaceSize + 1) - 1)
+        m += M
+    plt.plot([(m * M + M - 1) / (d**N) for m in range(len(estimation))],
+             np.abs(np.array(estimation) - toricCode.getPurity(i + 1)) / toricCode.getPurity(i + 1))
+    print(N)
+    estimation = np.array(estimation)
+    b = 1
+    print(np.round(estimation, 3))
+plt.legend(legends)
+plt.show()
 
 
 M = 100
-Ns = [4, 8, 12, 16, 20]
-
-
+chi = 1000
+for i in range(len(Ns)):
+    N = Ns[i]
+    m = 99
+    estimation = []
+    while os.path.isfile('./results/localMC/toric_local_MC_N_' + str(N) + '_M_' + str(M) + \
+                         '_m_' + str(m) + '_chi_' + str(chi)):
+        with open('results/localMC/toric_local_MC_N_' + str(N) + '_M_' + str(M) + \
+                         '_m_' + str(m) + '_chi_' + str(chi), 'rb') as f:
+            curr = pickle.load(f)
+            estimation.append(curr)
+        m += M
+    print(N)
+    print(estimation)
+    plt.plot([(m * M + M - 1) / N**2 for m in range(len(estimation))], np.abs(np.array(estimation) - expected[i]) / expected[i])
+    plt.show()
+    b = 1
+plt.show()
 
 M = 1000
 Ns = [4, 8, 12]
 Ms = [16, 64, 36]
-expected = [1/8, 1/32, 1/128]
 legends = []
 for i in range(len(Ns)):
     N = Ns[i]

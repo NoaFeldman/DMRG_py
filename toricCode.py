@@ -165,7 +165,8 @@ def verticalPair(topSite, bottomSite, cleanTop, cleanBottom):
     return bops.permute(top, [0, 1, 4, 2, 3]), bottom
 
 
-def getPurity():
+def getPurity(l):
+
     with open('toricBoundaries', 'rb') as f:
         [upRow, downRow, leftRow, rightRow, openA, openB] = pickle.load(f)
 
@@ -178,18 +179,17 @@ def getPurity():
     [cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>')
     [cDown, dDown, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>')
 
-    norm = applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, 2,
-                                   [tn.Node(np.eye(d)) for i in range(l * 4)])
+    norm = applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, l,
+                               [tn.Node(np.eye(d)) for i in range(l * 4)])
     leftRow = bops.multNode(leftRow, 1 / norm)
-    ABNet = bops.permute(
-            bops.multiContraction(bops.multiContraction(openB, openA, '2', '4'), bops.multiContraction(openA, openB, '2', '4'), '28', '16',
-                                  cleanOr1=True, cleanOr2=True),
-            [1, 5, 6, 13, 14, 9, 10, 2, 0, 4, 8, 12, 3, 7, 11, 15])
-    s1 = bops.permute(bops.multiContraction(bops.multiContraction(bops.multiContraction(
-        downRow, leftRow, '3', '0'), upRow, '5', '0'), ABNet, '123456', '456701'), [0, 3, 2, 1, 4, 5, 6, 7, 8, 9, 10, 11])
-    s2 = bops.multiContraction(bops.multiContraction(bops.multiContraction(bops.multiContraction(
-        downRow, s1, '3', '0'), upRow, '5', '0'), ABNet, [1, 2, 3, 4, 13, 14], '456701'), rightRow, [9, 10, 11, 0], '0123')
-    s3 = np.reshape(bops.permute(s2, [0, 1, 2, 3, 8, 9, 10, 11, 4, 5, 6, 7, 12, 13, 14, 15]).tensor, [2**8, 2**8])
-    purity = sum(np.linalg.eigvalsh(s3)**2)
-    print(purity)
-    print(1 / purity)
+    res = applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, l,
+                            [tn.Node(ru.proj0Tensor) for i in range(l * 4)])
+    # The density matrix is constructed of blocks of ones of size N and normalized by res.
+    # Squaring it adds a factor of N * res.
+    N = 2**l
+    purity = N * res
+    print(res * d**(l * 4) / 2**(l - 1))
+    return purity
+
+for l in range(1, 6):
+    getPurity(l)
