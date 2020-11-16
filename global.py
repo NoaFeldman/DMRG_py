@@ -24,6 +24,28 @@ norm = toricCode.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, 
                                [tn.Node(np.eye(d)) for i in range(l * 4)])
 leftRow = bops.multNode(leftRow, 1 / norm)
 
+
+def expectationValue(currSites, op):
+    left = leftRow
+    for i in range(l):
+        left = bops.multiContraction(left, cUp, '3', '0', cleanOr1=True)
+        leftUp = toricCode.applyOpTosite(currSites[0][i * 2], op)
+        leftDown = toricCode.applyOpTosite(currSites[1][i * 2], op)
+        left = bops.multiContraction(left, leftUp, '23', '30', cleanOr1=True)
+        left = bops.multiContraction(left, leftDown, '14', '30', cleanOr1=True)
+        left = bops.permute(bops.multiContraction(left, dDown, '04', '21', cleanOr1=True), [3, 2, 1, 0])
+
+        left = bops.multiContraction(left, dUp, '3', '0', cleanOr1=True)
+        rightUp = toricCode.applyOpTosite(currSites[0][i * 2 + 1], op)
+        rightDown = toricCode.applyOpTosite(currSites[1][i * 2 + 1], op)
+        left = bops.multiContraction(left, rightUp, '23', '30', cleanOr1=True)
+        left = bops.multiContraction(left, rightDown, '14', '30', cleanOr1=True)
+        left = bops.permute(bops.multiContraction(left, cDown, '04', '21', cleanOr1=True), [3, 2, 1, 0])
+
+        bops.removeState([leftUp, leftDown, rightDown, rightUp])
+    return bops.multiContraction(left, rightRow, '0123', '3210').tensor * 1
+
+
 proj = tn.Node(ru.proj0Tensor)
 sites = [[0] * 2 * l, [0] * 2 * l]
 mysum = 0
@@ -37,50 +59,41 @@ for m in range(M * d**(4 * l)):
             if layer == 0:
                 rightSiteUp = toricCode.A
                 rightSiteDown = toricCode.B
+                cleanRight = False
             else:
                 rightSiteUp = sites[0][i * 2 + 1]
                 rightSiteDown = sites[1][i * 2 + 1]
-            sites[0][i * 2], sites[0][i * 2 + 1] = toricCode.horizontalPair(sites[0][i * 2], rightSiteUp)
-            sites[1][i * 2], sites[1][i * 2 + 1] = toricCode.horizontalPair(sites[1][i * 2], rightSiteDown)
+                cleanRight = True
+            sites[0][i * 2], sites[0][i * 2 + 1] = toricCode.horizontalPair(sites[0][i * 2], rightSiteUp, cleanRight=cleanRight)
+            sites[1][i * 2], sites[1][i * 2 + 1] = toricCode.horizontalPair(sites[1][i * 2], rightSiteDown, cleanRight=cleanRight)
             if i < l - 1:
                 if layer == 0:
                     rightSiteUp = toricCode.B
                     rightSiteDown = toricCode.A
+                    cleanRight = False
                 else:
                     rightSiteUp = sites[0][i * 2 + 2]
                     rightSiteDown = sites[1][i * 2 + 2]
-                sites[0][i * 2 + 1], sites[0][i * 2 + 2] = toricCode.horizontalPair(sites[0][i * 2 + 1], rightSiteUp)
-                sites[1][i * 2 + 1], sites[1][i * 2 + 2] = toricCode.horizontalPair(sites[1][i * 2 + 1], rightSiteDown)
-        sites[0][-1], sites[1][-1] = toricCode.verticalPair(sites[0][-1], sites[1][-1], cleanTop=True, cleanBottom=True)
+                    cleanRight = True
+                sites[0][i * 2 + 1], sites[0][i * 2 + 2] = toricCode.horizontalPair(sites[0][i * 2 + 1], rightSiteUp, cleanRight=cleanRight)
+                sites[1][i * 2 + 1], sites[1][i * 2 + 2] = toricCode.horizontalPair(sites[1][i * 2 + 1], rightSiteDown, cleanRight=cleanRight)
+            sites[0][i * 2], sites[1][i * 2] = toricCode.verticalPair(sites[0][i * 2], sites[1][i * 2])
+            sites[0][i * 2], sites[1][i * 2] = toricCode.verticalPair(sites[0][i * 2], sites[1][i * 2])
         for i in range(l-1, -1, -1):
             sites[0][2 * i], sites[0][2 * i + 1] = \
-                toricCode.horizontalPair(sites[0][2 * i], sites[0][2 * i + 1], cleanRight=True)
+                toricCode.horizontalPair(sites[0][2 * i], sites[0][2 * i + 1])
             sites[1][2 * i], sites[1][2 * i + 1] = \
-                toricCode.horizontalPair(sites[1][2 * i], sites[1][2 * i + 1], cleanRight=True)
+                toricCode.horizontalPair(sites[1][2 * i], sites[1][2 * i + 1])
             if i > 0:
                 sites[0][2 * i - 1], sites[0][2 * i] = \
-                    toricCode.horizontalPair(sites[0][2 * i - 1], sites[0][2 * i], cleanRight=True)
+                    toricCode.horizontalPair(sites[0][2 * i - 1], sites[0][2 * i])
                 sites[1][2 * i - 1], sites[1][2 * i] = \
-                    toricCode.horizontalPair(sites[1][2 * i - 1], sites[1][2 * i], cleanRight=True)
-        sites[0][0], sites[1][0] = toricCode.verticalPair(sites[0][0], sites[1][0], cleanTop=True, cleanBottom=True)
-    left = leftRow
-    for i in range(l):
-        left = bops.multiContraction(left, cUp, '3', '0', cleanOr1=True)
-        leftUp = toricCode.applyOpTosite(sites[0][i * 2], proj)
-        leftDown = toricCode.applyOpTosite(sites[1][i * 2], proj)
-        left = bops.multiContraction(left, leftUp, '23', '30', cleanOr1=True)
-        left = bops.multiContraction(left, leftDown, '14', '30', cleanOr1=True)
-        left = bops.permute(bops.multiContraction(left, dDown, '04', '21', cleanOr1=True), [3, 2, 1, 0])
-
-        left = bops.multiContraction(left, dUp, '3', '0', cleanOr1=True)
-        rightUp = toricCode.applyOpTosite(sites[0][i * 2 + 1], proj)
-        rightDown = toricCode.applyOpTosite(sites[1][i * 2 + 1], proj)
-        left = bops.multiContraction(left, rightUp, '23', '30', cleanOr1=True)
-        left = bops.multiContraction(left, rightDown, '14', '30', cleanOr1=True)
-        left = bops.permute(bops.multiContraction(left, cDown, '04', '21', cleanOr1=True), [3, 2, 1, 0])
-
-        bops.removeState([leftUp, leftDown, rightDown, rightUp])
-    res = bops.multiContraction(left, rightRow, '0123', '3210').tensor * 1
+                    toricCode.horizontalPair(sites[1][2 * i - 1], sites[1][2 * i])
+            sites[0][i * 2], sites[1][i * 2] = toricCode.verticalPair(sites[0][i * 2], sites[1][i * 2])
+            sites[0][i * 2], sites[1][i * 2] = toricCode.verticalPair(sites[0][i * 2], sites[1][i * 2])
+        norm = expectationValue(sites, tn.Node(np.eye(d)))
+        sites[0][0] = bops.multNode(sites[0][0], 1 / np.sqrt(norm))
+    res = expectationValue(sites, proj)
     mysum += res
     mysum2 += res ** 2
     mysum3 += res ** 3

@@ -150,23 +150,22 @@ def applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, l, ops)
 
 
 
-def horizontalPair(leftSite, rightSite, cleanLeft=True, cleanRight=False):
+def horizontalPair(leftSite, rightSite, cleanLeft=True, cleanRight=True):
     pair = bops.multiContraction(leftSite, rightSite, '1', '3', cleanOr1=cleanLeft, cleanOr2=cleanRight)
     pair = bops.multiContraction(pair, ru.getPairUnitary(d), '37', '01')
-    [left, right, te] = bops.svdTruncation(pair, [0, 1, 2, 6], [3, 4, 5, 7], '>>')
+    [left, right, te] = bops.svdTruncation(pair, [0, 1, 2, 6], [3, 4, 5, 7], '>>', maxBondDim=16)
     return bops.permute(left, [0, 4, 1, 2, 3]), bops.permute(right, [1, 2, 3, 0, 4])
 
 
-def verticalPair(topSite, bottomSite, cleanTop, cleanBottom):
+def verticalPair(topSite, bottomSite, cleanTop=True, cleanBottom=True):
     pair = bops.multiContraction(topSite, bottomSite, '2', '0', cleanOr1=cleanTop, cleanOr2=cleanBottom)
     pair = bops.multiContraction(pair, ru.getPairUnitary(d), '37', '01',
                                  cleanOr1=True, cleanOr2=True)
-    [top, bottom, te] = bops.svdTruncation(pair, [0, 1, 2, 6], [3, 4, 5, 7], '>>')
+    [top, bottom, te] = bops.svdTruncation(pair, [0, 1, 2, 6], [3, 4, 5, 7], '>>', maxBondDim=16)
     return bops.permute(top, [0, 1, 4, 2, 3]), bottom
 
 
 def getPurity(l):
-
     with open('toricBoundaries', 'rb') as f:
         [upRow, downRow, leftRow, rightRow, openA, openB] = pickle.load(f)
 
@@ -188,5 +187,4 @@ def getPurity(l):
     # Squaring it adds a factor of N * res.
     N = 2**l
     purity = N * res
-    print(res * d**(l * 4) / 2**(l - 1))
     return purity
