@@ -5,6 +5,7 @@ import toricCode
 import tensornetwork as tn
 import numpy as np
 import basicOperations as bops
+from datetime import datetime
 
 d = 2
 M = int(sys.argv[1])
@@ -52,6 +53,7 @@ mysum = 0
 mysum2 = 0
 mysum3 = 0
 layers = 4
+start = datetime.now()
 for m in range(M * d**(4 * l)):
     sites[0][0], sites[1][0] = toricCode.verticalPair(toricCode.B, toricCode.A, cleanTop=False, cleanBottom=False)
     for layer in range(layers):
@@ -104,3 +106,6 @@ for m in range(M * d**(4 * l)):
             pickle.dump(mysum2 / (m + 1), f)
         with open(dirname + 'global_p3_N_' + str(l * 4) + '_M_' + str(M) + '_m_' + str(m) + '_layers_' + str(layers), 'wb') as f:
             pickle.dump(mysum3 / (m + 1), f)
+end = datetime.now()
+with open(dirname + 'global_time_N_' + str(l * 4) + '_M_' + str(M), 'wb') as f:
+    pickle.dump((end - start).total_seconds(), f)
