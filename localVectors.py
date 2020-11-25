@@ -28,4 +28,4 @@ leftRow = bops.multNode(leftRow, 1 / norm)
 
 print(toricCode.getPurity(l))
 ru.localNonUnitaries(l * 4, M, option, toricCode.applyLocalOperators, [cUp, dUp, cDown, dDown, leftRow, rightRow, toricCode.A, toricCode.B, l],
-                      dirname + 'toric_local_vecs')
+                      dirname + option + '/toric_local_vecs')
