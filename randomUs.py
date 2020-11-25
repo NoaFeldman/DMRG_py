@@ -4,6 +4,7 @@ import tensornetwork as tn
 import scipy
 import pickle
 from datetime import datetime
+import statistics
 
 
 """A Random matrix distributed with Haar measure"""
@@ -67,9 +68,47 @@ def getP(d, s, us, estimateFunc, arguments):
     currUs = [tn.Node(np.eye(d)) for i in range(len(us))]
     for i in range(len(us)):
         currUs[i].tensor = np.matmul(np.matmul(us[i], projs[int(s & d ** i > 0)]), np.conj(np.transpose(us[i])))
-    result =  wrapper(estimateFunc, arguments + [currUs])
+    result = wrapper(estimateFunc, arguments + [currUs])
     bops.removeState(currUs)
     return result
+
+
+
+# Based on my analysis in unitary_alternatives.
+# We eventually calculate for each site M_i \rho_ij G_j M_k \rho_kl G_l
+# for real Gaussian M, G.
+# Averaging we get \delta_il\delta_jk
+# This function returns mat_ij = M_iG_j
+def getNonUnitaryRandomOp(d, randOption):
+    if randOption == 'complex':
+        M = (np.random.randint(2, size=d) * 2 - 1 + 1j * (np.random.randint(2, size=d) * 2 - 1)) / np.sqrt(2)
+        G = (np.random.randint(2, size=(1, d)) * 2 - 1 + 1j * (np.random.randint(2, size=(1, d)) * 2 - 1)) / np.sqrt(2)
+    elif randOption == 'real':
+        M = np.random.randint(2, size=d) * 2 - 1
+        G = np.random.randint(2, size=(1, d)) * 2 - 1
+    elif randOption == 'gaussian':
+        M = np.random.randn(2)
+        G = np.random.randn(1, 2)
+    return tn.Node(np.kron(M, np.transpose(G)))
+
+def localNonUnitaries(N, M, randOption, estimateFunc, arguments, filename, d=2):
+    start = datetime.now()
+    avg = 0
+    for m in range(int(M * d**N)):
+        ops = [getNonUnitaryRandomOp(d, randOption) for i in range(N)]
+        expectation = wrapper(estimateFunc, arguments + [ops])
+        estimation = np.abs(expectation)**2
+        mc = m % M
+        avg = (avg * mc + estimation) / (mc + 1)
+        if m % M == M - 1:
+            with open(filename + '_N_' + str(N) + '_' + randOption + '_M_' + str(M) + '_m_' + str(m), 'wb') as f:
+                pickle.dump(avg, f)
+                print(avg)
+                avg = 0
+        bops.removeState(ops)
+    end = datetime.now()
+    with open(filename + '_time_N_' + str(N) + '_M_' + str(M), 'wb') as f:
+        pickle.dump((end - start).total_seconds(), f)
 
 
 def localUnitariesFull(N, M, estimateFunc, arguments, filename, d=2):
