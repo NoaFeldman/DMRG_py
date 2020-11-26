@@ -89,6 +89,12 @@ def getNonUnitaryRandomOp(d, randOption):
     elif randOption == 'gaussian':
         M = np.random.randn(2)
         G = np.random.randn(1, 2)
+    elif randOption == 'unitCircle':
+        M = np.exp(1j * 2 * np.pi * np.random.uniform(size=d))
+        G = np.exp(1j * 2 * np.pi * np.random.uniform(size=(1, d)))
+    elif randOption == 'slice8':
+        M = np.exp(1j * 0.25 * np.pi * np.random.randint(8, size=d))
+        G = np.exp(1j * 0.25 * np.pi * np.random.randint(8, size=(1, d)))
     return tn.Node(np.kron(M, np.transpose(G)))
 
 def localNonUnitaries(N, M, randOption, estimateFunc, arguments, filename, d=2):
