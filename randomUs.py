@@ -79,29 +79,57 @@ def getP(d, s, us, estimateFunc, arguments):
 # for real Gaussian M, G.
 # Averaging we get \delta_il\delta_jk
 # This function returns mat_ij = M_iG_j
-def getNonUnitaryRandomOp(d, randOption):
-    if randOption == 'complex':
-        M = (np.random.randint(2, size=d) * 2 - 1 + 1j * (np.random.randint(2, size=d) * 2 - 1)) / np.sqrt(2)
-        G = (np.random.randint(2, size=(1, d)) * 2 - 1 + 1j * (np.random.randint(2, size=(1, d)) * 2 - 1)) / np.sqrt(2)
-    elif randOption == 'real':
-        M = np.random.randint(2, size=d) * 2 - 1
-        G = np.random.randint(2, size=(1, d)) * 2 - 1
-    elif randOption == 'gaussian':
-        M = np.random.randn(2)
-        G = np.random.randn(1, 2)
-    elif randOption == 'unitCircle':
-        M = np.exp(1j * 2 * np.pi * np.random.uniform(size=d))
-        G = np.exp(1j * 2 * np.pi * np.random.uniform(size=(1, d)))
-    elif randOption == 'slice8':
-        M = np.exp(1j * 0.25 * np.pi * np.random.randint(8, size=d))
-        G = np.exp(1j * 0.25 * np.pi * np.random.randint(8, size=(1, d)))
-    return tn.Node(np.kron(M, np.transpose(G)))
+def getNonUnitaryRandomOps(d, randOption, vecsNum=2):
+    vecs = [np.zeros((d), dtype=complex) for i in range(vecsNum)]
+    for i in range(vecsNum):
+        if randOption == 'complex':
+            vecs[i] = (np.random.randint(2, size=d) * 2 - 1 + 1j * (np.random.randint(2, size=d) * 2 - 1)) / np.sqrt(2)
+        elif randOption == 'real':
+            vecs[i] = np.random.randint(2, size=d) * 2 - 1
+        elif randOption == 'gaussian':
+            vecs[i] = np.random.randn(2)
+        elif randOption == 'unitCircle':
+            vecs[i] = np.exp(1j * 2 * np.pi * np.random.uniform(size=d))
+        elif randOption == 'slice8':
+            vecs[i] = np.exp(1j * 0.25 * np.pi * np.random.randint(8, size=d))
+    res = [tn.Node(np.zeros((d, d), dtype=complex)) for i in range(vecsNum)]
+    for i in range(vecsNum):
+        if i == vecsNum - 1:
+            next = 0
+        else:
+            next = i + 1
+        res[i].tensor = np.kron(vecs[i], np.conj(np.reshape(vecs[next], [2, 1])))
+    return res
+
+
+def renyiEntropy(n, N, M, randOption, estimateFunc, arguments, filename, d=2):
+    start = datetime.now()
+    avg = 0
+    for m in range(int(M * d ** N)):
+        ops = [getNonUnitaryRandomOps(d, randOption, vecsNum=n) for i in range(N)]
+        estimation = 1
+        for i in range(n):
+            expectation = wrapper(estimateFunc, arguments + [[op[i] for op in ops]])
+            estimation *= expectation
+        mc = m % M
+        avg = (avg * mc + estimation) / (mc + 1)
+        if m % M == M - 1:
+            with open(filename + '_n_' + str(n) + '_N_' + str(N) + '_' + randOption + '_M_' + str(M) + '_m_' + str(m), 'wb') as f:
+                pickle.dump(avg, f)
+                print(avg)
+                avg = 0
+        for op in ops:
+            bops.removeState(op)
+    end = datetime.now()
+    with open(filename + '_time_N_' + str(N) + '_M_' + str(M), 'wb') as f:
+        pickle.dump((end - start).total_seconds(), f)
+
 
 def localNonUnitaries(N, M, randOption, estimateFunc, arguments, filename, d=2):
     start = datetime.now()
     avg = 0
     for m in range(int(M * d**N)):
-        ops = [getNonUnitaryRandomOp(d, randOption) for i in range(N)]
+        ops = [getNonUnitaryRandomOps(d, randOption)[0] for i in range(N)]
         expectation = wrapper(estimateFunc, arguments + [ops])
         estimation = np.abs(expectation)**2
         mc = m % M

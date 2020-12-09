@@ -26,6 +26,7 @@ norm = toricCode.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, 
                                [tn.Node(np.eye(d)) for i in range(l * 4)])
 leftRow = bops.multNode(leftRow, 1 / norm)
 
-print(toricCode.getPurity(l))
-ru.localNonUnitaries(l * 4, M, option, toricCode.applyLocalOperators, [cUp, dUp, cDown, dDown, leftRow, rightRow, toricCode.A, toricCode.B, l],
-                      dirname + option + '/toric_local_vecs')
+ru.renyiEntropy(3, l * 4, M, option, toricCode.applyLocalOperators, [cUp, dUp, cDown, dDown, leftRow, rightRow, toricCode.A, toricCode.B, l],
+                      dirname + 'renyis/toric_local_vecs')
+# ru.localNonUnitaries(l * 4, M, option, toricCode.applyLocalOperators, [cUp, dUp, cDown, dDown, leftRow, rightRow, toricCode.A, toricCode.B, l],
+#                       dirname + option + '/toric_local_vecs')
