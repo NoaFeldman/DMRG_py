@@ -63,7 +63,7 @@ proj0Tensor = np.zeros((2, 2), dtype=complex)
 proj0Tensor[0, 0] = 1
 proj1Tensor = np.zeros((2, 2), dtype=complex)
 proj1Tensor[1, 1] = 1
-projs = [proj0Tensor, proj1Tensor]
+projs =  [proj0Tensor, proj1Tensor]
 def getP(d, s, us, estimateFunc, arguments):
     currUs = [tn.Node(np.eye(d)) for i in range(len(us))]
     for i in range(len(us)):
@@ -79,6 +79,8 @@ def getP(d, s, us, estimateFunc, arguments):
 # for real Gaussian M, G.
 # Averaging we get \delta_il\delta_jk
 # This function returns mat_ij = M_iG_j
+hadamard = np.ones((2, 2)) * np.sqrt(0.5)
+hadamard[1, 1] *= -1
 def getNonUnitaryRandomOps(d, randOption, vecsNum=2):
     vecs = [np.zeros((d), dtype=complex) for i in range(vecsNum)]
     for i in range(vecsNum):
@@ -90,8 +92,9 @@ def getNonUnitaryRandomOps(d, randOption, vecsNum=2):
             vecs[i] = np.random.randn(2)
         elif randOption == 'unitCircle':
             vecs[i] = np.exp(1j * 2 * np.pi * np.random.uniform(size=d))
-        elif randOption == 'slice8':
-            vecs[i] = np.exp(1j * 0.25 * np.pi * np.random.randint(8, size=d))
+        elif randOption == 'complexTwist':
+            vecs[i] = (np.random.randint(2, size=d) * 2 - 1 + 1j * (np.random.randint(2, size=d) * 2 - 1)) / np.sqrt(2)
+            vecs[i] = np.matmul(hadamard, vecs[i])
     res = [tn.Node(np.zeros((d, d), dtype=complex)) for i in range(vecsNum)]
     for i in range(vecsNum):
         if i == vecsNum - 1:

@@ -166,7 +166,7 @@ def verticalPair(topSite, bottomSite, cleanTop=True, cleanBottom=True):
 
 
 def getPurity(l):
-    with open('toricBoundaries', 'rb') as f:
+    with open('results/toricBoundaries', 'rb') as f:
         [upRow, downRow, leftRow, rightRow, openA, openB] = pickle.load(f)
 
     upRow = tn.Node(upRow)
