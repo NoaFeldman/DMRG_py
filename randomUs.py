@@ -81,7 +81,7 @@ def getP(d, s, us, estimateFunc, arguments):
 # This function returns mat_ij = M_iG_j
 hadamard = np.ones((2, 2)) * np.sqrt(0.5)
 hadamard[1, 1] *= -1
-def getNonUnitaryRandomOps(d, randOption, vecsNum=2):
+def getNonUnitaryRandomOps(d, randOption, vecsNum=2, direction=0):
     vecs = [np.zeros((d), dtype=complex) for i in range(vecsNum)]
     for i in range(vecsNum):
         if randOption == 'complex':
@@ -96,12 +96,20 @@ def getNonUnitaryRandomOps(d, randOption, vecsNum=2):
             vecs[i] = (np.random.randint(2, size=d) * 2 - 1 + 1j * (np.random.randint(2, size=d) * 2 - 1)) / np.sqrt(2)
             vecs[i] = np.matmul(hadamard, vecs[i])
     res = [tn.Node(np.zeros((d, d), dtype=complex)) for i in range(vecsNum)]
-    for i in range(vecsNum):
-        if i == vecsNum - 1:
-            next = 0
-        else:
-            next = i + 1
-        res[i].tensor = np.kron(vecs[i], np.conj(np.reshape(vecs[next], [2, 1])))
+    if direction == 0:
+        for i in range(vecsNum):
+            if i == vecsNum - 1:
+                next = 0
+            else:
+                next = i + 1
+            res[i].tensor = np.kron(vecs[i], np.conj(np.reshape(vecs[next], [2, 1])))
+    else:
+        for i in range(vecsNum):
+            if i == 0:
+                prev = vecsNum -1
+            else:
+                prev = i - 1
+            res[i].tensor = np.kron(vecs[prev], np.conj(np.reshape(vecs[i], [2, 1])))
     return res
 
 
@@ -125,6 +133,29 @@ def renyiEntropy(n, N, M, randOption, estimateFunc, arguments, filename, d=2):
             bops.removeState(op)
     end = datetime.now()
     with open(filename + '_time_N_' + str(N) + '_M_' + str(M), 'wb') as f:
+        pickle.dump((end - start).total_seconds(), f)
+
+
+def renyiNegativity(n, N, M, randOption, estimateFunc, arguments, filename, d=2):
+    start = datetime.now()
+    avg = 0
+    for m in range(int(M * d ** N)):
+        ops = [getNonUnitaryRandomOps(d, randOption, vecsNum=n, direction=int(N / 2 > i)) for i in range(N)]
+        estimation = 1
+        for i in range(n):
+            expectation = wrapper(estimateFunc, arguments + [[op[i] for op in ops]])
+            estimation *= expectation
+        mc = m % M
+        avg = (avg * mc + estimation) / (mc + 1)
+        if m % M == M - 1:
+            with open(filename + 'neg_n_' + str(n) + '_N_' + str(N) + '_' + randOption + '_M_' + str(M) + '_m_' + str(m), 'wb') as f:
+                pickle.dump(avg, f)
+                print(np.real(np.round(avg, 16)))
+                avg = 0
+        for op in ops:
+            bops.removeState(op)
+    end = datetime.now()
+    with open(filename + 'neg_time_N_' + str(N) + '_M_' + str(M), 'wb') as f:
         pickle.dump((end - start).total_seconds(), f)
 
 
