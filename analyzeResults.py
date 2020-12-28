@@ -27,10 +27,39 @@ for i in range(len(Ns)):
                 estimation.append((estimation[-1] * len(estimation) + curr) / (len(estimation) + 1))
         m += M
     expected = toricCode.getPurity(i + 1)
-    plt.plot([(m * M + M - 1) / (d ** N) for m in range(len(estimation))],
+    plt.plot([(m * M + M - 1) / (2**N * expected) for m in range(len(estimation))],
              np.abs(np.array(estimation) - expected) / expected)
+plt.xlabel(r'$M/(2^N p_2))$')
+plt.ylabel(r'|$p_2$ - est|/$p_2$')
 plt.legend(legends)
 plt.show()
+
+dop3 = True
+if dop3:
+    for i in range(len(Ns)):
+        N = Ns[i]
+        spaceSize = d**N
+        m = M - 1
+        estimation = []
+        legends.append('N = ' + str(N))
+        while os.path.isfile('./results/renyis/toric_local_vecs_n_3_N_' + str(N) + '_' + option +
+                             '_M_' + str(M) + '_m_' + str(m)):
+            with open('./results/renyis/toric_local_vecs_n_3_N_' + str(N) + '_' + option +
+                             '_M_' + str(M) + '_m_' + str(m), 'rb') as f:
+                curr = pickle.load(f)
+                if len(estimation) == 0:
+                    estimation.append(curr)
+                else:
+                    estimation.append((estimation[-1] * len(estimation) + curr) / (len(estimation) + 1))
+            m += M
+        p2 = toricCode.getPurity(i + 1)
+        p3 = p2**2
+        plt.plot([(m * M + M - 1) / (2**N * p3) for m in range(len(estimation))],
+                 np.abs(np.array(estimation) - p3) / p3)
+    plt.xlabel(r'$M/(2^N p3))$')
+    plt.ylabel(r'|$p_3$ - est|/$p_3$')
+    plt.legend(legends)
+    plt.show()
 
 # M = 100
 # Ns = [4, 8, 12]
