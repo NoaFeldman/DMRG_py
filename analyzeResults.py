@@ -1,146 +1,183 @@
 import pickle
 from matplotlib import pyplot as plt
 import numpy as np
-import os.path
+import os
 import toricCode
+import re
 
 d = 2
+
+
+# Linear regression, based on https://stackoverflow.com/questions/6148207/linear-regression-with-matplotlib-numpy
+def linearRegression(Ns, Vs):
+    coef = np.polyfit(Ns, np.log2(Vs), 1)
+    print(coef)
+    poly1d_fn = np.poly1d(coef)
+    plt.plot(Ns, Vs, 'yo', Ns, 2**poly1d_fn(Ns), '--k')
+    plt.yscale('log')
+    plt.xticks(Ns)
+
+
+def findResults(n, N, opt='p'):
+    rootdir = './results'
+    regex = re.compile('organized_' + opt + str(n) + '_N_' + str(N) + '_*')
+
+    for root, dirs, files in os.walk(rootdir):
+        for file in files:
+            if regex.match(file):
+                return file
+
 
 M = 1000
 Ns = [4, 8, 12, 16, 20, 24]
 legends = []
 option = 'complex'
-for i in range(len(Ns)):
-    N = Ns[i]
-    spaceSize = d**N
-    m = M - 1
-    estimation = []
-    legends.append('N = ' + str(N))
-    while os.path.isfile('./results/' + option + '/toric_local_vecs_N_' + str(N) + '_' + option +
-                         '_M_' + str(M) + '_m_' + str(m)):
-        with open('./results/' + option + '/toric_local_vecs_N_' + str(N) + '_' + option +
-                         '_M_' + str(M) + '_m_' + str(m), 'rb') as f:
-            curr = pickle.load(f)
-            if len(estimation) == 0:
-                estimation.append(curr)
-            else:
-                estimation.append((estimation[-1] * len(estimation) + curr) / (len(estimation) + 1))
-        m += M
-    expected = toricCode.getPurity(i + 1)
-    plt.plot([(m * M + M - 1) / (2**N * expected) for m in range(len(estimation))],
-             np.abs(np.array(estimation) - expected) / expected)
-plt.xlabel(r'$M/(2^N p_2))$')
-plt.ylabel(r'|$p_2$ - est|/$p_2$')
-plt.legend(legends)
-plt.show()
+Vs = np.zeros(len(Ns))
+ns = [2, 3, 4]
+dops = True
+if dops:
+    for n in ns:
+        for i in range(len(Ns)):
+            N = Ns[i]
+            spaceSize = d**N
+            m = M - 1
+            legends.append('N = ' + str(N))
+            # while os.path.isfile('./results/' + option + '/toric_local_vecs_N_' + str(N) + '_' + option +
+            #                      '_M_' + str(M) + '_m_' + str(m)):
+            #     with open('./results/' + option + '/toric_local_vecs_N_' + str(N) + '_' + option +
+            #                      '_M_' + str(M) + '_m_' + str(m), 'rb') as f:
+            #         curr = pickle.load(f)
+            #         organized.append(curr)
+            with open('./results/' + str(findResults(n, N)), 'rb') as f:
+                organized = pickle.load(f)
+            estimation = np.zeros(len(organized))
+            for j in range(len(organized)):
+                if j == 0:
+                    estimation[j] = organized[j]
+                else:
+                    estimation[j] = (estimation[j-1] * j + organized[j]) / (j + 1)
+                m += M
+            p2 = toricCode.getPurity(i + 1)
+            expected = p2**(n-1)
+            plt.plot([(m * M + M - 1) / (2**N * expected) for m in range(len(estimation))],
+                     np.abs(np.array(estimation) - expected) / expected)
+            variance = np.average((np.array(organized) - expected)**2 * M)
+            Vs[i] = variance / expected**2
+        plt.xlabel(r'$M/(2^N p_' + str(n) + ')$')
+        plt.ylabel(r'|$p_' + str(n) + '$ - est|/$p_' + str(n) + '$')
+        plt.legend(legends)
+        plt.show()
+        linearRegression(Ns, Vs)
+        plt.xlabel(r'$N_A$')
+        plt.ylabel(r'Var$(p_' + str(n) + ')/p^2_' + str(n) + '$')
+        plt.show()
 
-dop3 = True
+doR3 = True
+if doR3:
+    for i in range(len(Ns)):
+        N = Ns[i]
+        m = M - 1
+        estimation = []
+        organized = []
+        legends.append('N = ' + str(N))
+        while os.path.isfile('./results/complex3' + str(i+1) + '/neg_n_3_N_' + str(N) + '_' + option +
+                             '_M_' + str(M) + '_m_' + str(m)):
+            with open('./results/complex3' + str(i+1) + '/neg_n_3_N_' + str(N) + '_' + option +
+                             '_M_' + str(M) + '_m_' + str(m), 'rb') as f:
+                curr = pickle.load(f)
+                organized.append(curr)
+                if len(estimation) == 0:
+                    estimation.append(curr)
+                else:
+                    estimation.append(np.average(organized))
+            m += M
+        with open('./results/neg_r3_N_' + str(N) + '_' + str(len(organized)), 'wb') as f:
+            pickle.dump(organized, f)
+        p2 = toricCode.getPurity(i + 1)
+        expected = p2 ** 2
+        plt.plot([(m * M + M - 1) / (2 ** N * expected) for m in range(len(estimation))],
+                 np.abs(np.array(estimation) - expected) / expected)
+        variance = np.average((np.array(organized) - expected) ** 2 * M)
+        Vs[i] = variance / expected ** 2
+    plt.xlabel(r'$M/(2^N R_3)$')
+    plt.ylabel(r'|$R_3$ - est|/$R_3$')
+    plt.legend(legends)
+    plt.show()
+    linearRegression(Ns, Vs)
+    plt.xlabel(r'$N_A$')
+    plt.ylabel(r'Var$(R_3)/R^2_3$')
+    plt.show()
+dop3 = False
 if dop3:
     for i in range(len(Ns)):
         N = Ns[i]
         spaceSize = d**N
         m = M - 1
         estimation = []
+        organized = []
         legends.append('N = ' + str(N))
         while os.path.isfile('./results/renyis/toric_local_vecs_n_3_N_' + str(N) + '_' + option +
                              '_M_' + str(M) + '_m_' + str(m)):
             with open('./results/renyis/toric_local_vecs_n_3_N_' + str(N) + '_' + option +
                              '_M_' + str(M) + '_m_' + str(m), 'rb') as f:
                 curr = pickle.load(f)
+                organized.append(curr)
                 if len(estimation) == 0:
                     estimation.append(curr)
                 else:
                     estimation.append((estimation[-1] * len(estimation) + curr) / (len(estimation) + 1))
             m += M
+        with open('./results/organized_p3_N_' + str(N) + '_' + str(len(organized)), 'wb') as f:
+            pickle.dump(organized, f)
         p2 = toricCode.getPurity(i + 1)
-        p3 = p2**2
-        plt.plot([(m * M + M - 1) / (2**N * p3) for m in range(len(estimation))],
-                 np.abs(np.array(estimation) - p3) / p3)
-    plt.xlabel(r'$M/(2^N p3))$')
+        expected = p2 ** 2
+        plt.plot([(m * M + M - 1) / (2 ** N) for m in range(len(estimation))],
+                 np.abs(np.array(estimation) - expected) / expected)
+        variance = np.average((np.array(organized) - expected) ** 2 * M)
+        Vs[i] = variance / expected ** 2
+    plt.xlabel(r'$M/(2^N))$')
     plt.ylabel(r'|$p_3$ - est|/$p_3$')
     plt.legend(legends)
     plt.show()
-
-# M = 100
-# Ns = [4, 8, 12]
-# legends = []
-# for i in range(len(Ns)):
-#     N = Ns[i]
-#     spaceSize = d**N
-#     m = M - 1
-#     estimation = []
-#     estimation2 = []
-#     legends.append('N = ' + str(N))
-#     while os.path.isfile('./results/global/global_p1_N_' + str(N) + '_M_' + str(M) + '_m_' + str(m) + '_layers_4'):
-#         with open('./results/global/global_p2_N_' + str(N) + '_M_' + str(M) + '_m_' + str(m) + '_layers_4', 'rb') as f:
-#             curr = pickle.load(f)
-#             estimation2.append(curr)
-#         with open('./results/global/global_p1_N_' + str(N) + '_M_' + str(M) + '_m_' + str(m) + '_layers_4', 'rb') as f:
-#             curr = pickle.load(f)
-#             estimation.append(curr)
-#         m += M
-#     expected = toricCode.getPurity(i + 1)
-#     if N == 12:
-#         for i in range(N**2 * 4):
-#             estimation.append((expected + 1) / (d**N * (d**N + 1)))
-#             estimation2.append(7.39e-8 + 1e-10 * np.random.randn())
-#     plt.plot([(m * M + M - 1) / (d**N) for m in range(len(estimation))],
-#              (np.abs(np.array(estimation2) * (d**N) * (d**N + 1) - 1) - expected) / expected)
-#     print(N)
-#     print((expected + 1) / (d**N * (d**N + 1)))
-#     estimation = np.array(estimation)
-#     estimation2 = np.array(estimation2)
-#     b = 1
-#     print(np.round(estimation2, 14))
-# plt.xlabel(r'$M/2^{N}$')
-# plt.ylabel(r'|$p_2$ - est|/$p_2$')
-# plt.title('Toric code with global unitaries - contract nearest neighbor pairs')
-# plt.legend(legends)
-# plt.show()
+    linearRegression(Ns, Vs)
+    plt.xlabel(r'$N_A$')
+    plt.ylabel(r'Var$(p_3)/p^2_3$')
+    plt.show()
 
 
-# M = 100
-# chi = 1000
-# expected = [toricCode.getPurity(i + 1) for i in range(len(Ns))]
-# for i in range(len(Ns)):
-#     N = Ns[i]
-#     m = 99
-#     estimation = []
-#     legends.append('N = ' + str(N))
-#     while os.path.isfile('./results/localMC/toric_local_MC_N_' + str(N) + '_M_' + str(M) + \
-#                          '_m_' + str(m) + '_chi_' + str(chi)):
-#         with open('results/localMC/toric_local_MC_N_' + str(N) + '_M_' + str(M) + \
-#                          '_m_' + str(m) + '_chi_' + str(chi), 'rb') as f:
-#             curr = pickle.load(f)
-#             estimation.append(curr)
-#         m += M
-#     print(N)
-#     print(estimation)
-#     plt.plot([(m * M + M - 1) / N**2 for m in range(len(estimation))], np.abs(np.array(estimation) - expected[i]) / expected[i])
-#     b = 1
-# plt.legend(legends)
-# plt.xlabel(r'$M/N^2$')
-# plt.ylabel(r'|$p_2$ - est|/$p_2$')
-# plt.title(r'MC attempts - $1000\cdot N^2$')
-# plt.show()
-
-# M = 1000
-# Ns = [4, 8, 12]
-# legends = []
-# for i in range(len(Ns)):
-#     N = Ns[i]
-#     result = []
-#     purity = toricCode.getPurity(i + 1)
-#     legends.append('N = ' + str(N))
-#     m = 0
-#     while os.path.isfile('results/localFull/toric_local_full_N_' + str(N) + '_M_' + str(M) + '_m_' + str(m * M + M - 1)):
-#         with open('results/localFull/toric_local_full_N_' + str(N) + '_M_' + str(M) + '_m_' + str(m * M + M - 1), 'rb') as f:
-#             result.append(pickle.load(f))
-#         m += 1
-#     plt.plot([(m * M + M - 1) / N**2 for m in range(len(result))], np.abs(np.array(result) - purity) / purity)
-#     print(result)
-# plt.xlabel(r'$M/N^2$')
-# plt.ylabel(r'|$p_2$ - est|/$p_2$')
-# plt.title('Toric code with local unitaries - full expression')
-# plt.legend(legends)
-# plt.show()
+dop4 = False
+if dop4:
+    for i in range(len(Ns)):
+        N = Ns[i]
+        spaceSize = d**N
+        m = M - 1
+        estimation = []
+        organized = []
+        p2 = toricCode.getPurity(i + 1)
+        expected = p2 ** 3
+        legends.append('N = ' + str(N))
+        while os.path.isfile('./results/complex4' + str(i+1) + '/toric_local_vecs_n_4_N_' + str(N) + '_' + option +
+                             '_M_' + str(M) + '_m_' + str(m)):
+            with open('./results/complex4' + str(i+1) + '/toric_local_vecs_n_4_N_' + str(N) + '_' + option +
+                             '_M_' + str(M) + '_m_' + str(m), 'rb') as f:
+                curr = pickle.load(f)
+                organized.append(curr)
+                if len(estimation) == 0:
+                    estimation.append(curr)
+                else:
+                    estimation.append((estimation[-1] * len(estimation) + curr) / (len(estimation) + 1))
+            m += M
+        with open('./results/organized_p4_N_' + str(N) + '_' + str(len(organized)), 'wb') as f:
+            pickle.dump(organized, f)
+        plt.plot([(m * M + M - 1) / (2**N) for m in range(len(estimation))],
+                 np.abs(np.array(estimation) - expected) / expected)
+        variance = np.average((np.array(organized) - expected) ** 2 * M)
+        Vs[i] = variance / expected ** 2
+    plt.xlabel(r'$M/(2^N))$')
+    plt.ylabel(r'|$p_4$ - est|/$p_4$')
+    plt.legend(legends)
+    plt.show()
+    linearRegression(Ns, Vs)
+    plt.xlabel(r'$N_A$')
+    plt.ylabel(r'Var$(p_4)/p^2_4$')
+    plt.show()
