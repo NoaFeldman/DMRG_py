@@ -34,13 +34,15 @@ legends = []
 option = 'complex'
 Vs = np.zeros(len(Ns))
 ns = [2, 3, 4]
+p2s = []
+for i in range(len(Ns)):
+    p2s.append(toricCode.getPurity(i + 1))
 dops = True
 if dops:
     for n in ns:
         for i in range(len(Ns)):
             N = Ns[i]
             spaceSize = d**N
-            m = M - 1
             legends.append('N = ' + str(N))
             # while os.path.isfile('./results/' + option + '/toric_local_vecs_N_' + str(N) + '_' + option +
             #                      '_M_' + str(M) + '_m_' + str(m)):
@@ -49,30 +51,37 @@ if dops:
             #         curr = pickle.load(f)
             #         organized.append(curr)
             with open('./results/' + str(findResults(n, N)), 'rb') as f:
-                organized = pickle.load(f)
-            estimation = np.zeros(len(organized))
-            for j in range(len(organized)):
-                if j == 0:
-                    estimation[j] = organized[j]
-                else:
-                    estimation[j] = (estimation[j-1] * j + organized[j]) / (j + 1)
-                m += M
-            p2 = toricCode.getPurity(i + 1)
+                organized = np.array(pickle.load(f))
+                print(str(N) + ' ' + str(len(organized)))
+            # estimation = np.zeros(len(organized))
+            # for j in range(len(organized)):
+            #     if j == 0:
+            #         estimation[j] = organized[j]
+            #     else:
+            #         estimation[j] = (estimation[j-1] * j + organized[j]) / (j + 1)
+            p2 = p2s[i]
             expected = p2**(n-1)
-            plt.plot([(m * M + M - 1) / (2**N * expected) for m in range(len(estimation))],
-                     np.abs(np.array(estimation) - expected) / expected)
-            variance = np.average((np.array(organized) - expected)**2 * M)
+            precision = np.zeros(int(len(organized)/2))
+            or2 = np.concatenate([organized, organized])
+            for j in range(1, len(precision) + 1):
+                curr = [np.average(or2[i : i + j]) - expected for i in range(min(len(organized), 1000))]
+                precision[j-1] = np.average(np.abs(curr))
+            plt.plot([(m * M + M - 1) / (2**N * expected) for m in range(len(precision))], precision)
+            print(i)
+            # plt.plot([(m * M + M - 1) / (2**N * expected) for m in range(len(estimation))],
+            #          np.abs(np.array(estimation) - expected) / expected)
+            variance = np.real(np.average((np.array(organized) - expected)**2 * M))
             Vs[i] = variance / expected**2
         plt.xlabel(r'$M/(2^N p_' + str(n) + ')$')
         plt.ylabel(r'|$p_' + str(n) + '$ - est|/$p_' + str(n) + '$')
         plt.legend(legends)
         plt.show()
-        linearRegression(Ns, Vs)
-        plt.xlabel(r'$N_A$')
-        plt.ylabel(r'Var$(p_' + str(n) + ')/p^2_' + str(n) + '$')
-        plt.show()
+        # linearRegression(Ns, Vs)
+        # plt.xlabel(r'$N_A$')
+        # plt.ylabel(r'Var$(p_' + str(n) + ')/p^2_' + str(n) + '$')
+        # plt.show()
 
-doR3 = True
+doR3 = False
 if doR3:
     for i in range(len(Ns)):
         N = Ns[i]
