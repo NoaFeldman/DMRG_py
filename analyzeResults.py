@@ -18,8 +18,8 @@ def linearRegression(Ns, Vs):
     plt.xticks(Ns)
 
 
+rootdir = './results'
 def findResults(n, N, opt='p'):
-    rootdir = './results'
     regex = re.compile('organized_' + opt + str(n) + '_N_' + str(N) + '_*')
 
     for root, dirs, files in os.walk(rootdir):
@@ -33,46 +33,50 @@ Ns = [4, 8, 12, 16, 20, 24]
 legends = []
 option = 'complex'
 Vs = np.zeros(len(Ns))
-ns = [2, 3, 4]
+ns = [3, 4]
 p2s = []
 for i in range(len(Ns)):
     p2s.append(toricCode.getPurity(i + 1))
 dops = True
 if dops:
     for n in ns:
+        precisions = []
         for i in range(len(Ns)):
             N = Ns[i]
             spaceSize = d**N
             legends.append('N = ' + str(N))
-            # while os.path.isfile('./results/' + option + '/toric_local_vecs_N_' + str(N) + '_' + option +
-            #                      '_M_' + str(M) + '_m_' + str(m)):
-            #     with open('./results/' + option + '/toric_local_vecs_N_' + str(N) + '_' + option +
-            #                      '_M_' + str(M) + '_m_' + str(m), 'rb') as f:
-            #         curr = pickle.load(f)
-            #         organized.append(curr)
-            with open('./results/' + str(findResults(n, N)), 'rb') as f:
-                organized = np.array(pickle.load(f))
-                print(str(N) + ' ' + str(len(organized)))
-            # estimation = np.zeros(len(organized))
-            # for j in range(len(organized)):
-            #     if j == 0:
-            #         estimation[j] = organized[j]
-            #     else:
-            #         estimation[j] = (estimation[j-1] * j + organized[j]) / (j + 1)
+            organized = []
+            for j in range(100):
+                dirname = rootdir + '/' + option + str(n) + str(i+1)
+                if j > 0:
+                    dirname += '_' + str(j)
+                if os.path.exists(dirname):
+                    for filename in os.listdir(dirname):
+                        with open(dirname + '/' + filename, 'rb') as f:
+                            curr = pickle.load(f)
+                            organized.append(curr)
+
+            # with open('./results/' + str(findResults(n, N)), 'rb') as f:
+            #     organized = np.array(pickle.load(f))
+            with open('./results/' + 'organized_p' + str(n) + '_N_' + str(N) + '_' + str(len(organized)), 'wb') as f:
+                pickle.dump(organized, f)
+            #     print(str(N) + ' ' + str(len(organized)))
             p2 = p2s[i]
             expected = p2**(n-1)
-            precision = np.zeros(int(len(organized)/2))
-            or2 = np.concatenate([organized, organized])
-            for j in range(1, len(precision) + 1):
-                curr = [np.average(or2[i : i + j]) - expected for i in range(min(len(organized), 1000))]
-                precision[j-1] = np.average(np.abs(curr))
-            plt.plot([(m * M + M - 1) / (2**N * expected) for m in range(len(precision))], precision)
+            numOfExperiments = 10
+            precision = np.zeros(int(len(organized)/numOfExperiments))
+            for j in range(int(len(organized)/numOfExperiments)):
+                precision[j] = np.average([np.abs(np.average( \
+                    organized[c * int(len(organized)/numOfExperiments):c * int(len(organized)/numOfExperiments)+j]) - expected) \
+                                           for c in range(numOfExperiments)])
+            plt.plot([(m * M + M - 1) / (1.51**N * expected) for m in range(len(precision))], precision)
+            precisions.append(precision)
             print(i)
             # plt.plot([(m * M + M - 1) / (2**N * expected) for m in range(len(estimation))],
             #          np.abs(np.array(estimation) - expected) / expected)
             variance = np.real(np.average((np.array(organized) - expected)**2 * M))
             Vs[i] = variance / expected**2
-        plt.xlabel(r'$M/(2^N p_' + str(n) + ')$')
+        plt.xlabel(r'$M/(1.23^N p_' + str(n) + ')$')
         plt.ylabel(r'|$p_' + str(n) + '$ - est|/$p_' + str(n) + '$')
         plt.legend(legends)
         plt.show()
