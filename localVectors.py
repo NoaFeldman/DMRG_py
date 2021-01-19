@@ -33,7 +33,7 @@ try:
     os.mkdir(newdir)
 except FileExistsError:
     pass
-# ru.renyiEntropy(n, l * 4, M, option, toricCode.applyLocalOperators, [cUp, dUp, cDown, dDown, leftRow, rightRow, toricCode.A, toricCode.B, l],
-#                       newdir + '/toric_local_vecs')
-ru.renyiNegativity(n, l * 4, M, option, toricCode.applyLocalOperators, [cUp, dUp, cDown, dDown, leftRow, rightRow, toricCode.A, toricCode.B, l],
-                   newdir + '/')
+ru.renyiEntropy(n, l * 4, M, option, toricCode.applyLocalOperators, [cUp, dUp, cDown, dDown, leftRow, rightRow, toricCode.A, toricCode.B, l],
+                      newdir + '/toric_local_vecs')
+# ru.renyiNegativity(n, l * 4, M, option, toricCode.applyLocalOperators, [cUp, dUp, cDown, dDown, leftRow, rightRow, toricCode.A, toricCode.B, l],
+#                    newdir + '/')

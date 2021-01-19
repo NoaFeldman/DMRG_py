@@ -33,7 +33,9 @@ Ns = [4, 8, 12, 16, 20, 24]
 legends = []
 option = 'complex'
 Vs = np.zeros(len(Ns))
-ns = [3, 4]
+ns = [2, 3, 4]
+# ns = [3]
+varianceNormalizations = [1.23, 1.51, 2.01]
 p2s = []
 for i in range(len(Ns)):
     p2s.append(toricCode.getPurity(i + 1))
@@ -46,44 +48,57 @@ if dops:
             spaceSize = d**N
             legends.append('N = ' + str(N))
             organized = []
-            for j in range(100):
-                dirname = rootdir + '/' + option + str(n) + str(i+1)
-                if j > 0:
-                    dirname += '_' + str(j)
-                if os.path.exists(dirname):
-                    for filename in os.listdir(dirname):
-                        with open(dirname + '/' + filename, 'rb') as f:
-                            curr = pickle.load(f)
-                            organized.append(curr)
+            # for j in range(100):
+            #     dirname = rootdir + '/' + option + str(n) + str(i+1)
+            #     if j > 0:
+            #         dirname += '_' + str(j)
+            #     if os.path.exists(dirname):
+            #         for filename in os.listdir(dirname):
+            #             with open(dirname + '/' + filename, 'rb') as f:
+            #                 curr = pickle.load(f)
+            #                 organized.append(curr)
 
-            # with open('./results/' + str(findResults(n, N)), 'rb') as f:
-            #     organized = np.array(pickle.load(f))
+            with open('./results/' + str(findResults(n, N)), 'rb') as f:
+                organized = np.array(pickle.load(f))
+            organized = organized[organized < 50]
             with open('./results/' + 'organized_p' + str(n) + '_N_' + str(N) + '_' + str(len(organized)), 'wb') as f:
                 pickle.dump(organized, f)
-            #     print(str(N) + ' ' + str(len(organized)))
             p2 = p2s[i]
             expected = p2**(n-1)
             numOfExperiments = 10
-            precision = np.zeros(int(len(organized)/numOfExperiments))
-            for j in range(int(len(organized)/numOfExperiments)):
-                precision[j] = np.average([np.abs(np.average( \
-                    organized[c * int(len(organized)/numOfExperiments):c * int(len(organized)/numOfExperiments)+j]) - expected) \
-                                           for c in range(numOfExperiments)])
-            plt.plot([(m * M + M - 1) / (1.51**N * expected) for m in range(len(precision))], precision)
-            precisions.append(precision)
-            print(i)
-            # plt.plot([(m * M + M - 1) / (2**N * expected) for m in range(len(estimation))],
-            #          np.abs(np.array(estimation) - expected) / expected)
+            numOfMixes = 20
+            precision = np.zeros(int(len(organized) / numOfExperiments))
+            for mix in range(numOfMixes):
+                np.random.shuffle(organized)
+                for j in range(1, int(len(organized)/numOfExperiments)):
+                    currPrecision= np.average([np.abs(np.average( \
+                        organized[c * int(len(organized)/numOfExperiments):c * int(len(organized)/numOfExperiments)+j]) - expected) \
+                                               for c in range(numOfExperiments)])
+                    # currPrecision= np.average([ \
+                    #     (np.average(organized[c * int(len(organized)/numOfExperiments):c * int(len(organized)/numOfExperiments)+j]) \
+                    #      - expected)**2 \
+                    #     for c in range(numOfExperiments)])
+                    if mix == 0:
+                        precision[j] = currPrecision
+                    else:
+                        precision[j] = (precision[j] * mix + currPrecision) / (mix + 1)
+            plt.plot([(m * M + M - 1) / (varianceNormalizations[n - 2] ** N) for m in range(len(precision)-1)],
+                     precision[1:] / expected)
+            # plt.plot([(m * M + M - 1) / (1.52 ** N) for m in range(len(precision)-1)],
+            #          precision[1:] / expected)
             variance = np.real(np.average((np.array(organized) - expected)**2 * M))
-            Vs[i] = variance / expected**2
-        plt.xlabel(r'$M/(1.23^N p_' + str(n) + ')$')
+            Vs[i] = np.real(variance / expected**2)
+        plt.xlabel(r'$M/(' + str(varianceNormalizations[n-2]) + '^N)$')
+        # plt.xlabel(r'$M/(' + str(1.53) + '^N)$')
         plt.ylabel(r'|$p_' + str(n) + '$ - est|/$p_' + str(n) + '$')
+        # plt.ylabel(r'|$R_' + str(n) + '$ - est|/$R_' + str(n) + '$')
+        plt.yscale('log')
         plt.legend(legends)
         plt.show()
-        # linearRegression(Ns, Vs)
-        # plt.xlabel(r'$N_A$')
-        # plt.ylabel(r'Var$(p_' + str(n) + ')/p^2_' + str(n) + '$')
-        # plt.show()
+        linearRegression(Ns, Vs)
+        plt.xlabel(r'$N_A$')
+        plt.ylabel(r'Var$(p_' + str(n) + ')/p^2_' + str(n) + '$')
+        plt.show()
 
 doR3 = False
 if doR3:

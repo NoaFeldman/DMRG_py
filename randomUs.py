@@ -84,7 +84,7 @@ hadamard[1, 1] *= -1
 def getNonUnitaryRandomOps(d, randOption, vecsNum=2, direction=0):
     vecs = [np.zeros((d), dtype=complex) for i in range(vecsNum)]
     for i in range(vecsNum):
-        if randOption == 'complex':
+        if randOption == 'complex' or randOption == 'experimental':
             vecs[i] = (np.random.randint(2, size=d) * 2 - 1 + 1j * (np.random.randint(2, size=d) * 2 - 1)) / np.sqrt(2)
         elif randOption == 'real':
             vecs[i] = np.random.randint(2, size=d) * 2 - 1
@@ -110,13 +110,19 @@ def getNonUnitaryRandomOps(d, randOption, vecsNum=2, direction=0):
             else:
                 prev = i - 1
             res[i].tensor = np.kron(vecs[prev], np.conj(np.reshape(vecs[i], [2, 1])))
+    if randOption == 'experimental':
+        for i in range(vecsNum):
+            if np.random.randint(2) == 0:
+                res[i].tensor = (res[i].tensor + np.conj(np.transpose(res[i].tensor))) / 2
+            else:
+                res[i].tensor = (res[i].tensor - np.conj(np.transpose(res[i].tensor))) / 2
     return res
 
 
 def renyiEntropy(n, N, M, randOption, estimateFunc, arguments, filename, d=2):
     start = datetime.now()
     avg = 0
-    for m in range(int(M * d ** N)):
+    for m in range(int(100 * M * d ** N)):
         ops = [getNonUnitaryRandomOps(d, randOption, vecsNum=n) for i in range(N)]
         estimation = 1
         for i in range(n):
