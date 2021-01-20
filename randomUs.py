@@ -122,7 +122,7 @@ def getNonUnitaryRandomOps(d, randOption, vecsNum=2, direction=0):
 def renyiEntropy(n, N, M, randOption, estimateFunc, arguments, filename, d=2):
     start = datetime.now()
     avg = 0
-    for m in range(int(100 * M * d ** N)):
+    for m in range(M):
         ops = [getNonUnitaryRandomOps(d, randOption, vecsNum=n) for i in range(N)]
         estimation = 1
         for i in range(n):

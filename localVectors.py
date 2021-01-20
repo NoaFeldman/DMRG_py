@@ -13,8 +13,9 @@ M = int(sys.argv[1])
 l = int(sys.argv[2])
 option = sys.argv[3]
 n = int(sys.argv[4])
-if len(sys.argv) == 6:
-    dirname = sys.argv[5]
+attempt = int(sys.argv[5])
+if len(sys.argv) == 7:
+    dirname = sys.argv[6]
 else:
     dirname = 'results/'
 
@@ -34,6 +35,6 @@ try:
 except FileExistsError:
     pass
 ru.renyiEntropy(n, l * 4, M, option, toricCode.applyLocalOperators, [cUp, dUp, cDown, dDown, leftRow, rightRow, toricCode.A, toricCode.B, l],
-                      newdir + '/toric_local_vecs')
+                      newdir + '/toric_attempt_' + str(attempt) + '_')
 # ru.renyiNegativity(n, l * 4, M, option, toricCode.applyLocalOperators, [cUp, dUp, cDown, dDown, leftRow, rightRow, toricCode.A, toricCode.B, l],
 #                    newdir + '/')
