@@ -198,7 +198,7 @@ def getTridiagonal(HL, HR, H, k, psi, psiCompare=None):
     psiCopy = bops.copyState(psi)
 
     base = []
-    base.append(v)
+    base.append(bops.copyState([v])[0])
     Hv = applyHToM(HL, HR, H, v, k)
     alpha = bops.multiContraction(v, Hv, '0123', '0123*').get_tensor()
 
@@ -223,7 +223,7 @@ def getTridiagonal(HL, HR, H, k, psi, psiCompare=None):
         counter += 1
 
         v = bops.multNode(w, 1 / beta)
-        base.append(v)
+        base.append(bops.copyState([v])[0])
 
         if psiCompare is not None:
             copyV = bops.copyState([v])[0]
@@ -233,7 +233,7 @@ def getTridiagonal(HL, HR, H, k, psi, psiCompare=None):
         alpha = bops.multiContraction(v, Hv, '0123', '0123*').get_tensor()
         Tarr[counter][1] = alpha
         w = bops.addNodes(bops.addNodes(Hv, bops.multNode(v, -alpha)), \
-                          bops.multNode(base[counter-1], -beta))
+                          bops.multNode(bops.copyState([base[counter-1]])[0], -beta), cleanOr2=True)
         formBeta = beta
         beta = bops.getNodeNorm(w)
     T = np.zeros((len(Tarr), len(Tarr)), dtype=complex)
@@ -261,9 +261,9 @@ def applyHToM(HL, HR, H, M, k):
     # Add I(Left) x h.single(k1) x h.identity(k2) x I(Right)
     # And I(Left) x h.identity(k1) x h.single(k2) x I(Right)
     Hv = bops.addNodes(Hv, \
-                       tn.transpose(bops.multiContraction(M, H.singles[k1], '1', '0'), [0, 3, 1, 2]))
+                       bops.permute(bops.multiContraction(M, H.singles[k1], '1', '0'), [0, 3, 1, 2]))
     Hv = bops.addNodes(Hv, \
-                       tn.transpose(bops.multiContraction(M, H.singles[k2], '2', '0'), [0, 1, 3, 2]))
+                       bops.permute(bops.multiContraction(M, H.singles[k2], '2', '0'), [0, 1, 3, 2]))
 
     # Add HL.openOp x h.r2l(k1) x h.identity(k2) x I(Right)
     # And I(Left) x h.identity(k1) x h.l2r(k2) x HR.openOp
@@ -365,16 +365,16 @@ def getHLRs(H, psi, workingSite=None):
     return HLs, HRs
 
 
-def getGroundState(H, HLs, HRs, psi, psiCompare=None, accuration=10**(-3)):
+def getGroundState(H, HLs, HRs, psi, psiCompare=None, accuration=10**(-6)):
     truncErrs = []
     [psi, E0, truncErr, HLs, HRs] = dmrgSweep(psi, H, HLs, HRs, psiCompare)
     truncErrs.append(truncErr)
     while True:
         [psi, E0Curr, truncErr, HLs, HRs] = dmrgSweep(psi, H, HLs, HRs, psiCompare)
         truncErrs.append(truncErr)
-        if math.fabs((E0Curr-E0)/E0) < accuration:
+        if np.abs((E0Curr-E0)/E0) < accuration:
             return psi, E0Curr, truncErrs
-        print(math.fabs((E0Curr-E0)/E0))
+        print(np.abs((E0Curr-E0)/E0))
         E0 = E0Curr
 
 
@@ -405,26 +405,27 @@ def stateEnergy(psi: List[tn.Node], H: HOp):
     return E
 
 
-def applyH(psi: List[tn.Node], H: HOp):
-    psiCopy = bops.copyState(psi)
-    single_0 = bops.copyState([H.singles[0]])[0]
-    psiCopy[0] = bops.permute(tn.contract(psiCopy[0][1] ^ single_0[0], name=('site' + str(0))), [0, 2, 1])
-    result = psiCopy
-    for i in range(1, len(psi)):
-        psiCopy = bops.copyState(psi)
-        single_i = bops.copyState([H.singles[i]])[0]
-        psiCopy[i] = bops.permute(tn.contract(psiCopy[i][1] ^ single_i[0], name=('site' + str(i))), [0, 2, 1])
-        result = bops.addStates(result, psiCopy)
-    for i in range(len(psi) - 1):
-        psiCopy = bops.copyState(psi)
-        r2l = bops.copyState([H.r2l[i+1]])[0]
-        l2r = bops.copyState([H.l2r[i]])[0]
-        psiCopy[i][2] ^ psiCopy[i+1][0]
-        psiCopy[i][1] ^ l2r[0]
-        r2l[0] ^ psiCopy[i+1][1]
-        l2r[2] ^ r2l[2]
-        M = tn.contract_between(psiCopy[i], \
-                                tn.contract_between(l2r, tn.contract_between(r2l, psiCopy[i+1])))
-        [psiCopy, te] = bops.assignNewSiteTensors(psiCopy, i, M, '>>')
-        result = bops.addStates(result, psiCopy)
-    return result
+# buggy
+# def applyH(psi: List[tn.Node], H: HOp):
+#     psiCopy = bops.copyState(psi)
+#     single_0 = bops.copyState([H.singles[0]])[0]
+#     psiCopy[0] = bops.permute(tn.contract(psiCopy[0][1] ^ single_0[0], name=('site' + str(0))), [0, 2, 1])
+#     result = psiCopy
+#     for i in range(1, len(psi)):
+#         psiCopy = bops.copyState(psi)
+#         single_i = bops.copyState([H.singles[i]])[0]
+#         psiCopy[i] = bops.permute(tn.contract(psiCopy[i][1] ^ single_i[0], name=('site' + str(i))), [0, 2, 1])
+#         result = bops.addStates(result, psiCopy)
+#     for i in range(len(psi) - 1):
+#         psiCopy = bops.copyState(psi)
+#         r2l = bops.copyState([H.r2l[i+1]])[0]
+#         l2r = bops.copyState([H.l2r[i]])[0]
+#         psiCopy[i][2] ^ psiCopy[i+1][0]
+#         psiCopy[i][1] ^ l2r[0]
+#         r2l[0] ^ psiCopy[i+1][1]
+#         l2r[2] ^ r2l[2]
+#         M = tn.contract_between(psiCopy[i], \
+#                                 tn.contract_between(l2r, tn.contract_between(r2l, psiCopy[i+1])))
+#         [psiCopy, te] = bops.assignNewSiteTensors(psiCopy, i, M, '>>')
+#         result = bops.addStates(result, psiCopy)
+#     return result

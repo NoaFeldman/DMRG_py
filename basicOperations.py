@@ -195,20 +195,25 @@ def copyState(psi, conj=False) -> List[tn.Node]:
                     edge.name = edge.name + '*'
     return result
 
-def addNodes(node1, node2):
+def addNodes(node1, node2, cleanOr1=False, cleanOr2=False):
     # TODO asserts
     if node1 is None:
         if node2 is None:
-            return None
+            res =  None
         else:
-            return node2
+            res =  node2
     else:
         if node2 is None:
-            return node1
+            res =  node1
         else:
             result = copyState([node1])[0]
             result.set_tensor(result.get_tensor() + node2.get_tensor())
-            return result
+            res =  result
+    if cleanOr1:
+        tn.remove_node(node1)
+    if cleanOr2:
+        tn.remove_node(node2)
+    return res
 
 def multNode(node, c):
     node.set_tensor(node.get_tensor() * c)
@@ -330,10 +335,9 @@ def svdTruncation(node: tn.Node, leftEdges: List[int], rightEdges: List[int],
 
 def getRenyiEntropy(psi: List[tn.Node], n: int, AEnd: int, maxBondDim=256):
     psiCopy = copyState(psi)
-    for k in [len(psiCopy) - 1 - i for i in range(len(psiCopy) - AEnd - 1)]:
+    for k in [len(psiCopy) - 1 - i for i in range(1, len(psiCopy) - AEnd - 1)]:
         psiCopy = shiftWorkingSite(psiCopy, k, '<<')
-    psiCopy[k - 1][2] ^ psiCopy[k][0]
-    M = tn.contract_between(psi[k - 1], psi[k])
+    M = multiContraction(psiCopy[k - 1], psiCopy[k], [2], [0])
 
     leftEdges = M.edges[:2]
     rightEdges = M.edges[2:]
@@ -362,7 +366,7 @@ def getAppropriateMaxBondDim(maxBondDim, leftEdges, rightEdges):
 
 # Split M into 2 3-rank tensors for sites k, k+1
 def assignNewSiteTensors(psi, k, M, dir, getOrthogonal=False):
-    [sitek, sitekPlus1, truncErr] = svdTruncation(M, [M[0], M[1]], [M[2], M[3]], dir, \
+    [sitek, sitekPlus1, truncErr] = svdTruncation(M, [0, 1], [2, 3], dir, \
             leftName=('site' + str(k)), rightName=('site' + str(k+1)), edgeName = ('v' + str(k+1)))
     tn.remove_node(psi[k])
     psi[k] = sitek
@@ -385,8 +389,11 @@ def getEdgeNames(node: tn.Node):
 # k is curr working site, shift it by one in dir direction.
 def shiftWorkingSite(psi: List[tn.Node], k, dir):
     if dir == '<<':
-        pair = tn.contract(psi[k-1][2] ^ psi[k][0], axis_names=getEdgeNames(psi[k-1])[:2] + getEdgeNames(psi[k])[1:])
-        [psi, truncErr] = assignNewSiteTensors(psi, k-1, pair, dir)
+        pair = multiContraction(psi[k-1], psi[k], [2], [0], cleanOr1=True, cleanOr2=True)
+        [l, r, I] = svdTruncation(pair, [0, 1], [2, 3], '<<')
+        psi[k-1] = l
+        psi[k] = r
+        tn.remove_node(pair)
     else:
         pair = tn.contract(psi[k][2] ^ psi[k+1][0], axis_names=getEdgeNames(psi[k])[:2] + getEdgeNames(psi[k+1])[1:])
         [psi, truncErr] = assignNewSiteTensors(psi, k, pair, dir)

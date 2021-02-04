@@ -16,10 +16,10 @@ sigmaZ[1][1] = -1
 sigmaY = 1j * np.matmul(sigmaZ, sigmaX)
 
 
-def getXXZHamiltonianMatrices(J, JDelta):
-    onsiteTerms = [np.eye(2)] * N
+def getXXHamiltonianMatrices(J, JDelta):
+    onsiteTerms = [np.eye(2) * 0] * N
     neighborTerms = \
-        [J * np.kron(sigmaX, sigmaX) + J * np.kron(sigmaY, sigmaY) + JDelta * np.kron(sigmaZ, sigmaZ)] * (N-1)
+        [J/2 * np.kron(sigmaX, sigmaX) + J/2 * np.kron(sigmaY, sigmaY) + JDelta * np.kron(sigmaZ, sigmaZ)] * (N-1)
     return onsiteTerms, neighborTerms
 
 
@@ -55,49 +55,19 @@ def fullState(psi):
     return ten
 
 
-N = 8
+N = 16
 T = 1
 C = 1/T
 J = C
 Omega = 1/T
 delta = 1
-onsiteTermsXXZ, neighborTermsXXZ = getXXZHamiltonianMatrices(0, 1)
-psi = bops.getStartupState(N, 'antiferromagnetic')
+onsiteTermsXX, neighborTermsXX = getXXHamiltonianMatrices(1, 0)
+psi = bops.getStartupState(N)
 
-# HXXZ = dmrg.getDMRGH(N, onsiteTermsXXZ, neighborTermsXXZ)
-# HLs, HRs = dmrg.getHLRs(HXXZ, psi0)
-# psi, E0, truncErrs = dmrg.getGroundState(HXXZ, HLs, HRs, psi0, None)
-# print('E0 = ' + str(E0))
-# print('E0 = ' + str(dmrg.stateEnergy(psi, HXXZ)))
-# hpsi = dmrg.applyH(psi, HXXZ)
-# hpsi[0].tensor /= math.sqrt(abs(bops.getOverlap(hpsi, hpsi)))
-# print('<psi|hpsi> = ' + str(bops.getOverlap(psi, hpsi)))
+HXX = dmrg.getDMRGH(N, onsiteTermsXX, neighborTermsXX)
+HLs, HRs = dmrg.getHLRs(HXX, psi)
+psi, E0, truncErrs = dmrg.getGroundState(HXX, HLs, HRs, psi, None)
+print('E0 = ' + str(E0))
+print('E0 = ' + str(dmrg.stateEnergy(psi, HXX)))
 R2 = bops.getRenyiEntropy(psi, 2, int(len(psi) / 2 - 1))
-
-NU = 200
-etas = [1, 2, 3, N, int(N * 1.5), N * 2, int(N * 2.5), N * 3]
-results = [None] * len(etas)
-dt = J * 1e-2
-for e in range(len(etas)):
-    eta = etas[e]
-    sum = 0
-    for n in range(NU):
-        psiCopy = bops.copyState(psi)
-        for j in range(eta):
-            onsiteTermsA, neighborTermsA = getHAMatrices(N, C, Omega, delta)
-            HA = dmrg.getDMRGH(N, onsiteTermsA, neighborTermsA)
-            trotterGates = trotter.getTrotterGates(N, 2, onsiteTermsA, neighborTermsA, dt)
-            for i in range(int(T / dt)):
-                [psiCopy, truncErr] = trotter.trotterSweep(trotterGates, psiCopy, 0, int(len(psiCopy) / 2 - 1))
-        psiCopy2 = bops.copyState(psiCopy)
-        projectS(psiCopy, int(len(psiCopy)/2 - 1))
-        p = bops.getOverlap(psiCopy, psiCopy2)
-        sum += p * p
-        bops.removeState(psiCopy)
-        bops.removeState(psiCopy2)
-    avg = sum / NU
-    results[e] = avg * (2**int(len(psi)/2) * (2**int(len(psi)/2) + 1)) - 1
-
-plt.plot(etas, [R2] * len(etas))
-plt.plot(etas, results)
-plt.show()
+print(R2)

@@ -21,20 +21,21 @@ def linearRegression(Ns, Vs):
 rootdir = './results'
 def findResults(n, N, opt='p'):
     regex = re.compile('organized_' + opt + str(n) + '_N_' + str(N) + '_*')
-
+    regex2 = re.compile('organized_' + opt + '_' + str(n) + '_' + str(int(N/4)) + '*')
     for root, dirs, files in os.walk(rootdir):
         for file in files:
-            if regex.match(file):
+            if regex.match(file) or regex2.match(file):
                 return file
 
 
 M = 1000
 Ns = [4, 8, 12, 16, 20, 24]
+Ns = [4, 8, 12]
 legends = []
-option = 'complex'
+option = 'experimental'
 Vs = np.zeros(len(Ns))
 ns = [2, 3, 4]
-# ns = [3]
+ns = [4]
 varianceNormalizations = [1.23, 1.51, 2.01]
 p2s = []
 for i in range(len(Ns)):
@@ -58,15 +59,15 @@ if dops:
             #                 curr = pickle.load(f)
             #                 organized.append(curr)
 
-            with open('./results/' + str(findResults(n, N)), 'rb') as f:
+            with open('./results/' + str(findResults(n, N, 'experimental')), 'rb') as f:
                 organized = np.array(pickle.load(f))
             organized = organized[organized < 50]
-            with open('./results/' + 'organized_p' + str(n) + '_N_' + str(N) + '_' + str(len(organized)), 'wb') as f:
-                pickle.dump(organized, f)
+            # with open('./results/' + 'organized_p' + str(n) + '_N_' + str(N) + '_' + str(len(organized)), 'wb') as f:
+            #     pickle.dump(organized, f)
             p2 = p2s[i]
             expected = p2**(n-1)
-            numOfExperiments = 10
-            numOfMixes = 20
+            numOfExperiments = 1
+            numOfMixes = 2
             precision = np.zeros(int(len(organized) / numOfExperiments))
             for mix in range(numOfMixes):
                 np.random.shuffle(organized)
@@ -92,7 +93,6 @@ if dops:
         # plt.xlabel(r'$M/(' + str(1.53) + '^N)$')
         plt.ylabel(r'|$p_' + str(n) + '$ - est|/$p_' + str(n) + '$')
         # plt.ylabel(r'|$R_' + str(n) + '$ - est|/$R_' + str(n) + '$')
-        plt.yscale('log')
         plt.legend(legends)
         plt.show()
         linearRegression(Ns, Vs)
