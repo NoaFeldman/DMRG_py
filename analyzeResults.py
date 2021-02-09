@@ -30,13 +30,11 @@ def findResults(n, N, opt='p'):
 
 M = 1000
 Ns = [4, 8, 12, 16, 20, 24]
-Ns = [4, 8, 12]
 legends = []
-option = 'experimental'
+option = 'complex'
 Vs = np.zeros(len(Ns))
 ns = [2, 3, 4]
-ns = [4]
-varianceNormalizations = [1.23, 1.51, 2.01]
+varianceNormalizations = [1.23, 1.57, 1.94]
 p2s = []
 for i in range(len(Ns)):
     p2s.append(toricCode.getPurity(i + 1))
@@ -59,15 +57,15 @@ if dops:
             #                 curr = pickle.load(f)
             #                 organized.append(curr)
 
-            with open('./results/' + str(findResults(n, N, 'experimental')), 'rb') as f:
+            with open('./results/' + str(findResults(n, N)), 'rb') as f:
                 organized = np.array(pickle.load(f))
             organized = organized[organized < 50]
             # with open('./results/' + 'organized_p' + str(n) + '_N_' + str(N) + '_' + str(len(organized)), 'wb') as f:
             #     pickle.dump(organized, f)
             p2 = p2s[i]
             expected = p2**(n-1)
-            numOfExperiments = 1
-            numOfMixes = 2
+            numOfExperiments = 10
+            numOfMixes = 20
             precision = np.zeros(int(len(organized) / numOfExperiments))
             for mix in range(numOfMixes):
                 np.random.shuffle(organized)
@@ -90,9 +88,9 @@ if dops:
             variance = np.real(np.average((np.array(organized) - expected)**2 * M))
             Vs[i] = np.real(variance / expected**2)
         plt.xlabel(r'$M/(' + str(varianceNormalizations[n-2]) + '^N)$')
-        # plt.xlabel(r'$M/(' + str(1.53) + '^N)$')
         plt.ylabel(r'|$p_' + str(n) + '$ - est|/$p_' + str(n) + '$')
-        # plt.ylabel(r'|$R_' + str(n) + '$ - est|/$R_' + str(n) + '$')
+        plt.xscale('log')
+        plt.yscale('log')
         plt.legend(legends)
         plt.show()
         linearRegression(Ns, Vs)

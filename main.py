@@ -67,27 +67,46 @@ HXX = dmrg.getDMRGH(N, onsiteTermsXX, neighborTermsXX)
 HLs, HRs = dmrg.getHLRs(HXX, psi)
 psi, E0, truncErrs = dmrg.getGroundState(HXX, HLs, HRs, psi, None)
 
-ASize = 2
-for ASize in range(5, 2, -1):
-    for n in range(2, 6):
-        print(bops.getOverlap(psi, psi))
-        print('ASize = ' + str(ASize))
-        print('n = ' + str(n))
+def noHermitianTest(psi, vs):
+    n = len(vs)
+    NA = len(vs[0])
+    result = 1
+    for copy in range(n):
+        psiCopy = bops.copyState(psi)
+        for alpha in range(NA - 1, -1, -1):
+            toEstimate = np.kron(vs[copy][alpha], np.conj(np.reshape(vs[np.mod(copy+1, n)][alpha], [2, 1])))
+            if np.random.randint(2) == 0:
+                toMeasure = toEstimate + np.conj(np.transpose(toEstimate))
+            else:
+                toMeasure = toEstimate - np.conj(np.transpose(toEstimate))
+            psiCopy[alpha] = bops.permute(bops.multiContraction(psiCopy[alpha], tn.Node(toMeasure), '1', '0'), [0, 2, 1])
+        result *= bops.getOverlap(psi, psiCopy)
+    return result
 
-        Sn = bops.getRenyiEntropy(psi, n, ASize - 1)
-        # print('Sn = ' + str(Sn))
-        mySum = 0
-        M = 1000000
-        from datetime import datetime
-        for k in range(N - 1, ASize - 1, -1):
-            psi = bops.shiftWorkingSite(psi, k, '<<')
-        for m in range(M * 1):
-            vs = [[np.array([np.random.randint(2) * 2 - 1, np.random.randint(2) * 2 - 1]) \
-                   for alpha in range(ASize)] for copy in range(n)]
-            mySum += exr.singleMeasurement(psi, vs)
-            if m % M == M - 1:
-                # plt.scatter(m, mySum / m)
-                # print(mySum / m)
-                print('pn / result = ' + str(Sn / (mySum / m)))
-        # plt.show()
+
+ASize = 2
+for n in range(2, 6):
+    print('ASize = ' + str(ASize))
+    print('n = ' + str(n))
+
+    Sn = bops.getRenyiEntropy(psi, n, ASize - 1)
+    # print('Sn = ' + str(Sn))
+    mySum = 0
+    M = 100000
+    from datetime import datetime
+    for k in range(N - 1, ASize - 1, -1):
+        psi = bops.shiftWorkingSite(psi, k, '<<')
+    start = datetime.now()
+    for m in range(M * 1):
+        vs = [[np.array([np.random.randint(2) * 2 - 1, np.random.randint(2) * 2 - 1]) \
+               for alpha in range(ASize)] for copy in range(n)]
+        mySum += exr.singleMeasurement(psi, vs)
+        # mySum += noHermitianTest(psi, vs)
+        if m % M == M - 1:
+            # plt.scatter(m, mySum / m)
+            # print(mySum / m)
+            print('pn / result = ' + str(Sn / (mySum / m)))
+            end = datetime.now()
+            # print((end - start).seconds)
+    # plt.show()
 
