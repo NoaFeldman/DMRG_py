@@ -2,8 +2,7 @@ import tensornetwork as tn
 import numpy as np
 import basicOperations as bops
 import DMRG as dmrg
-import trotter
-import test
+import experimantalRandom as exr
 from matplotlib import pyplot as plt
 
 
@@ -55,7 +54,7 @@ def fullState(psi):
     return ten
 
 
-N = 16
+N = 8
 T = 1
 C = 1/T
 J = C
@@ -67,7 +66,28 @@ psi = bops.getStartupState(N)
 HXX = dmrg.getDMRGH(N, onsiteTermsXX, neighborTermsXX)
 HLs, HRs = dmrg.getHLRs(HXX, psi)
 psi, E0, truncErrs = dmrg.getGroundState(HXX, HLs, HRs, psi, None)
-print('E0 = ' + str(E0))
-print('E0 = ' + str(dmrg.stateEnergy(psi, HXX)))
-R2 = bops.getRenyiEntropy(psi, 2, int(len(psi) / 2 - 1))
-print(R2)
+
+ASize = 2
+for ASize in range(5, 2, -1):
+    for n in range(2, 6):
+        print(bops.getOverlap(psi, psi))
+        print('ASize = ' + str(ASize))
+        print('n = ' + str(n))
+
+        Sn = bops.getRenyiEntropy(psi, n, ASize - 1)
+        # print('Sn = ' + str(Sn))
+        mySum = 0
+        M = 1000000
+        from datetime import datetime
+        for k in range(N - 1, ASize - 1, -1):
+            psi = bops.shiftWorkingSite(psi, k, '<<')
+        for m in range(M * 1):
+            vs = [[np.array([np.random.randint(2) * 2 - 1, np.random.randint(2) * 2 - 1]) \
+                   for alpha in range(ASize)] for copy in range(n)]
+            mySum += exr.singleMeasurement(psi, vs)
+            if m % M == M - 1:
+                # plt.scatter(m, mySum / m)
+                # print(mySum / m)
+                print('pn / result = ' + str(Sn / (mySum / m)))
+        # plt.show()
+

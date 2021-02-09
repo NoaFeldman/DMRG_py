@@ -374,7 +374,6 @@ def getGroundState(H, HLs, HRs, psi, psiCompare=None, accuration=10**(-6)):
         truncErrs.append(truncErr)
         if np.abs((E0Curr-E0)/E0) < accuration:
             return psi, E0Curr, truncErrs
-        print(np.abs((E0Curr-E0)/E0))
         E0 = E0Curr
 
 
@@ -397,8 +396,9 @@ def stateEnergy(psi: List[tn.Node], H: HOp):
         l2r[2] ^ r2l[2]
         M = tn.contract_between(psiCopy[i], \
                                 tn.contract_between(l2r, tn.contract_between(r2l, psiCopy[i+1])))
-        [psiCopy, te] = bops.assignNewSiteTensors(psiCopy, i, M, '>>')
-        E += bops.getOverlap(psiCopy, psi)
+        if bops.multiContraction(M, M, '0123', '0123*').tensor != 0:
+            [psiCopy, te] = bops.assignNewSiteTensors(psiCopy, i, M, '>>')
+            E += bops.getOverlap(psiCopy, psi)
         bops.removeState(psiCopy)
         tn.remove_node(r2l)
         tn.remove_node(l2r)
