@@ -8,7 +8,7 @@ d = 2
 randomPossibilities = 2
 
 # vs[i][j] = rabdom vector for copy i, site j
-def singleMeasurement(psi: List[tn.Node], vs: List[List[np.array]], choices: List[List[bool]]):
+def singleMeasurement(psi: List[tn.Node], vs: List[List[np.array]]):
     n = len(vs)
     NA = len(vs[0])
     result = 1
@@ -24,7 +24,7 @@ def singleMeasurement(psi: List[tn.Node], vs: List[List[np.array]], choices: Lis
                 else:
                     result *= overlap
             else:
-                hermitianComponent = choices[copy][alpha] # np.random.randint(2)
+                hermitianComponent = np.random.randint(2)
                 if hermitianComponent:
                     y = 1
                 else:
