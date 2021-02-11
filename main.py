@@ -67,7 +67,7 @@ HXX = dmrg.getDMRGH(N, onsiteTermsXX, neighborTermsXX)
 HLs, HRs = dmrg.getHLRs(HXX, psi)
 psi, E0, truncErrs = dmrg.getGroundState(HXX, HLs, HRs, psi, None)
 
-def noHermitianTest(psi, vs):
+def noHermitianTest(psi, vs, choices):
     n = len(vs)
     NA = len(vs[0])
     result = 1
@@ -75,10 +75,11 @@ def noHermitianTest(psi, vs):
         psiCopy = bops.copyState(psi)
         for alpha in range(NA - 1, -1, -1):
             toEstimate = np.kron(vs[copy][alpha], np.conj(np.reshape(vs[np.mod(copy+1, n)][alpha], [2, 1])))
-            if np.random.randint(2) == 0:
-                toMeasure = toEstimate + np.conj(np.transpose(toEstimate))
+            hermitianComponent = choices[copy][alpha] # np.random.randint(2)
+            if hermitianComponent:
+                toMeasure = (toEstimate + np.conj(np.transpose(toEstimate))) / 2
             else:
-                toMeasure = toEstimate - np.conj(np.transpose(toEstimate))
+                toMeasure = toEstimate - np.conj(np.transpose(toEstimate)) / 2
             psiCopy[alpha] = bops.permute(bops.multiContraction(psiCopy[alpha], tn.Node(toMeasure), '1', '0'), [0, 2, 1])
         result *= bops.getOverlap(psi, psiCopy)
     return result
@@ -92,16 +93,29 @@ for n in range(2, 6):
     Sn = bops.getRenyiEntropy(psi, n, ASize - 1)
     # print('Sn = ' + str(Sn))
     mySum = 0
-    M = 100000
+    M = 1000
     from datetime import datetime
     for k in range(N - 1, ASize - 1, -1):
         psi = bops.shiftWorkingSite(psi, k, '<<')
     start = datetime.now()
-    for m in range(M * 1):
+    for m in range(M * 10):
         vs = [[np.array([np.random.randint(2) * 2 - 1, np.random.randint(2) * 2 - 1]) \
                for alpha in range(ASize)] for copy in range(n)]
-        mySum += exr.singleMeasurement(psi, vs)
+        vs = [[np.array([1, 1]), np.array([-1, -1])], [np.array([1, -1]), np.array([-1, 1])]]
         # mySum += noHermitianTest(psi, vs)
+        # mySum += exr.singleMeasurement(psi, vs)
+        for choiceCopy in range(2**n):
+            for choiceAlpha in range(2**ASize):
+                choices = [[choiceCopy & 2**j > 0 for j in range(n)],
+                           [choiceAlpha & 2**j > 0 for j in range(ASize)]]
+                c = noHermitianTest(psi, vs, choices)
+                if np.round(c, 8) > 0:
+                    csum = 0
+                    steps = 10000
+                    for i in range(steps):
+                        csum += exr.singleMeasurement(psi, vs, choices)
+                    cavg = csum / steps
+                    print(csum / steps)
         if m % M == M - 1:
             # plt.scatter(m, mySum / m)
             # print(mySum / m)
