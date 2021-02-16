@@ -29,13 +29,15 @@ def singleMeasurement(psi: List[tn.Node], vs: List[List[np.array]]):
                     y = 1
                 else:
                     y = 1j
-                plusVec = vs[copy][alpha] + y * vs[np.mod(copy+1, n)][alpha]
+                plusVec = (vs[copy][alpha] + y * vs[np.mod(copy+1, n)][alpha])
                 projectionResult = makeMeasurement(psiCopy, alpha, plusVec)
                 if projectionResult == 1:
-                    result *= np.matmul(np.conj(np.transpose(plusVec)), vs[np.mod(copy+1, n)][alpha]) / 2
+                    # result *= np.matmul(np.conj(np.transpose(vs[np.mod(copy+1, n)][alpha])), plusVec)
+                    result *= 2 * y
                 else:
-                    minusVec = vs[copy][alpha] - y * vs[np.mod(copy + 1, n)][alpha]
-                    result *= np.matmul(np.conj(np.transpose(minusVec)), vs[np.mod(copy + 1, n)][alpha]) / 2
+                    # minusVec = (vs[copy][alpha] - y * vs[np.mod(copy + 1, n)][alpha])
+                    # result *= np.matmul(np.conj(np.transpose(vs[np.mod(copy + 1, n)][alpha])), minusVec)
+                    result *= -2 * y
             psiCopy = bops.shiftWorkingSite(psiCopy, alpha, '<<')
         bops.removeState(psiCopy)
     return result

@@ -54,7 +54,7 @@ def fullState(psi):
     return ten
 
 
-N = 8
+N = 16
 T = 1
 C = 1/T
 J = C
@@ -85,8 +85,8 @@ def noHermitianTest(psi, vs):
     return result
 
 
-ASize = 2
-for n in range(2, 6):
+n=4
+for ASize in [8, 6, 4, 2]:
     print('ASize = ' + str(ASize))
     print('n = ' + str(n))
 
@@ -98,7 +98,7 @@ for n in range(2, 6):
     for k in range(N - 1, ASize - 1, -1):
         psi = bops.shiftWorkingSite(psi, k, '<<')
     start = datetime.now()
-    for m in range(M * 1000):
+    for m in range(M * 100 * 2**ASize):
         vs = [[np.array([np.random.randint(2) * 2 - 1, np.random.randint(2) * 2 - 1]) \
                for alpha in range(ASize)] for copy in range(n)]
         # mySum += noHermitianTest(psi, vs)
@@ -116,10 +116,11 @@ for n in range(2, 6):
                 #     cavg = csum / steps
                 #     print(csum / steps)
         if m % M == M - 1:
-            plt.scatter(m, mySum / m)
+            plt.scatter(m, Sn / (mySum / m))
             # print(mySum / m)
             # print('pn / result = ' + str(Sn / (mySum / m)))
             end = datetime.now()
             # print((end - start).seconds)
-    plt.show()
+    plt.savefig('experimental_n_' + str(n) + '_N_' + str(ASize) + '.png')
+    plt.clf()
 
