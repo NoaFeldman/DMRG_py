@@ -16,30 +16,25 @@ def singleMeasurement(psi: List[tn.Node], vs: List[List[np.array]]):
         psiCopy = bops.copyState(psi)
         for alpha in range(NA - 1, -1, -1):
             overlap = np.matmul(vs[copy][alpha], vs[np.mod(copy+1, n)][alpha])
+            toEstimate = np.kron(vs[copy][alpha],
+                                np.conj(np.reshape(vs[np.mod(copy + 1, n)][alpha], [2, 1])))
             case1 = np.round(overlap, 8) != 0
             if case1:
-                projectionResult = makeMeasurement(psiCopy, alpha, vs[copy][alpha])
-                if projectionResult == 0:
-                    return 0
-                else:
-                    result *= overlap
+                result *= getExpectationValue(psi, alpha, toEstimate) #/2
             else:
                 hermitianComponent = np.random.randint(2)
                 if hermitianComponent:
-                    y = 1
+                    toMeasure = (toEstimate + np.conj(np.transpose(toEstimate)))/2
                 else:
-                    y = 1j
-                plusVec = (vs[copy][alpha] + y * vs[np.mod(copy+1, n)][alpha])
-                projectionResult = makeMeasurement(psiCopy, alpha, plusVec)
-                if projectionResult == 1:
-                    # result *= np.matmul(np.conj(np.transpose(vs[np.mod(copy+1, n)][alpha])), plusVec)
-                    result *= 2 * y
-                else:
-                    # minusVec = (vs[copy][alpha] - y * vs[np.mod(copy + 1, n)][alpha])
-                    # result *= np.matmul(np.conj(np.transpose(vs[np.mod(copy + 1, n)][alpha])), minusVec)
-                    result *= -2 * y
+                    toMeasure = (toEstimate - np.conj(np.transpose(toEstimate)))/2
+                result *= getExpectationValue(psi, alpha, toMeasure)
             psiCopy = bops.shiftWorkingSite(psiCopy, alpha, '<<')
         bops.removeState(psiCopy)
+    return result
+
+def getExpectationValue(psi, site, op):
+    localDM = bops.multiContraction(psi[site], psi[site], '02', '02*').tensor
+    result = np.trace(np.matmul(localDM, op))
     return result
 
 # Assuming the working site of psi is already site

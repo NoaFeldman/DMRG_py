@@ -205,12 +205,9 @@ def getTridiagonal(HL, HR, H, k, psi, psiCompare=None):
     if psiCompare is not None:
         copyV = bops.copyState([v])[0]
         psiCopy = bops.assignNewSiteTensors(psiCopy, k, copyV, '>>')[0]
-
     E = stateEnergy(psi, H)
-
     w = bops.addNodes(Hv, bops.multNode(v, -alpha))
     beta = bops.getNodeNorm(w)
-
     # Start with T as an array and turn into tridiagonal matrix at the end.
     Tarr = [[0, 0, 0]]
     Tarr[0][1] = alpha
@@ -365,7 +362,7 @@ def getHLRs(H, psi, workingSite=None):
     return HLs, HRs
 
 
-def getGroundState(H, HLs, HRs, psi, psiCompare=None, accuration=10**(-6)):
+def getGroundState(H, HLs, HRs, psi, psiCompare=None, accuration=10**(-2)):
     truncErrs = []
     [psi, E0, truncErr, HLs, HRs] = dmrgSweep(psi, H, HLs, HRs, psiCompare)
     truncErrs.append(truncErr)
@@ -404,28 +401,3 @@ def stateEnergy(psi: List[tn.Node], H: HOp):
         tn.remove_node(l2r)
     return E
 
-
-# buggy
-# def applyH(psi: List[tn.Node], H: HOp):
-#     psiCopy = bops.copyState(psi)
-#     single_0 = bops.copyState([H.singles[0]])[0]
-#     psiCopy[0] = bops.permute(tn.contract(psiCopy[0][1] ^ single_0[0], name=('site' + str(0))), [0, 2, 1])
-#     result = psiCopy
-#     for i in range(1, len(psi)):
-#         psiCopy = bops.copyState(psi)
-#         single_i = bops.copyState([H.singles[i]])[0]
-#         psiCopy[i] = bops.permute(tn.contract(psiCopy[i][1] ^ single_i[0], name=('site' + str(i))), [0, 2, 1])
-#         result = bops.addStates(result, psiCopy)
-#     for i in range(len(psi) - 1):
-#         psiCopy = bops.copyState(psi)
-#         r2l = bops.copyState([H.r2l[i+1]])[0]
-#         l2r = bops.copyState([H.l2r[i]])[0]
-#         psiCopy[i][2] ^ psiCopy[i+1][0]
-#         psiCopy[i][1] ^ l2r[0]
-#         r2l[0] ^ psiCopy[i+1][1]
-#         l2r[2] ^ r2l[2]
-#         M = tn.contract_between(psiCopy[i], \
-#                                 tn.contract_between(l2r, tn.contract_between(r2l, psiCopy[i+1])))
-#         [psiCopy, te] = bops.assignNewSiteTensors(psiCopy, i, M, '>>')
-#         result = bops.addStates(result, psiCopy)
-#     return result

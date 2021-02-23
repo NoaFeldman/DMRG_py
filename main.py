@@ -3,6 +3,7 @@ import numpy as np
 import basicOperations as bops
 import DMRG as dmrg
 import experimantalRandom as exr
+import pickle
 from matplotlib import pyplot as plt
 
 
@@ -54,7 +55,7 @@ def fullState(psi):
     return ten
 
 
-N = 16
+N = 8
 T = 1
 C = 1/T
 J = C
@@ -67,26 +68,9 @@ HXX = dmrg.getDMRGH(N, onsiteTermsXX, neighborTermsXX)
 HLs, HRs = dmrg.getHLRs(HXX, psi)
 psi, E0, truncErrs = dmrg.getGroundState(HXX, HLs, HRs, psi, None)
 
-def noHermitianTest(psi, vs):
-    n = len(vs)
-    NA = len(vs[0])
-    result = 1
-    for copy in range(n):
-        psiCopy = bops.copyState(psi)
-        for alpha in range(NA - 1, -1, -1):
-            toEstimate = np.kron(vs[copy][alpha], np.conj(np.reshape(vs[np.mod(copy+1, n)][alpha], [2, 1])))
-            hermitianComponent = np.random.randint(2) # choices[copy][alpha]
-            if hermitianComponent:
-                toMeasure = (toEstimate + np.conj(np.transpose(toEstimate))) / 2
-            else:
-                toMeasure = (toEstimate - np.conj(np.transpose(toEstimate))) / 2
-            psiCopy[alpha] = bops.permute(bops.multiContraction(psiCopy[alpha], tn.Node(toMeasure), '1', '0'), [0, 2, 1])
-        result *= bops.getOverlap(psi, psiCopy)
-    return result
 
-
-n=4
-for ASize in [8, 6, 4, 2]:
+n = 3
+for ASize in [3]:
     print('ASize = ' + str(ASize))
     print('n = ' + str(n))
 
@@ -94,33 +78,20 @@ for ASize in [8, 6, 4, 2]:
     print('Sn = ' + str(Sn))
     mySum = 0
     M = 1000
+    steps = 100 * 2**ASize
+    results = np.zeros(steps)
     from datetime import datetime
     for k in range(N - 1, ASize - 1, -1):
         psi = bops.shiftWorkingSite(psi, k, '<<')
     start = datetime.now()
-    for m in range(M * 100 * 2**ASize):
+    for m in range(M * steps):
         vs = [[np.array([np.random.randint(2) * 2 - 1, np.random.randint(2) * 2 - 1]) \
                for alpha in range(ASize)] for copy in range(n)]
-        # mySum += noHermitianTest(psi, vs)
         mySum += exr.singleMeasurement(psi, vs)
-        # for choiceCopy in range(2**n):
-        #     for choiceAlpha in range(2**ASize):
-        #         choices = [[choiceCopy & 2**j > 0 for j in range(n)],
-        #                    [choiceAlpha & 2**j > 0 for j in range(ASize)]]
-        #         c = noHermitianTest(psi, vs, choices)
-                # if np.round(c, 8) > 0:
-                #     csum = 0
-                #     steps = 10000
-                #     for i in range(steps):
-                #         csum += exr.singleMeasurement(psi, vs, choices)
-                #     cavg = csum / steps
-                #     print(csum / steps)
         if m % M == M - 1:
-            plt.scatter(m, Sn / (mySum / m))
-            # print(mySum / m)
-            # print('pn / result = ' + str(Sn / (mySum / m)))
+            results[int(m / M)] = mySum / M
+            mySum = 0
             end = datetime.now()
-            # print((end - start).seconds)
-    plt.savefig('experimental_n_' + str(n) + '_N_' + str(ASize) + '.png')
-    plt.clf()
-
+with open('results/experimental_N_' + str(N) + '_NA_' + str(ASize) +'_n_' + str(n), 'wb') as f:
+    pickle.dump(results, f)
+print(np.average(results))

@@ -1,5 +1,4 @@
 import tensornetwork as tn
-import tensornetwork.backends.base_backend as be
 import numpy as np
 import math
 from typing import Any, Dict, List, Optional, Set, Text, Tuple, Union, \
