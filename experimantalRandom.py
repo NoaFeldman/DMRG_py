@@ -20,7 +20,7 @@ def singleMeasurement(psi: List[tn.Node], vs: List[List[np.array]]):
                                 np.conj(np.reshape(vs[np.mod(copy + 1, n)][alpha], [2, 1])))
             case1 = np.round(overlap, 8) != 0
             if case1:
-                result *= getExpectationValue(psi, alpha, toEstimate) #/2
+                result *= getExpectationValue(psi, alpha, toEstimate) / 2
             else:
                 hermitianComponent = np.random.randint(2)
                 if hermitianComponent:
