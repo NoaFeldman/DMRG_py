@@ -146,6 +146,24 @@ def getStartupState(n, d=2, mode='general'):
         psi[n-1] = multNode(psi[n-1], 1/np.sqrt(norm))
         return psi
 
+
+# three spins, last two are maximally entangled and the first one is in a product state with them.
+def getTestState_small():
+    psi = [None] * 3
+    leftTensor = np.ones((1, 2, 1), dtype=complex)
+    leftTensor *= 1 / np.sqrt(2)
+    psi[0] = tn.Node(leftTensor)
+    middleTensor = np.zeros((1, 2, 2), dtype=complex)
+    middleTensor[0, 0, 0] = 1
+    middleTensor[0, 1, 1] = 1
+    psi[1] = tn.Node(middleTensor)
+    rightTensor = np.zeros((2, 2, 1))
+    rightTensor[0, 0, 0] = 1 / np.sqrt(2)
+    rightTensor[1, 1, 0] = 1 / np.sqrt(2)
+    psi[2] = tn.Node(rightTensor)
+    return psi
+
+
 # Assuming psi1, psi2 have the same length, Hilbert space etc.
 # assuming psi2 is conjugated
 def getOverlap(psi1Orig: List[tn.Node], psi2Orig: List[tn.Node]):
@@ -335,7 +353,7 @@ def svdTruncation(node: tn.Node, leftEdges: List[int], rightEdges: List[int],
 
 def getRenyiEntropy(psi: List[tn.Node], n: int, AEnd: int, maxBondDim=256):
     psiCopy = copyState(psi)
-    for k in [len(psiCopy) - 1 - i for i in range(1, len(psiCopy) - AEnd - 1)]:
+    for k in [len(psiCopy) - 1 - i for i in range(len(psiCopy) - AEnd - 1)]:
         psiCopy = shiftWorkingSite(psiCopy, k, '<<')
     M = multiContraction(psiCopy[k - 1], psiCopy[k], [2], [0])
 
