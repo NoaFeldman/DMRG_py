@@ -321,6 +321,8 @@ def svdTruncation(node: tn.Node, leftEdges: List[int], rightEdges: List[int],
     S = tn.Node(np.diag(S.tensor))
     tn.remove_node(s)
     norm = np.sqrt(sum(S.tensor**2))
+    if norm == 0:
+        b = 1
     if maxTrunc > 0:
         meaningful = sum(np.round(S.tensor / norm, maxTrunc) > 0)
         S.tensor = S.tensor[:meaningful]

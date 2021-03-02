@@ -20,14 +20,21 @@ def singleMeasurement(psi: List[tn.Node], vs: List[List[np.array]]):
                                 np.conj(np.reshape(vs[np.mod(copy + 1, n)][alpha], [2, 1])))
             case1 = np.round(overlap, 8) != 0
             if case1:
-                result *= getExpectationValue(psi, alpha, toEstimate) / 2
+                result *= getExpectationValue(psiCopy, alpha, toEstimate) / 2
             else:
                 hermitianComponent = np.random.randint(2)
                 if hermitianComponent:
                     toMeasure = (toEstimate + np.conj(np.transpose(toEstimate)))/2
                 else:
-                    toMeasure = (toEstimate - np.conj(np.transpose(toEstimate)))/2
-                result *= getExpectationValue(psi, alpha, toMeasure)
+                    toMeasure = (toEstimate - np.conj(np.transpose(toEstimate)))/2 * 1j
+                measureVals, measureVecs = np.linalg.eigh(toMeasure)
+                projector = np.outer(measureVecs[:, 0], np.conj(measureVecs[:, 0]))
+                measResult = makeMeasurement(psiCopy, alpha, projector)
+                if measResult:
+                    result *= measureVals[0]
+                else:
+                    result *= measureVals[1]
+                # result *= getExpectationValue(psi, alpha, toMeasure)
             psiCopy = bops.shiftWorkingSite(psiCopy, alpha, '<<')
         bops.removeState(psiCopy)
     return result
@@ -38,9 +45,7 @@ def getExpectationValue(psi, site, op):
     return result
 
 # Assuming the working site of psi is already site
-def makeMeasurement(psi, site, projectedVec):
-    toProject = np.kron(projectedVec, np.conj(np.reshape(projectedVec, [2, 1])))
-    toProject = toProject / np.trace(toProject)
+def makeMeasurement(psi, site, toProject):
     localDM = bops.multiContraction(psi[site], psi[site], '02', '02*').tensor
     projectionProbability = np.trace(np.matmul(localDM, toProject)) / np.trace(localDM)
     # Project to the measured vector

@@ -75,7 +75,7 @@ psiCurr = bops.getTestState_small()
 N = 3
 print('ASize = ' + str(ASize))
 
-for n in range(3, 5):
+for n in range(2, 5):
     print('n = ' + str(n))
 
     Sn = bops.getRenyiEntropy(psiCurr, n, ASize - 1)
