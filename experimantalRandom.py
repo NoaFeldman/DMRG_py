@@ -18,23 +18,27 @@ def singleMeasurement(psi: List[tn.Node], vs: List[List[np.array]]):
             overlap = np.matmul(vs[copy][alpha], vs[np.mod(copy+1, n)][alpha])
             toEstimate = np.kron(vs[copy][alpha],
                                 np.conj(np.reshape(vs[np.mod(copy + 1, n)][alpha], [2, 1])))
-            case1 = np.round(overlap, 8) != 0
-            if case1:
-                result *= getExpectationValue(psiCopy, alpha, toEstimate) / 2
+            if np.abs(np.round(overlap, 8)) == 2:
+                measResult = makeMeasurement(psiCopy, alpha, toEstimate)
+                if measResult:
+                    result *= overlap / 2 # Or  / 4???
+                else:
+                    return 0
             else:
                 hermitianComponent = np.random.randint(2)
                 if hermitianComponent:
                     toMeasure = (toEstimate + np.conj(np.transpose(toEstimate)))/2
                 else:
-                    toMeasure = (toEstimate - np.conj(np.transpose(toEstimate)))/2 * 1j
+                    toMeasure = (toEstimate - np.conj(np.transpose(toEstimate)))/(2 * 1j)
                 measureVals, measureVecs = np.linalg.eigh(toMeasure)
                 projector = np.outer(measureVecs[:, 0], np.conj(measureVecs[:, 0]))
                 measResult = makeMeasurement(psiCopy, alpha, projector)
                 if measResult:
-                    result *= measureVals[0]
+                    result *= measureVals[0] / 2
                 else:
-                    result *= measureVals[1]
-                # result *= getExpectationValue(psi, alpha, toMeasure)
+                    result *= measureVals[1] / 2
+                if not hermitianComponent:
+                    result *= 1j
             psiCopy = bops.shiftWorkingSite(psiCopy, alpha, '<<')
         bops.removeState(psiCopy)
     return result

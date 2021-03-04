@@ -30,11 +30,13 @@ def findResults(n, N, opt='p'):
 
 M = 1000
 Ns = [4, 8, 12, 16, 20, 24]
+colors = ['blueviolet', 'blue', 'deepskyblue', 'green', 'yellowgreen', 'orange']
 legends = []
 option = 'complex'
 Vs = np.zeros(len(Ns))
 ns = [2, 3, 4]
 varianceNormalizations = [1.23, 1.57, 1.94]
+[1.35, 1.95, 2.7]
 p2s = []
 for i in range(len(Ns)):
     p2s.append(toricCode.getPurity(i + 1))
@@ -45,23 +47,12 @@ if dops:
         for i in range(len(Ns)):
             N = Ns[i]
             spaceSize = d**N
-            legends.append('N = ' + str(N))
+            if n == 2:
+                legends.append('N_A = ' + str(N))
             organized = []
-            # for j in range(100):
-            #     dirname = rootdir + '/' + option + str(n) + str(i+1)
-            #     if j > 0:
-            #         dirname += '_' + str(j)
-            #     if os.path.exists(dirname):
-            #         for filename in os.listdir(dirname):
-            #             with open(dirname + '/' + filename, 'rb') as f:
-            #                 curr = pickle.load(f)
-            #                 organized.append(curr)
-
             with open('./results/' + str(findResults(n, N)), 'rb') as f:
                 organized = np.array(pickle.load(f))
             organized = organized[organized < 50]
-            # with open('./results/' + 'organized_p' + str(n) + '_N_' + str(N) + '_' + str(len(organized)), 'wb') as f:
-            #     pickle.dump(organized, f)
             p2 = p2s[i]
             expected = p2**(n-1)
             numOfExperiments = 10
@@ -81,22 +72,23 @@ if dops:
                         precision[j] = currPrecision
                     else:
                         precision[j] = (precision[j] * mix + currPrecision) / (mix + 1)
-            plt.plot([(m * M + M - 1) / (varianceNormalizations[n - 2] ** N) for m in range(len(precision)-1)],
-                     precision[1:] / expected)
-            # plt.plot([(m * M + M - 1) / (1.52 ** N) for m in range(len(precision)-1)],
-            #          precision[1:] / expected)
+            plt.plot([(m * M + M - 1) for m in range(len(precision) - 1)],
+                     precision[1:] / expected * (1 / 2.7 * varianceNormalizations[n - 2]) ** N, color=colors[i])
+            # plt.plot(np.log([(m * M + M - 1) / (varianceNormalizations[n - 2] ** N) for m in range(len(precision) - 1)]),
+            #          np.log(precision[1:] / expected), color=colors[i])
             variance = np.real(np.average((np.array(organized) - expected)**2 * M))
             Vs[i] = np.real(variance / expected**2)
-        plt.xlabel(r'$M/(' + str(varianceNormalizations[n-2]) + '^N)$')
+        plt.xlabel(r'$M/(' + str(varianceNormalizations[n-2]) + '^{N_A})$')
         plt.ylabel(r'|$p_' + str(n) + '$ - est|/$p_' + str(n) + '$')
         plt.xscale('log')
         plt.yscale('log')
         plt.legend(legends)
-        plt.show()
-        linearRegression(Ns, Vs)
-        plt.xlabel(r'$N_A$')
-        plt.ylabel(r'Var$(p_' + str(n) + ')/p^2_' + str(n) + '$')
-        plt.show()
+        # plt.show()
+        # linearRegression(Ns, Vs)
+        # plt.xlabel(r'$N_A$')
+        # plt.ylabel(r'Var$(p_' + str(n) + ')/p^2_' + str(n) + '$')
+        # plt.show()
+plt.show()
 
 doR3 = False
 if doR3:
@@ -181,7 +173,7 @@ if dop4:
         organized = []
         p2 = toricCode.getPurity(i + 1)
         expected = p2 ** 3
-        legends.append('N = ' + str(N))
+        legends.append(r'$N = ' + str(N) + '$')
         while os.path.isfile('./results/complex4' + str(i+1) + '/toric_local_vecs_n_4_N_' + str(N) + '_' + option +
                              '_M_' + str(M) + '_m_' + str(m)):
             with open('./results/complex4' + str(i+1) + '/toric_local_vecs_n_4_N_' + str(N) + '_' + option +

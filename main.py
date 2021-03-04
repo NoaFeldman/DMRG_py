@@ -70,34 +70,34 @@ psi = bops.getStartupState(N)
 
 import sys
 n = 2 # int(sys.argv[1])
-ASize = 2 # int(sys.argv[2])
-psiCurr = bops.getTestState_small()
-N = 3
-print('ASize = ' + str(ASize))
 
-for n in range(2, 5):
-    print('n = ' + str(n))
+for n in range(3, 5):
+    for N in range(3, 6):
+        ASize = N - 1
+        psiCurr = bops.getTestState_small(N)
+        print('n = ' + str(n))
+        print('N = ' + str(N))
 
-    Sn = bops.getRenyiEntropy(psiCurr, n, ASize - 1)
-    print('Sn = ' + str(Sn))
-    mySum = 0
-    M = 1000
-    steps = 100 * 2 ** ASize
-    results = np.zeros(steps + 1)
-    results[0] = Sn
-    # from datetime import datetime
-    for k in range(N - 1, ASize - 1, -1):
-        psiCurr = bops.shiftWorkingSite(psiCurr, k, '<<')
-        # start = datetime.now()
-        for m in range(M * steps):
-            vs = [[np.array([np.random.randint(2) * 2 - 1, np.random.randint(2) * 2 - 1]) \
-                       for alpha in range(ASize)] for copy in range(n)]
-            currEstimation = exr.singleMeasurement(psiCurr, vs)
-            mySum += currEstimation
-            if m % M == M - 1:
-                results[int(m / M) + 1] = mySum / M
-                mySum = 0
-                # end = datetime.now()
-    with open('results/experimental_N_' + str(N) + '_NA_' + str(ASize) +'_n_' + str(n), 'wb') as f:
-        pickle.dump(results, f)
+        Sn = bops.getRenyiEntropy(psiCurr, n, ASize - 1)
+        print('Sn = ' + str(Sn))
+        mySum = 0
+        M = 1000
+        steps = 100 * 2 ** ASize
+        results = np.zeros(steps + 1)
+        results[0] = Sn
+        # from datetime import datetime
+        for k in range(N - 1, ASize - 1, -1):
+            psiCurr = bops.shiftWorkingSite(psiCurr, k, '<<')
+            # start = datetime.now()
+            for m in range(M * steps):
+                vs = [[np.array([np.exp(1j * np.pi * np.random.randint(4)), np.exp(1j * np.pi * np.random.randint(4))]) \
+                           for alpha in range(ASize)] for copy in range(n)]
+                currEstimation = exr.singleMeasurement(psiCurr, vs)
+                mySum += currEstimation
+                if m % M == M - 1:
+                    results[int(m / M) + 1] = mySum / M
+                    mySum = 0
+                    # end = datetime.now()
+        with open('results/experimental_N_' + str(N) + '_NA_' + str(ASize) +'_n_' + str(n), 'wb') as f:
+            pickle.dump(results, f)
 

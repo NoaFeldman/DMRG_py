@@ -147,20 +147,21 @@ def getStartupState(n, d=2, mode='general'):
         return psi
 
 
-# three spins, last two are maximally entangled and the first one is in a product state with them.
-def getTestState_small():
-    psi = [None] * 3
+# n spins, last two are maximally entangled and the first one is in a product state with them.
+def getTestState_small(n):
+    psi = [None] * n
     leftTensor = np.ones((1, 2, 1), dtype=complex)
     leftTensor *= 1 / np.sqrt(2)
-    psi[0] = tn.Node(leftTensor)
+    for i in range(n-2):
+        psi[i] = tn.Node(leftTensor)
     middleTensor = np.zeros((1, 2, 2), dtype=complex)
     middleTensor[0, 0, 0] = 1
     middleTensor[0, 1, 1] = 1
-    psi[1] = tn.Node(middleTensor)
+    psi[n-2] = tn.Node(middleTensor)
     rightTensor = np.zeros((2, 2, 1))
     rightTensor[0, 0, 0] = 1 / np.sqrt(2)
     rightTensor[1, 1, 0] = 1 / np.sqrt(2)
-    psi[2] = tn.Node(rightTensor)
+    psi[n-1] = tn.Node(rightTensor)
     return psi
 
 

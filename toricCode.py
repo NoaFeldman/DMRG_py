@@ -48,6 +48,8 @@ def toEnvOperator(op):
         bops.permute(op, [0, 4, 1, 5, 2, 6, 3, 7]), 6, 7), 4, 5), 2, 3), 0, 1)
     tn.remove_node(op)
     return result
+
+
 AEnv = toEnvOperator(bops.multiContraction(A, A, '4', '4*'))
 BEnv = toEnvOperator(bops.multiContraction(B, B, '4', '4*'))
 chi = 32
@@ -63,6 +65,7 @@ steps = 50
 
 envOpAB = bops.permute(bops.multiContraction(AEnv, BEnv, '1', '3'), [0, 3, 2, 4, 1, 5])
 envOpBA = bops.permute(bops.multiContraction(BEnv, AEnv, '1', '3'), [0, 3, 2, 4, 1, 5])
+b = 1
 #
 # curr = bops.permute(bops.multiContraction(envOpBA, envOpAB, '45', '01'), [0, 2, 4, 6, 1, 3, 5, 7])
 #
