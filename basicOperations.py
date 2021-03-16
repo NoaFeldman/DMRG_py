@@ -147,8 +147,8 @@ def getStartupState(n, d=2, mode='general'):
         return psi
 
 
-# n spins, last two are maximally entangled and the first one is in a product state with them.
-def getTestState_small(n):
+# n spins, last two are maximally entangled and the first n - 2 are in a product state with them.
+def getTestState_pair(n):
     psi = [None] * n
     leftTensor = np.ones((1, 2, 1), dtype=complex)
     leftTensor *= 1 / np.sqrt(2)
@@ -162,6 +162,50 @@ def getTestState_small(n):
     rightTensor[0, 0, 0] = 1 / np.sqrt(2)
     rightTensor[1, 1, 0] = 1 / np.sqrt(2)
     psi[n-1] = tn.Node(rightTensor)
+    norm = getOverlap(psi, psi)
+    psi[n - 1] = multNode(psi[n - 1], 1 / np.sqrt(norm))
+    return psi
+
+# both halves of the systems are in the maximally entangled state of a pair (0000000 + 111111)
+def getTestState_halvesAsPair(n):
+    psi = [None] * n
+    leftTensor = np.zeros((1, 2, 2), dtype=complex)
+    leftTensor[0, 0, 0] = 1
+    leftTensor[0, 1, 1] = 1
+    psi[0] = tn.Node(leftTensor)
+    midTensor = np.zeros((2, 2, 2), dtype=complex)
+    midTensor[0, 0, 0] = 1
+    midTensor[1, 1, 1] = 1
+    for i in range(1, n-1):
+        psi[i] = tn.Node(midTensor)
+    rightTensor = np.zeros((2, 2, 1), dtype=complex)
+    rightTensor[0, 0, 0] = 1
+    rightTensor[1, 1, 0] = 1
+    psi[n-1] = tn.Node(rightTensor)
+    norm = getOverlap(psi, psi)
+    psi[int(n / 2) - 1] = multNode(psi[int(n / 2) - 1], 1 / np.sqrt(norm))
+    return psi
+
+# Both halves of the state are maximally entangled
+# working site is middle site
+def getTestState_maximallyEntangledHalves(n):
+    psi = [None] * n
+    for i in range(int(n / 2)):
+        tensor = np.zeros((2**i, 2, 2**(i+1)), dtype=complex)
+        for j in range(2**i):
+            tensor[j, 0, 2 * j] = 1
+            tensor[j, 1, 2 * j + 1] = 1
+        psi[i] = tn.Node(tensor)
+    for i in range(int(n / 2), n):
+        tensor = np.zeros((2**(n - i), 2, 2**(n - 1 - i)), dtype=complex)
+        for j in range(2 ** (n - i)):
+            currBit = int((2 ** (n - i - 1) & j) > 0)
+            tensor[j, currBit, j % 2 ** (n - i - 1)] = 1
+        psi[i] = tn.Node(tensor)
+    norm = getOverlap(psi, psi)
+    psi[int(n/2)] = multNode(psi[int(n/2)], 1 / np.sqrt(norm))
+    for k in range(int(n/2), n - 1):
+        psi = shiftWorkingSite(psi, k, '>>')
     return psi
 
 
@@ -354,11 +398,11 @@ def svdTruncation(node: tn.Node, leftEdges: List[int], rightEdges: List[int],
     return [l, r, truncErr]
 
 
-def getRenyiEntropy(psi: List[tn.Node], n: int, AEnd: int, maxBondDim=256):
+def getRenyiEntropy(psi: List[tn.Node], n: int, ASize: int, maxBondDim=1024):
     psiCopy = copyState(psi)
-    for k in [len(psiCopy) - 1 - i for i in range(len(psiCopy) - AEnd - 1)]:
+    for k in [len(psiCopy) - 1 - i for i in range(len(psiCopy) - ASize - 1)]:
         psiCopy = shiftWorkingSite(psiCopy, k, '<<')
-    M = multiContraction(psiCopy[k - 1], psiCopy[k], [2], [0])
+    M = multiContraction(psiCopy[ASize - 1], psiCopy[ASize], [2], [0])
 
     leftEdges = M.edges[:2]
     rightEdges = M.edges[2:]
@@ -412,12 +456,15 @@ def shiftWorkingSite(psi: List[tn.Node], k, dir):
     if dir == '<<':
         pair = multiContraction(psi[k-1], psi[k], [2], [0], cleanOr1=True, cleanOr2=True)
         [l, r, I] = svdTruncation(pair, [0, 1], [2, 3], '<<')
-        psi[k-1] = l
+        psi[k - 1] = l
         psi[k] = r
         tn.remove_node(pair)
     else:
-        pair = tn.contract(psi[k][2] ^ psi[k+1][0], axis_names=getEdgeNames(psi[k])[:2] + getEdgeNames(psi[k+1])[1:])
-        [psi, truncErr] = assignNewSiteTensors(psi, k, pair, dir)
+        pair = tn.contract(psi[k][2] ^ psi[k+1][0])
+        [l, r, I] = svdTruncation(pair, [0, 1], [2, 3], '>>')
+        psi[k] = l
+        psi[k + 1] = r
+        tn.remove_node(pair)
     return psi
 
 

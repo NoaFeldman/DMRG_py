@@ -7,7 +7,30 @@ from typing import List
 d = 2
 randomPossibilities = 2
 
-# vs[i][j] = rabdom vector for copy i, site j
+def singleHaarEstimation(psi: List[tn.Node], us: List[tn.Node], n: int, NA: int):
+    psiCopy = bops.copyState(psi)
+    projector0 = np.zeros((2, 2))
+    projector0[0, 0] = 1
+    projector1 = np.zeros((2, 2))
+    projector1[1, 1] = 1
+    measurementResults = np.array(NA)
+    estimation = 1
+    for i in range(NA):
+        psiCopy[i] = bops.permute(bops.multiContraction(psiCopy[i], us[i], '1', '1', cleanOr1=True), [0, 2, 1])
+        measurementResults[i] = makeMeasurement(psiCopy, i, projector0)
+        if measurementResults:
+            resultProjector = projector0
+        else:
+            resultProjector = projector1
+        localEstimation = np.matmul(np.matmul(np.conj(np.transpose(us[i].tensor)), resultProjector), us[i].tensor) \
+            - np.eye(2)
+        estimation *= np.trace(localEstimation**4)
+        psiCopy = bops.shiftWorkingSite(psiCopy, i, '<<')
+    return estimation
+
+
+
+# vs[i][j] = random vector for copy i, site j
 def singleMeasurement(psi: List[tn.Node], vs: List[List[np.array]]):
     n = len(vs)
     NA = len(vs[0])

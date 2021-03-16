@@ -54,31 +54,36 @@ def fullState(psi):
     ten = np.round(curr.tensor, decimals=5)
     return ten
 
+xx = False
+if xx:
+    N = 32
+    T = 1
+    C = 1/T
+    J = C
+    Omega = 1/T
+    delta = 1
+    onsiteTermsXX, neighborTermsXX = getXXHamiltonianMatrices(1, 0)
+    psi = bops.getStartupState(N)
 
-N = 8
-T = 1
-C = 1/T
-J = C
-Omega = 1/T
-delta = 1
-onsiteTermsXX, neighborTermsXX = getXXHamiltonianMatrices(1, 0)
-psi = bops.getStartupState(N)
+    HXX = dmrg.getDMRGH(N, onsiteTermsXX, neighborTermsXX)
+    HLs, HRs = dmrg.getHLRs(HXX, psi)
+    psi, E0, truncErrs = dmrg.getGroundState(HXX, HLs, HRs, psi, None)
 
-# HXX = dmrg.getDMRGH(N, onsiteTermsXX, neighborTermsXX)
-# HLs, HRs = dmrg.getHLRs(HXX, psi)
-# psi, E0, truncErrs = dmrg.getGroundState(HXX, HLs, HRs, psi, None)
+b = 1
+import os
 
-import sys
-n = 2 # int(sys.argv[1])
+for n in [1, 2, 4]:
+    for N in [2, 4, 6]:
+        ASize = int(N / 2)
+        dir = 'results/experimental/maxEntangled_' + str(ASize)
+        try:
+            os.mkdir(dir)
+        except FileExistsError:
+            pass
 
-for n in range(3, 5):
-    for N in range(3, 6):
-        ASize = N - 1
-        psiCurr = bops.getTestState_small(N)
-        print('n = ' + str(n))
-        print('N = ' + str(N))
-
-        Sn = bops.getRenyiEntropy(psiCurr, n, ASize - 1)
+        psi = bops.getTestState_maximallyEntangledHalves(N)
+        Sn = bops.getRenyiEntropy(psi, n, ASize)
+        l = np.log2(bops.getRenyiEntropy(psi, 2, ASize))
         print('Sn = ' + str(Sn))
         mySum = 0
         M = 1000
@@ -87,17 +92,17 @@ for n in range(3, 5):
         results[0] = Sn
         # from datetime import datetime
         for k in range(N - 1, ASize - 1, -1):
-            psiCurr = bops.shiftWorkingSite(psiCurr, k, '<<')
+            psi = bops.shiftWorkingSite(psi, k, '<<')
             # start = datetime.now()
             for m in range(M * steps):
                 vs = [[np.array([np.exp(1j * np.pi * np.random.randint(4)), np.exp(1j * np.pi * np.random.randint(4))]) \
                            for alpha in range(ASize)] for copy in range(n)]
-                currEstimation = exr.singleMeasurement(psiCurr, vs)
+                currEstimation = exr.singleMeasurement(psi, vs)
                 mySum += currEstimation
                 if m % M == M - 1:
                     results[int(m / M) + 1] = mySum / M
                     mySum = 0
                     # end = datetime.now()
-        with open('results/experimental_N_' + str(N) + '_NA_' + str(ASize) +'_n_' + str(n), 'wb') as f:
+        with open('dir + /experimental_N_' + str(N) + '_NA_' + str(ASize) +'_n_' + str(n), 'wb') as f:
             pickle.dump(results, f)
 
