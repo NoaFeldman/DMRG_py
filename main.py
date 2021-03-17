@@ -62,6 +62,9 @@ dir = sys.argv[4] + '/' + option + '_NA_' + str(ASize) + '_n_' + str(n)
 if option == 'asym':
     weight = float(sys.argv[5])
     dir = dir + '_' + str(weight)
+    rep = sys.argv[6]
+else:
+    rep = sys.argv[5]
 
 try:
     os.mkdir(dir)
@@ -87,7 +90,7 @@ elif option == 'asym':
 Sn = bops.getRenyiEntropy(psi, n, ASize)
 mySum = 0
 M = 1000
-steps = 100 * 2 ** (ASize * n)
+steps = 2 ** (ASize * n)
 results = np.zeros(steps + 1)
 results[0] = Sn
 # from datetime import datetime
@@ -103,6 +106,6 @@ for k in range(len(psi) - 1, ASize - 2, -1):
             results[int(m / M) + 1] = mySum / M
             mySum = 0
             # end = datetime.now()
-with open(dir + '/experimental_N_' + str(N) + '_NA_' + str(ASize) +'_n_' + str(n), 'wb') as f:
+with open(dir + '/experimental_NA_' + str(ASize) +'_n_' + str(n) + '_' + rep, 'wb') as f:
     pickle.dump(results, f)
 
