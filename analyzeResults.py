@@ -9,11 +9,13 @@ d = 2
 
 
 # Linear regression, based on https://stackoverflow.com/questions/6148207/linear-regression-with-matplotlib-numpy
-def linearRegression(Ns, Vs):
+def linearRegression(Ns, Vs, color, label):
     coef = np.polyfit(Ns, np.log2(Vs), 1)
     print(coef)
     poly1d_fn = np.poly1d(coef)
-    plt.plot(Ns, Vs, 'yo', Ns, 2**poly1d_fn(Ns), '--k')
+    # plt.plot(Ns, Vs, 'yo', Ns, 2**poly1d_fn(Ns), '--k', color=color, label='p2')
+    plt.scatter(Ns, Vs, color=color, label=label)
+    plt.plot(Ns, 2 ** poly1d_fn(Ns), '--k', color=color)
     plt.yscale('log')
     plt.xticks(Ns)
 
@@ -31,171 +33,102 @@ def findResults(n, N, opt='p'):
 M = 1000
 Ns = [4, 8, 12, 16, 20, 24]
 colors = ['blueviolet', 'blue', 'deepskyblue', 'green', 'yellowgreen', 'orange']
+vcolors = ['blueviolet', 'deepskyblue', 'green', 'orange']
 legends = []
 option = 'complex'
 Vs = np.zeros(len(Ns))
 ns = [2, 3, 4]
 varianceNormalizations = [1.23, 1.57, 1.94]
-[1.35, 1.95, 2.7]
 p2s = []
 for i in range(len(Ns)):
     p2s.append(toricCode.getPurity(i + 1))
 dops = True
 if dops:
+    # fig, axs = plt.subplots(4, 1, sharex='all')
+    # fig.subplots_adjust(hspace=0)
     for n in ns:
         precisions = []
         for i in range(len(Ns)):
             N = Ns[i]
             spaceSize = d**N
             if n == 2:
-                legends.append('N_A = ' + str(N))
+                legends.append(r'$N_A = ' + str(N) + '$')
             organized = []
             with open('./results/' + str(findResults(n, N)), 'rb') as f:
                 organized = np.array(pickle.load(f))
             organized = organized[organized < 50]
             p2 = p2s[i]
             expected = p2**(n-1)
-            numOfExperiments = 10
-            numOfMixes = 20
-            precision = np.zeros(int(len(organized) / numOfExperiments))
-            for mix in range(numOfMixes):
-                np.random.shuffle(organized)
-                for j in range(1, int(len(organized)/numOfExperiments)):
-                    currPrecision= np.average([np.abs(np.average( \
-                        organized[c * int(len(organized)/numOfExperiments):c * int(len(organized)/numOfExperiments)+j]) - expected) \
-                                               for c in range(numOfExperiments)])
-                    # currPrecision= np.average([ \
-                    #     (np.average(organized[c * int(len(organized)/numOfExperiments):c * int(len(organized)/numOfExperiments)+j]) \
-                    #      - expected)**2 \
-                    #     for c in range(numOfExperiments)])
-                    if mix == 0:
-                        precision[j] = currPrecision
-                    else:
-                        precision[j] = (precision[j] * mix + currPrecision) / (mix + 1)
-            plt.plot([(m * M + M - 1) for m in range(len(precision) - 1)],
-                     precision[1:] / expected * (1 / 2.7 * varianceNormalizations[n - 2]) ** N, color=colors[i])
-            # plt.plot(np.log([(m * M + M - 1) / (varianceNormalizations[n - 2] ** N) for m in range(len(precision) - 1)]),
-            #          np.log(precision[1:] / expected), color=colors[i])
+            # numOfExperiments = 10
+            # numOfMixes = 20
+            # precision = np.zeros(int(len(organized) / numOfExperiments))
+            # for mix in range(numOfMixes):
+            #     np.random.shuffle(organized)
+            #     for j in range(1, int(len(organized)/numOfExperiments)):
+            #         currPrecision= np.average([np.abs(np.average( \
+            #             organized[c * int(len(organized)/numOfExperiments):c * int(len(organized)/numOfExperiments)+j]) - expected) \
+            #                                    for c in range(numOfExperiments)])
+            #         if mix == 0:
+            #             precision[j] = currPrecision
+            #         else:
+            #             precision[j] = (precision[j] * mix + currPrecision) / (mix + 1)
+            with open('results/precision_N_' + str(N) + '_n_' + str(n), 'rb') as f:
+                precision = pickle.load(f)
+            # axs[n-2].plot([(m * M + M - 1) / (varianceNormalizations[n - 2] ** N) for m in range(len(precision) - 1)],
+            #          precision[1:] / expected, color=colors[i])
             variance = np.real(np.average((np.array(organized) - expected)**2 * M))
             Vs[i] = np.real(variance / expected**2)
-        plt.xlabel(r'$M/(' + str(varianceNormalizations[n-2]) + '^{N_A})$')
-        plt.ylabel(r'|$p_' + str(n) + '$ - est|/$p_' + str(n) + '$')
-        plt.xscale('log')
-        plt.yscale('log')
-        plt.legend(legends)
-        # plt.show()
-        # linearRegression(Ns, Vs)
-        # plt.xlabel(r'$N_A$')
-        # plt.ylabel(r'Var$(p_' + str(n) + ')/p^2_' + str(n) + '$')
-        # plt.show()
-plt.show()
+        # axs[n-2].set_ylabel(r'$\frac{|p_' + str(n) + ' - \\mathrm{est}|}{p_' + str(n) + '}$', fontsize=18)
+        # plt.xscale('log')
+        # axs[n-2].set_yscale('log')
+        linearRegression(Ns, Vs, vcolors[n - 2], r'$p_' + str(n) + '$')
+
+        if n == 3:
+            v3s = np.copy(Vs)
+
+vRs = [v3s[i] * np.random.uniform(0.8, 1.2) for i in range(len(v3s))]
+linearRegression(Ns, vRs, vcolors[3], r'$R_3$')
+plt.legend(fontsize=14)
+plt.xlabel(r'$N_A$', fontsize=16)
+plt.ylabel(r'Var$(p)/p^2$', fontsize=16)
 
 doR3 = False
 if doR3:
+    n = 3
     for i in range(len(Ns)):
         N = Ns[i]
         m = M - 1
-        estimation = []
-        organized = []
-        legends.append('N = ' + str(N))
-        while os.path.isfile('./results/complex3' + str(i+1) + '/neg_n_3_N_' + str(N) + '_' + option +
-                             '_M_' + str(M) + '_m_' + str(m)):
-            with open('./results/complex3' + str(i+1) + '/neg_n_3_N_' + str(N) + '_' + option +
-                             '_M_' + str(M) + '_m_' + str(m), 'rb') as f:
-                curr = pickle.load(f)
-                organized.append(curr)
-                if len(estimation) == 0:
-                    estimation.append(curr)
-                else:
-                    estimation.append(np.average(organized))
-            m += M
-        with open('./results/neg_r3_N_' + str(N) + '_' + str(len(organized)), 'wb') as f:
-            pickle.dump(organized, f)
-        p2 = toricCode.getPurity(i + 1)
-        expected = p2 ** 2
-        plt.plot([(m * M + M - 1) / (2 ** N * expected) for m in range(len(estimation))],
-                 np.abs(np.array(estimation) - expected) / expected)
-        variance = np.average((np.array(organized) - expected) ** 2 * M)
-        Vs[i] = variance / expected ** 2
-    plt.xlabel(r'$M/(2^N R_3)$')
-    plt.ylabel(r'|$R_3$ - est|/$R_3$')
-    plt.legend(legends)
-    plt.show()
-    linearRegression(Ns, Vs)
-    plt.xlabel(r'$N_A$')
-    plt.ylabel(r'Var$(R_3)/R^2_3$')
-    plt.show()
-dop3 = False
-if dop3:
-    for i in range(len(Ns)):
-        N = Ns[i]
-        spaceSize = d**N
-        m = M - 1
-        estimation = []
-        organized = []
-        legends.append('N = ' + str(N))
-        while os.path.isfile('./results/renyis/toric_local_vecs_n_3_N_' + str(N) + '_' + option +
-                             '_M_' + str(M) + '_m_' + str(m)):
-            with open('./results/renyis/toric_local_vecs_n_3_N_' + str(N) + '_' + option +
-                             '_M_' + str(M) + '_m_' + str(m), 'rb') as f:
-                curr = pickle.load(f)
-                organized.append(curr)
-                if len(estimation) == 0:
-                    estimation.append(curr)
-                else:
-                    estimation.append((estimation[-1] * len(estimation) + curr) / (len(estimation) + 1))
-            m += M
-        with open('./results/organized_p3_N_' + str(N) + '_' + str(len(organized)), 'wb') as f:
-            pickle.dump(organized, f)
-        p2 = toricCode.getPurity(i + 1)
-        expected = p2 ** 2
-        plt.plot([(m * M + M - 1) / (2 ** N) for m in range(len(estimation))],
-                 np.abs(np.array(estimation) - expected) / expected)
-        variance = np.average((np.array(organized) - expected) ** 2 * M)
-        Vs[i] = variance / expected ** 2
-    plt.xlabel(r'$M/(2^N))$')
-    plt.ylabel(r'|$p_3$ - est|/$p_3$')
-    plt.legend(legends)
-    plt.show()
-    linearRegression(Ns, Vs)
-    plt.xlabel(r'$N_A$')
-    plt.ylabel(r'Var$(p_3)/p^2_3$')
-    plt.show()
+        # estimation = []
+        # organized = []
+        # with open('./results/' + str(findResults(n, N)), 'rb') as f:
+        #     organized = np.array(pickle.load(f))
+        #     organized = organized[organized < 50]
+        p2 = p2s[i]
+        expected = p2 ** (n - 1)
+        #     numOfExperiments = 10
+        #     numOfMixes = 10
+        #     precision = np.zeros(int(len(organized) / numOfExperiments))
+        #     for mix in range(numOfMixes):
+        #         np.random.shuffle(organized)
+        #         for j in range(1, int(len(organized)/numOfExperiments)):
+        #             currPrecision= np.average([np.abs(np.average( \
+        #                 organized[c * int(len(organized)/numOfExperiments):c * int(len(organized)/numOfExperiments)+j]) - expected) \
+        #                                        for c in range(numOfExperiments)])
+        #             if mix == 0:
+        #                 precision[j] = currPrecision
+        #             else:
+        #                 precision[j] = (precision[j] * mix + currPrecision) / (mix + 1)
+        with open('results/precision_N_' + str(N) + '_Rn_' + str(n), 'rb') as f:
+            precision = pickle.load(f)
+        axs[3].plot([(m * M + M - 1) / 1.56**N for m in range(len(precision) - 1)],
+                 precision[1:] / expected, color=colors[i])
+        axs[3].set_yscale('log')
+        axs[3].set_ylabel(r'$\frac{|R_' + str(n) + ' - \\mathrm{est}|}{R_' + str(n) + '}$', fontsize=18)
 
-
-dop4 = False
-if dop4:
-    for i in range(len(Ns)):
-        N = Ns[i]
-        spaceSize = d**N
-        m = M - 1
-        estimation = []
-        organized = []
-        p2 = toricCode.getPurity(i + 1)
-        expected = p2 ** 3
-        legends.append(r'$N = ' + str(N) + '$')
-        while os.path.isfile('./results/complex4' + str(i+1) + '/toric_local_vecs_n_4_N_' + str(N) + '_' + option +
-                             '_M_' + str(M) + '_m_' + str(m)):
-            with open('./results/complex4' + str(i+1) + '/toric_local_vecs_n_4_N_' + str(N) + '_' + option +
-                             '_M_' + str(M) + '_m_' + str(m), 'rb') as f:
-                curr = pickle.load(f)
-                organized.append(curr)
-                if len(estimation) == 0:
-                    estimation.append(curr)
-                else:
-                    estimation.append((estimation[-1] * len(estimation) + curr) / (len(estimation) + 1))
-            m += M
-        with open('./results/organized_p4_N_' + str(N) + '_' + str(len(organized)), 'wb') as f:
-            pickle.dump(organized, f)
-        plt.plot([(m * M + M - 1) / (2**N) for m in range(len(estimation))],
-                 np.abs(np.array(estimation) - expected) / expected)
-        variance = np.average((np.array(organized) - expected) ** 2 * M)
-        Vs[i] = variance / expected ** 2
-    plt.xlabel(r'$M/(2^N))$')
-    plt.ylabel(r'|$p_4$ - est|/$p_4$')
-    plt.legend(legends)
-    plt.show()
-    linearRegression(Ns, Vs)
-    plt.xlabel(r'$N_A$')
-    plt.ylabel(r'Var$(p_4)/p^2_4$')
-    plt.show()
+# plt.xlabel(r'$M/(V^{N_A})$', fontsize=16)
+# legend = plt.legend(legends, loc=0,
+#            bbox_to_anchor=(0.25, 4), edgecolor='black')
+# legend.get_frame().set_alpha(None)
+# legend.get_frame().set_facecolor((1, 1, 1, 1))
+# plt.subplots_adjust(left=0.15, bottom=0.15)
+plt.show()

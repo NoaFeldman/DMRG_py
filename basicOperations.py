@@ -147,68 +147,6 @@ def getStartupState(n, d=2, mode='general'):
         return psi
 
 
-# n spins, last two are maximally entangled and the first n - 2 are in a product state with them.
-def getTestState_pair(n):
-    psi = [None] * n
-    leftTensor = np.ones((1, 2, 1), dtype=complex)
-    leftTensor *= 1 / np.sqrt(2)
-    for i in range(n-2):
-        psi[i] = tn.Node(leftTensor)
-    middleTensor = np.zeros((1, 2, 2), dtype=complex)
-    middleTensor[0, 0, 0] = 1
-    middleTensor[0, 1, 1] = 1
-    psi[n-2] = tn.Node(middleTensor)
-    rightTensor = np.zeros((2, 2, 1))
-    rightTensor[0, 0, 0] = 1 / np.sqrt(2)
-    rightTensor[1, 1, 0] = 1 / np.sqrt(2)
-    psi[n-1] = tn.Node(rightTensor)
-    norm = getOverlap(psi, psi)
-    psi[n - 1] = multNode(psi[n - 1], 1 / np.sqrt(norm))
-    return psi
-
-# both halves of the systems are in the maximally entangled state of a pair (0000000 + 111111)
-def getTestState_halvesAsPair(n):
-    psi = [None] * n
-    leftTensor = np.zeros((1, 2, 2), dtype=complex)
-    leftTensor[0, 0, 0] = 1
-    leftTensor[0, 1, 1] = 1
-    psi[0] = tn.Node(leftTensor)
-    midTensor = np.zeros((2, 2, 2), dtype=complex)
-    midTensor[0, 0, 0] = 1
-    midTensor[1, 1, 1] = 1
-    for i in range(1, n-1):
-        psi[i] = tn.Node(midTensor)
-    rightTensor = np.zeros((2, 2, 1), dtype=complex)
-    rightTensor[0, 0, 0] = 1
-    rightTensor[1, 1, 0] = 1
-    psi[n-1] = tn.Node(rightTensor)
-    norm = getOverlap(psi, psi)
-    psi[int(n / 2) - 1] = multNode(psi[int(n / 2) - 1], 1 / np.sqrt(norm))
-    return psi
-
-# Both halves of the state are maximally entangled
-# working site is middle site
-def getTestState_maximallyEntangledHalves(n):
-    psi = [None] * n
-    for i in range(int(n / 2)):
-        tensor = np.zeros((2**i, 2, 2**(i+1)), dtype=complex)
-        for j in range(2**i):
-            tensor[j, 0, 2 * j] = 1
-            tensor[j, 1, 2 * j + 1] = 1
-        psi[i] = tn.Node(tensor)
-    for i in range(int(n / 2), n):
-        tensor = np.zeros((2**(n - i), 2, 2**(n - 1 - i)), dtype=complex)
-        for j in range(2 ** (n - i)):
-            currBit = int((2 ** (n - i - 1) & j) > 0)
-            tensor[j, currBit, j % 2 ** (n - i - 1)] = 1
-        psi[i] = tn.Node(tensor)
-    norm = getOverlap(psi, psi)
-    psi[int(n/2)] = multNode(psi[int(n/2)], 1 / np.sqrt(norm))
-    for k in range(int(n/2), n - 1):
-        psi = shiftWorkingSite(psi, k, '>>')
-    return psi
-
-
 # Assuming psi1, psi2 have the same length, Hilbert space etc.
 # assuming psi2 is conjugated
 def getOverlap(psi1Orig: List[tn.Node], psi2Orig: List[tn.Node]):
@@ -528,3 +466,72 @@ def applySingleSiteOp(psi: List[tn.Node], op: tn.Node, i: int):
     psi[i][1] ^ op[1]
     psi[i] = permute(tn.contract_between(psi[i], op), [0, 2, 1])
 
+
+# n spins, last two are maximally entangled and the first n - 2 are in a product state with them.
+def getTestState_pair(n):
+    psi = [None] * n
+    leftTensor = np.ones((1, 2, 1), dtype=complex)
+    leftTensor *= 1 / np.sqrt(2)
+    for i in range(n-2):
+        psi[i] = tn.Node(leftTensor)
+    middleTensor = np.zeros((1, 2, 2), dtype=complex)
+    middleTensor[0, 0, 0] = 1
+    middleTensor[0, 1, 1] = 1
+    psi[n-2] = tn.Node(middleTensor)
+    rightTensor = np.zeros((2, 2, 1))
+    rightTensor[0, 0, 0] = 1 / np.sqrt(2)
+    rightTensor[1, 1, 0] = 1 / np.sqrt(2)
+    psi[n-1] = tn.Node(rightTensor)
+    norm = getOverlap(psi, psi)
+    psi[n - 1] = multNode(psi[n - 1], 1 / np.sqrt(norm))
+    return psi
+
+# both halves of the systems are in the maximally entangled state of a pair (0000000 + 111111)
+def getTestState_halvesAsPair(n):
+    psi = [None] * n
+    leftTensor = np.zeros((1, 2, 2), dtype=complex)
+    leftTensor[0, 0, 0] = 1
+    leftTensor[0, 1, 1] = 1
+    psi[0] = tn.Node(leftTensor)
+    midTensor = np.zeros((2, 2, 2), dtype=complex)
+    midTensor[0, 0, 0] = 1
+    midTensor[1, 1, 1] = 1
+    for i in range(1, n-1):
+        psi[i] = tn.Node(midTensor)
+    rightTensor = np.zeros((2, 2, 1), dtype=complex)
+    rightTensor[0, 0, 0] = 1
+    rightTensor[1, 1, 0] = 1
+    psi[n-1] = tn.Node(rightTensor)
+    norm = getOverlap(psi, psi)
+    psi[int(n / 2) - 1] = multNode(psi[int(n / 2) - 1], 1 / np.sqrt(norm))
+    for k in range(int(n / 2) - 1, n - 1):
+        psi = shiftWorkingSite(psi, k, '>>')
+    return psi
+
+# Both halves of the state are maximally entangled
+# working site is middle site
+def getTestState_maximallyEntangledHalves(n):
+    psi = [None] * n
+    for i in range(int(n / 2)):
+        tensor = np.zeros((2**i, 2, 2**(i+1)), dtype=complex)
+        for j in range(2**i):
+            tensor[j, 0, 2 * j] = 1
+            tensor[j, 1, 2 * j + 1] = 1
+        psi[i] = tn.Node(tensor)
+    for i in range(int(n / 2), n):
+        tensor = np.zeros((2**(n - i), 2, 2**(n - 1 - i)), dtype=complex)
+        for j in range(2 ** (n - i)):
+            currBit = int((2 ** (n - i - 1) & j) > 0)
+            tensor[j, currBit, j % 2 ** (n - i - 1)] = 1
+        psi[i] = tn.Node(tensor)
+    norm = getOverlap(psi, psi)
+    psi[int(n/2)] = multNode(psi[int(n/2)], 1 / np.sqrt(norm))
+    for k in range(int(n/2), n - 1):
+        psi = shiftWorkingSite(psi, k, '>>')
+    return psi
+
+def getTestState_unequalTwoStates(n, weight0):
+    psi = getTestState_halvesAsPair(n)
+    psi[n - 1].tensor[0, 0, 0] = weight0
+    psi[n - 1].tensor[1, 1, 0] = np.sqrt(1 - weight0**2)
+    return psi

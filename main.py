@@ -4,7 +4,8 @@ import basicOperations as bops
 import DMRG as dmrg
 import experimantalRandom as exr
 import pickle
-from matplotlib import pyplot as plt
+import os
+import sys
 
 
 sigmaX = np.zeros((2, 2))
@@ -54,55 +55,54 @@ def fullState(psi):
     ten = np.round(curr.tensor, decimals=5)
     return ten
 
-xx = False
-if xx:
+ASize = int(sys.argv[1])
+n = int(sys.argv[2])
+option = sys.argv[3]
+dir = sys.argv[4] + '/' + option + '_NA_' + str(ASize) + '_n_' + str(n)
+if option == 'asym':
+    weight = float(sys.argv[5])
+    dir = dir + '_' + str(weight)
+
+try:
+    os.mkdir(dir)
+except FileExistsError:
+    pass
+
+if option == 'h2':
+    psi = bops.getTestState_halvesAsPair(ASize * 2)
+elif option == 'maxEntangled':
+    psi = bops.getTestState_maximallyEntangledHalves(ASize * 2)
+elif option == 'pair':
+    psi = bops.getTestState_pair(ASize * 2 + 1)
+elif option == 'XX':
     N = 32
-    T = 1
-    C = 1/T
-    J = C
-    Omega = 1/T
-    delta = 1
     onsiteTermsXX, neighborTermsXX = getXXHamiltonianMatrices(1, 0)
     psi = bops.getStartupState(N)
-
     HXX = dmrg.getDMRGH(N, onsiteTermsXX, neighborTermsXX)
     HLs, HRs = dmrg.getHLRs(HXX, psi)
     psi, E0, truncErrs = dmrg.getGroundState(HXX, HLs, HRs, psi, None)
+elif option == 'asym':
+    psi = bops.getTestState_unequalTwoStates(ASize + 1, weight)
 
-b = 1
-import os
-
-for n in [1, 2, 4]:
-    for N in [2, 4, 6]:
-        ASize = int(N / 2)
-        dir = 'results/experimental/maxEntangled_' + str(ASize)
-        try:
-            os.mkdir(dir)
-        except FileExistsError:
-            pass
-
-        psi = bops.getTestState_maximallyEntangledHalves(N)
-        Sn = bops.getRenyiEntropy(psi, n, ASize)
-        l = np.log2(bops.getRenyiEntropy(psi, 2, ASize))
-        print('Sn = ' + str(Sn))
-        mySum = 0
-        M = 1000
-        steps = 100 * 2 ** ASize
-        results = np.zeros(steps + 1)
-        results[0] = Sn
-        # from datetime import datetime
-        for k in range(N - 1, ASize - 1, -1):
-            psi = bops.shiftWorkingSite(psi, k, '<<')
-            # start = datetime.now()
-            for m in range(M * steps):
-                vs = [[np.array([np.exp(1j * np.pi * np.random.randint(4)), np.exp(1j * np.pi * np.random.randint(4))]) \
-                           for alpha in range(ASize)] for copy in range(n)]
-                currEstimation = exr.singleMeasurement(psi, vs)
-                mySum += currEstimation
-                if m % M == M - 1:
-                    results[int(m / M) + 1] = mySum / M
-                    mySum = 0
-                    # end = datetime.now()
-        with open('dir + /experimental_N_' + str(N) + '_NA_' + str(ASize) +'_n_' + str(n), 'wb') as f:
-            pickle.dump(results, f)
+Sn = bops.getRenyiEntropy(psi, n, ASize)
+mySum = 0
+M = 1000
+steps = 100 * 2 ** (ASize * n)
+results = np.zeros(steps + 1)
+results[0] = Sn
+# from datetime import datetime
+for k in range(len(psi) - 1, ASize - 2, -1):
+    psi = bops.shiftWorkingSite(psi, k, '<<')
+    # start = datetime.now()
+    for m in range(M * steps):
+        vs = [[np.array([np.exp(1j * np.pi * np.random.randint(4)), np.exp(1j * np.pi * np.random.randint(4))]) \
+                   for alpha in range(ASize)] for copy in range(n)]
+        currEstimation = exr.singleMeasurement(psi, vs)
+        mySum += currEstimation
+        if m % M == M - 1:
+            results[int(m / M) + 1] = mySum / M
+            mySum = 0
+            # end = datetime.now()
+with open(dir + '/experimental_N_' + str(N) + '_NA_' + str(ASize) +'_n_' + str(n), 'wb') as f:
+    pickle.dump(results, f)
 
