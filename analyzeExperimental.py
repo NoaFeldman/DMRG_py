@@ -13,25 +13,25 @@ def linearRegression(Ns, Vs):
     plt.yscale('log')
     plt.xticks(Ns)
 
-Ns = [4, 6]
-Vs = [0, 0]
-dir = 'results/experimental'
-for i in range(len(Ns)):
-    res = np.array([])
-    NA = Ns[i]
-    for filename in os.listdir(dir):
-        if 'NA_' + str(NA) in filename:
-            with open(dir + '/' + filename, 'rb') as f:
-                curr = pickle.load(f)
-                res = np.concatenate([res, curr[1:]])
-    with open('results/experimental/organized_NA_' + str(NA), 'wb') as f:
-        pickle.dump(res, f)
-    con = np.zeros(len(res))
-    Vs[i] = np.average(res**2 - np.average(res)**2) / np.average(res)**2
-    print(curr[0] / np.average(res))
-linearRegression(Ns, Vs)
-plt.show()
-# for i in range(1, len(res)):
-#     con[i] = np.average(res[:i])
-# plt.plot(con)
-# plt.show()
+NA = 2
+option = 'h2'
+for n in range(1, 5):
+    dirname = 'results/experimental/' + option + '_NA_' + str(NA) + '_n_' + str(n)
+    organized = np.array([])
+    # for filename in os.listdir(dirname):
+    #     with open(dirname + '/' + filename, 'rb') as f:
+    #         curr = pickle.load(f)
+    #         organized = np.concatenate([organized, curr[1:]])
+    with open(dirname + '/experimental_NA_' + str(NA) + '_n_' + str(n) + '_t', 'rb') as f:
+        curr = pickle.load(f)
+    expected = curr[0]
+    organized = curr[1:]
+    print(expected)
+    print(np.average(organized))
+    print(curr[0] / np.average(organized))
+    print('---')
+    # with open(dirname + '_organized', 'wb') as f:
+    #     organized = np.concatenate([np.array([expected]), organized])
+    #     pickle.dump(organized, f)
+
+

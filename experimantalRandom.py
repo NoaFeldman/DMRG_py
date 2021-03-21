@@ -32,19 +32,19 @@ def singleHaarEstimation(psi: List[tn.Node], us: List[tn.Node], n: int, NA: int)
 
 # vs[i][j] = random vector for copy i, site j
 def singleMeasurement(psi: List[tn.Node], vs: List[List[np.array]]):
+    vs = np.round(vs, 10)
     n = len(vs)
     NA = len(vs[0])
     result = 1
     for copy in range(n):
         psiCopy = bops.copyState(psi)
         for alpha in range(NA - 1, -1, -1):
-            overlap = np.matmul(vs[copy][alpha], vs[np.mod(copy+1, n)][alpha])
-            toEstimate = np.kron(vs[copy][alpha],
-                                np.conj(np.reshape(vs[np.mod(copy + 1, n)][alpha], [2, 1])))
+            overlap = np.matmul(vs[copy][alpha], np.conj(vs[np.mod(copy+1, n)][alpha]))
+            toEstimate = np.outer(vs[copy][alpha], np.conj(vs[np.mod(copy+1, n)][alpha]))
             if np.abs(np.round(overlap, 8)) == 2:
-                measResult = makeMeasurement(psiCopy, alpha, toEstimate)
+                measResult = makeMeasurement(psiCopy, alpha, toEstimate / overlap)
                 if measResult:
-                    result *= overlap / 2 # Or  / 4???
+                    result *= overlap
                 else:
                     return 0
             else:
@@ -57,9 +57,9 @@ def singleMeasurement(psi: List[tn.Node], vs: List[List[np.array]]):
                 projector = np.outer(measureVecs[:, 0], np.conj(measureVecs[:, 0]))
                 measResult = makeMeasurement(psiCopy, alpha, projector)
                 if measResult:
-                    result *= measureVals[0] / 2
+                    result *= measureVals[0]
                 else:
-                    result *= measureVals[1] / 2
+                    result *= measureVals[1]
                 if not hermitianComponent:
                     result *= 1j
             psiCopy = bops.shiftWorkingSite(psiCopy, alpha, '<<')
