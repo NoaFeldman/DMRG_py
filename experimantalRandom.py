@@ -29,6 +29,33 @@ def singleHaarEstimation(psi: List[tn.Node], us: List[tn.Node], n: int, NA: int)
     return estimation
 
 
+def expectationValues(psi: List[tn.Node], vs: List[List[np.array]]):
+    vs = np.round(vs, 10)
+    n = len(vs)
+    NA = len(vs[0])
+    result = 1
+    # result = np.eye(2, dtype=complex)
+    for copy in range(n):
+        psiCopy = bops.copyState(psi)
+        for alpha in range(NA - 1, -1, -1):
+            overlap = np.matmul(vs[copy][alpha], np.conj(vs[np.mod(copy + 1, n)][alpha]))
+            toEstimate = np.outer(vs[copy][alpha], np.conj(vs[np.mod(copy + 1, n)][alpha]))
+            if np.abs(np.round(overlap, 8)) == 2:
+                toMeasure = toEstimate
+            else:
+                hermitianComponent = np.random.randint(2)
+                if hermitianComponent:
+                    toMeasure = (toEstimate + np.conj(np.transpose(toEstimate)))
+                else:
+                    toMeasure = (toEstimate - np.conj(np.transpose(toEstimate)))
+            psiCopy[alpha] = bops.permute(bops.multiContraction(psiCopy[alpha], tn.Node(toMeasure), \
+                                                   '1', '1'), [0, 2, 1])
+            psiCopy = bops.shiftWorkingSite(psiCopy, alpha, '<<')
+        result *= bops.getOverlap(psiCopy, psi)
+        # result = np.matmul(result, toMeasure)
+        bops.removeState(psiCopy)
+    return result
+
 
 # vs[i][j] = random vector for copy i, site j
 def singleMeasurement(psi: List[tn.Node], vs: List[List[np.array]]):
@@ -50,9 +77,9 @@ def singleMeasurement(psi: List[tn.Node], vs: List[List[np.array]]):
             else:
                 hermitianComponent = np.random.randint(2)
                 if hermitianComponent:
-                    toMeasure = (toEstimate + np.conj(np.transpose(toEstimate)))/2
+                    toMeasure = (toEstimate + np.conj(np.transpose(toEstimate)))
                 else:
-                    toMeasure = (toEstimate - np.conj(np.transpose(toEstimate)))/(2 * 1j)
+                    toMeasure = (toEstimate - np.conj(np.transpose(toEstimate)))/1j
                 measureVals, measureVecs = np.linalg.eigh(toMeasure)
                 projector = np.outer(measureVecs[:, 0], np.conj(measureVecs[:, 0]))
                 measResult = makeMeasurement(psiCopy, alpha, projector)
@@ -78,11 +105,11 @@ def makeMeasurement(psi, site, toProject):
     # Project to the measured vector
     if np.random.uniform(0, 1) < projectionProbability:
         psi[site] = bops.permute(bops.multiContraction(
-            psi[site], tn.Node(toProject), '1', '0', cleanOr1=True, cleanOr2=True), [0, 2, 1])
+            psi[site], tn.Node(toProject), '1', '1', cleanOr1=True, cleanOr2=True), [0, 2, 1])
         res = 1
     else:
         psi[site] = bops.permute(bops.multiContraction(
-            psi[site], tn.Node(np.eye(d) - toProject), '1', '0', cleanOr1=True, cleanOr2=True), [0, 2, 1])
+            psi[site], tn.Node(np.eye(d) - toProject), '1', '1', cleanOr1=True, cleanOr2=True), [0, 2, 1])
         res = 0
     return res
 

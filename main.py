@@ -56,25 +56,33 @@ def fullState(psi):
     return ten
 
 
-options = ['XX', 'h2']
+N = 16
+onsiteTermsXX, neighborTermsXX = getXXHamiltonianMatrices(1, 0)
+psi = bops.getStartupState(N)
+HXX = dmrg.getDMRGH(N, onsiteTermsXX, neighborTermsXX)
+HLs, HRs = dmrg.getHLRs(HXX, psi)
+psiXX, E0, truncErrs = dmrg.getGroundState(HXX, HLs, HRs, psi, None)
+
+
+options = ['XX', 'h2', 'maxEntangled']
 # ASize = int(sys.argv[1])
 # n = int(sys.argv[2])
 # option = sys.argv[3]
 for option in options:
-    for ASize in range(1, 3):
-        for n in range(1, 4):
-            dir = sys.argv[4] + '/' + option + '_NA_' + str(ASize) + '_n_' + str(n)
+    for ASize in [2, 4]:
+        for n in [2, 4]:
+            filename = sys.argv[4] + '/' + option + '_NA_' + str(ASize) + '_n_' + str(n)
             if option == 'asym':
-                weight = float(sys.argv[5])
+                weight = np.sqrt(1/3) # float(sys.argv[5])
                 dir = dir + '_' + str(weight)
-                rep = sys.argv[6]
+                rep = 't' # sys.argv[6]
             else:
                 rep = sys.argv[5]
 
-            try:
-                os.mkdir(dir)
-            except FileExistsError:
-                pass
+            # try:
+            #     os.mkdir(dir)
+            # except FileExistsError:
+            #     pass
 
             if option == 'h2':
                 psi = bops.getTestState_halvesAsPair(ASize * 2)
@@ -83,12 +91,7 @@ for option in options:
             elif option == 'pair':
                 psi = bops.getTestState_pair(ASize * 2 + 1)
             elif option == 'XX':
-                N = 32
-                onsiteTermsXX, neighborTermsXX = getXXHamiltonianMatrices(1, 0)
-                psi = bops.getStartupState(N)
-                HXX = dmrg.getDMRGH(N, onsiteTermsXX, neighborTermsXX)
-                HLs, HRs = dmrg.getHLRs(HXX, psi)
-                psi, E0, truncErrs = dmrg.getGroundState(HXX, HLs, HRs, psi, None)
+                psi = psiXX
             elif option == 'asym':
                 psi = bops.getTestState_unequalTwoStates(ASize + 1, weight)
 
@@ -108,12 +111,14 @@ for option in options:
                 vs = [[np.array(
                     [np.exp(1j * np.pi * np.random.randint(4)), np.exp(1j * np.pi * np.random.randint(4))]) \
                        for alpha in range(ASize)] for copy in range(n)]
+                # currEstimation = exr.expectationValues(psi, vs)
                 currEstimation = exr.singleMeasurement(psi, vs)
                 mySum += currEstimation
-                if m % M == M - 1:
+                if False: # m % M == M - 1:
                     results[int(m / M) + 1] = mySum / M
                     mySum = 0
                     # end = datetime.now()
-            with open(dir + '/experimental_NA_' + str(ASize) +'_n_' + str(n) + '_' + rep, 'wb') as f:
+            print(option, n, Sn, mySum / (steps * M), np.log2(Sn / (mySum / (steps * M))))
+            with open(filename + '_' + rep, 'wb') as f:
                 pickle.dump(results, f)
 
