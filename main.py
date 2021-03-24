@@ -56,69 +56,66 @@ def fullState(psi):
     return ten
 
 
-N = 16
-onsiteTermsXX, neighborTermsXX = getXXHamiltonianMatrices(1, 0)
-psi = bops.getStartupState(N)
-HXX = dmrg.getDMRGH(N, onsiteTermsXX, neighborTermsXX)
-HLs, HRs = dmrg.getHLRs(HXX, psi)
-psiXX, E0, truncErrs = dmrg.getGroundState(HXX, HLs, HRs, psi, None)
+# N = 32
+# onsiteTermsXX, neighborTermsXX = getXXHamiltonianMatrices(1, 0)
+# psi = bops.getStartupState(N)
+# HXX = dmrg.getDMRGH(N, onsiteTermsXX, neighborTermsXX)
+# HLs, HRs = dmrg.getHLRs(HXX, psi)
+# psiXX, E0, truncErrs = dmrg.getGroundState(HXX, HLs, HRs, psi, None)
+# with open('results/experimental/psiXX', 'wb') as f:
+#     pickle.dump(psiXX, f)
 
 
-options = ['XX', 'h2', 'maxEntangled']
-# ASize = int(sys.argv[1])
-# n = int(sys.argv[2])
-# option = sys.argv[3]
-for option in options:
-    for ASize in [2, 4]:
-        for n in [2, 4]:
-            filename = sys.argv[4] + '/' + option + '_NA_' + str(ASize) + '_n_' + str(n)
-            if option == 'asym':
-                weight = np.sqrt(1/3) # float(sys.argv[5])
-                dir = dir + '_' + str(weight)
-                rep = 't' # sys.argv[6]
-            else:
-                rep = sys.argv[5]
+ASize = int(sys.argv[1])
+n = int(sys.argv[2])
+option = sys.argv[3]
+dir = sys.argv[4] + '/' + option + '_NA_' + str(ASize) + '_n_' + str(n)
+if option == 'asym':
+    weight = np.sqrt(1/3) # float(sys.argv[5])
+    dir = dir + '_' + str(weight)
+    rep = sys.argv[6]
+else:
+    rep = sys.argv[5]
 
-            # try:
-            #     os.mkdir(dir)
-            # except FileExistsError:
-            #     pass
+try:
+    os.mkdir(dir)
+except FileExistsError:
+    pass
 
-            if option == 'h2':
-                psi = bops.getTestState_halvesAsPair(ASize * 2)
-            elif option == 'maxEntangled':
-                psi = bops.getTestState_maximallyEntangledHalves(ASize * 2)
-            elif option == 'pair':
-                psi = bops.getTestState_pair(ASize * 2 + 1)
-            elif option == 'XX':
-                psi = psiXX
-            elif option == 'asym':
-                psi = bops.getTestState_unequalTwoStates(ASize + 1, weight)
+if option == 'h2':
+    psi = bops.getTestState_halvesAsPair(ASize * 2)
+elif option == 'maxEntangled':
+    psi = bops.getTestState_maximallyEntangledHalves(ASize * 2)
+elif option == 'pair':
+    psi = bops.getTestState_pair(ASize * 2 + 1)
+elif option == 'XX':
+    with open(sys.argv[4] + '/psiXX', 'rb') as f:
+        psi = pickle.load(f)
+elif option == 'asym':
+    psi = bops.getTestState_unequalTwoStates(ASize + 1, weight)
 
-            Sn = bops.getRenyiEntropy(psi, n, ASize)
-            mySum = 0
-            M = 1000
-            steps = 5 * 2 ** (ASize * n)
-            results = np.zeros(steps + 1)
-            results[0] = Sn
-            # from datetime import datetime
-            for k in range(len(psi) - 1, ASize - 1, -1):
-                psi = bops.shiftWorkingSite(psi, k, '<<')
-                # start = datetime.now()
-            for m in range(M * steps):
-                # vs = [[np.array([np.exp(1j * np.pi * np.random.randint(4) / 2), np.exp(1j * np.pi * np.random.randint(4) / 2)]) \
-                #            for alpha in range(ASize)] for copy in range(n)]
-                vs = [[np.array(
-                    [np.exp(1j * np.pi * np.random.randint(4)), np.exp(1j * np.pi * np.random.randint(4))]) \
-                       for alpha in range(ASize)] for copy in range(n)]
-                # currEstimation = exr.expectationValues(psi, vs)
-                currEstimation = exr.singleMeasurement(psi, vs)
-                mySum += currEstimation
-                if False: # m % M == M - 1:
-                    results[int(m / M) + 1] = mySum / M
-                    mySum = 0
-                    # end = datetime.now()
-            print(option, n, Sn, mySum / (steps * M), np.log2(Sn / (mySum / (steps * M))))
-            with open(filename + '_' + rep, 'wb') as f:
-                pickle.dump(results, f)
+Sn = bops.getRenyiEntropy(psi, n, ASize)
+mySum = 0
+M = 1000
+steps = 2**(ASize * n)
+results = np.zeros(steps + 1, dtype=complex)
+results[0] = Sn
+for k in range(len(psi) - 1, ASize - 1, -1):
+    psi = bops.shiftWorkingSite(psi, k, '<<')
+for m in range(M * steps):
+    # vs = [[np.array([np.exp(1j * np.pi * np.random.randint(4) / 2), np.exp(1j * np.pi * np.random.randint(4) / 2)]) \
+    #            for alpha in range(ASize)] for copy in range(n)]
+    vs = [[np.array(
+        [np.exp(1j * np.pi * np.random.randint(4)), np.exp(1j * np.pi * np.random.randint(4))]) \
+           for alpha in range(ASize)] for copy in range(n)]
+    currEstimation = exr.singleMeasurement(psi, vs)
+    mySum += currEstimation
+    if m % M == M - 1:
+        results[int(m / M) + 1] = mySum / M
+        mySum = 0
+        # end = datetime.now()
+est = np.average(results[1:])
+print(option, n, Sn, est, np.log2(Sn / est))
+with open(dir + '/' + option + '_' + rep, 'wb') as f:
+    pickle.dump(results, f)
 
