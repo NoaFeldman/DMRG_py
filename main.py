@@ -113,7 +113,8 @@ for m in range(M * steps):
     if m % M == M - 1:
         results[int(m / M) + 1] = mySum / M
         mySum = 0
-        # end = datetime.now()
+        with open(dir + '/' + option + '_' + rep, 'wb') as f:
+            pickle.dump(results, f)
 est = np.average(results[1:])
 print(option, n, Sn, est, np.log2(Sn / est))
 with open(dir + '/' + option + '_' + rep, 'wb') as f:
