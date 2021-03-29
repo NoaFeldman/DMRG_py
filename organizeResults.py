@@ -4,14 +4,15 @@ import os
 import sys
 
 n = sys.argv[1]
-l = sys.argv[2]
+NA = sys.argv[2]
 option = sys.argv[3]
-homedir = sys.argv[4]
+indir = sys.argv[4]
+outdir = sys.argv[5]
 
-dir = homedir + option + n + l
-results = []
-for file in os.listdir(dir):
-    with open(dir + '/' + file, 'rb') as f:
-        results.append(pickle.load(f))
-with open(homedir + 'organized_' + option + '_' + n + '_' + l, 'wb') as f:
-    pickle.dump(results, f)
+organized = []
+for file in os.listdir(indir):
+    if '_m_' in file:
+        with open(indir + '/' + file, 'rb') as f:
+            organized.append(pickle.load(f))
+with open(outdir + '/' + 'organized_' + option + '_' + n + '_' + NA, 'wb') as f:
+    pickle.dump(organized, f)
