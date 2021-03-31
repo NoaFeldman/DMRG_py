@@ -97,7 +97,7 @@ elif option == 'asym':
 Sn = bops.getRenyiEntropy(psi, n, ASize)
 mySum = 0
 M = 1000
-steps = 2**(ASize * n)
+steps = int(2**(ASize * n) / 1)
 results = np.zeros(steps + 1, dtype=complex)
 results[0] = Sn
 for k in range(len(psi) - 1, ASize - 1, -1):
