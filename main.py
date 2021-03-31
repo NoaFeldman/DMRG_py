@@ -73,9 +73,7 @@ dir = sys.argv[4] + '/' + option + '_NA_' + str(ASize) + '_n_' + str(n)
 if option == 'asym':
     weight = np.sqrt(1/3) # float(sys.argv[5])
     dir = dir + '_' + str(weight)
-    rep = sys.argv[6]
-else:
-    rep = sys.argv[5]
+rep = sys.argv[5]
 
 try:
     os.mkdir(dir)
@@ -116,7 +114,7 @@ for m in range(M * steps):
         with open(dir + '/' + option + '_' + rep, 'wb') as f:
             pickle.dump(results, f)
 est = np.average(results[1:])
-print(option, n, Sn, est, np.log2(Sn / est))
+print(option, ASize, n, Sn, est, np.log2(Sn / est))
 with open(dir + '/' + option + '_' + rep, 'wb') as f:
     pickle.dump(results, f)
 
