@@ -6,6 +6,7 @@ import experimantalRandom as exr
 import pickle
 import os
 import sys
+import shutil
 
 
 sigmaX = np.zeros((2, 2))
@@ -110,11 +111,21 @@ for m in range(M * steps):
     mySum += currEstimation
     if m % M == M - 1:
         results[int(m / M) + 1] = mySum / M
+        with open(dir + '/' + option + '_' + rep + '_m_' + str(m), 'wb') as f:
+            pickle.dump(mySum / M, f)
         mySum = 0
-        with open(dir + '/' + option + '_' + rep, 'wb') as f:
-            pickle.dump(results, f)
-est = np.average(results[1:])
-print(option, ASize, n, Sn, est, np.log2(Sn / est))
-with open(dir + '/' + option + '_' + rep, 'wb') as f:
-    pickle.dump(results, f)
 
+organized = []
+for file in os.listdir(dir):
+    if '_m_' in file:
+        with open(dir + '/' + file, 'rb') as f:
+            organized.append(pickle.load(f))
+with open(sys.argv[4] + '/' + 'organized_' + option + '_' + str(n) + '_' + str(ASize) + '_' + rep, 'wb') as f:
+    pickle.dump(organized, f)
+convergence = np.zeros(len(organized) - 1)
+convergence[0] = organized[0]
+for i in range(1, len(convergence)):
+    convergence[i] = (convergence[i - 1] * i + organized[i]) / (i + 1)
+with open(sys.argv[4] + '/' + 'converged_' + option + '_' + str(n) + '_' + str(ASize) + '_' + rep, 'wb') as f:
+    pickle.dump(convergence, f)
+shutil.rmtree(dir)
