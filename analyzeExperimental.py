@@ -1,4 +1,4 @@
-import pickle
+import socket, pickle
 from matplotlib import pyplot as plt
 import numpy as np
 import os
@@ -13,25 +13,22 @@ def linearRegression(Ns, Vs):
     plt.yscale('log')
     plt.xticks(Ns)
 
-NA = 2
-option = 'h2'
-for n in range(1, 5):
-    dirname = 'results/experimental/' + option + '_NA_' + str(NA) + '_n_' + str(n)
-    organized = np.array([])
-    # for filename in os.listdir(dirname):
-    #     with open(dirname + '/' + filename, 'rb') as f:
-    #         curr = pickle.load(f)
-    #         organized = np.concatenate([organized, curr[1:]])
-    with open(dirname + '/experimental_NA_' + str(NA) + '_n_' + str(n) + '_t', 'rb') as f:
+NA = 6
+option = 'XX'
+n = 4
+dirname = 'results/experimental/' + option + '_NA_' + str(NA) + '_n_' + str(n)
+organized = np.array([])
+for filename in os.listdir(dirname):
+    with open(dirname + '/' + filename, 'rb') as f:
         curr = pickle.load(f)
+        curr = curr[curr!=0]
+        organized = np.concatenate([organized, curr[1:]])
     expected = curr[0]
-    organized = curr[1:]
-    print(expected)
-    print(np.average(organized))
-    print(curr[0] / np.average(organized))
-    print('---')
-    # with open(dirname + '_organized', 'wb') as f:
-    #     organized = np.concatenate([np.array([expected]), organized])
-    #     pickle.dump(organized, f)
+print(expected)
+print(np.average(organized))
+print(curr[0] / np.average(organized))
+with open(dirname + '_organized', 'wb') as f:
+    organized = np.concatenate([np.array([expected]), organized])
+    pickle.dump(organized, f)
 
 

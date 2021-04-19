@@ -56,14 +56,16 @@ def fullState(psi):
     return ten
 
 
-# N = 32
-# onsiteTermsXX, neighborTermsXX = getXXHamiltonianMatrices(1, 0)
-# psi = bops.getStartupState(N)
-# HXX = dmrg.getDMRGH(N, onsiteTermsXX, neighborTermsXX)
-# HLs, HRs = dmrg.getHLRs(HXX, psi)
-# psiXX, E0, truncErrs = dmrg.getGroundState(HXX, HLs, HRs, psi, None)
-# with open('results/experimental/psiXX', 'wb') as f:
-#     pickle.dump(psiXX, f)
+
+for NA in [16]:
+    N = NA * 2
+    onsiteTermsXX, neighborTermsXX = getXXHamiltonianMatrices(1, 0)
+    psi = bops.getStartupState(N)
+    HXX = dmrg.getDMRGH(N, onsiteTermsXX, neighborTermsXX)
+    HLs, HRs = dmrg.getHLRs(HXX, psi)
+    psiXX, E0, truncErrs = dmrg.getGroundState(HXX, HLs, HRs, psi, None)
+    with open('results/experimental/psiXX_' + str(N), 'wb') as f:
+        pickle.dump(psiXX, f)
 
 
 ASize = int(sys.argv[1])
@@ -95,7 +97,7 @@ elif option == 'asym':
 Sn = bops.getRenyiEntropy(psi, n, ASize)
 mySum = 0
 M = 1000
-steps = int(2**(ASize * n) / 1)
+steps = int(2**(ASize * n) / 1) * 10
 results = np.zeros(steps + 1, dtype=complex)
 results[0] = Sn
 for k in range(len(psi) - 1, ASize - 1, -1):
