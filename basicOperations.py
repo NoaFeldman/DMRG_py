@@ -285,7 +285,7 @@ def permute(node: tn.Node, permutation) -> tn.Node:
 
 
 def svdTruncation(node: tn.Node, leftEdges: List[int], rightEdges: List[int],
-                  dir: str, maxBondDim=128, leftName='U', rightName='V',  edgeName='default', normalize=False, maxTrunc=8):
+                  dir: str, maxBondDim=64, leftName='U', rightName='V',  edgeName='default', normalize=False, maxTrunc=8):
     # np.seterr(all='raise')
     maxBondDim = getAppropriateMaxBondDim(maxBondDim,
                                           [node.edges[e] for e in leftEdges], [node.edges[e] for e in rightEdges])
@@ -295,11 +295,21 @@ def svdTruncation(node: tn.Node, leftEdges: List[int], rightEdges: List[int],
     else:
         leftEdgeName = None
         rightEdgeName = edgeName
-
-    [U, S, V, truncErr] = tn.split_node_full_svd(node, [node.edges[e] for e in leftEdges],
+    try:
+        [U, S, V, truncErr] = tn.split_node_full_svd(node, [node.edges[e] for e in leftEdges],
                                                  [node.edges[e] for e in rightEdges], max_singular_values=maxBondDim,
                                        left_name=leftName, right_name=rightName,
                                        left_edge_name=leftEdgeName, right_edge_name=rightEdgeName)
+
+    except np.linalg.LinAlgError:
+        # TODO
+        b = 1
+        node.tensor = np.round(node.tensor, 16)
+        [U, S, V, truncErr] = tn.split_node_full_svd(node, [node.edges[e] for e in leftEdges],
+                                                     [node.edges[e] for e in rightEdges],
+                                                     max_singular_values=maxBondDim,
+                                                     left_name=leftName, right_name=rightName,
+                                                     left_edge_name=leftEdgeName, right_edge_name=rightEdgeName)
     s = S
     S = tn.Node(np.diag(S.tensor))
     tn.remove_node(s)

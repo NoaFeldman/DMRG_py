@@ -23,7 +23,7 @@ def linearRegression(Ns, Vs, color, label):
 rootdir = './results'
 def findResults(n, N, opt='p'):
     regex = re.compile('organized_' + opt + str(n) + '_N_' + str(N) + '_*')
-    regex2 = re.compile('organized_' + opt + '_' + str(n) + '_' + str(int(N/4)) + '*')
+    regex2 = re.compile('organized_' + opt + '_' + str(n) + '_' + str(N) + '*')
     for root, dirs, files in os.walk(rootdir):
         for file in files:
             if regex.match(file) or regex2.match(file):
@@ -35,17 +35,14 @@ Ns = [4, 8, 12, 16, 20, 24]
 colors = ['blueviolet', 'blue', 'deepskyblue', 'green', 'yellowgreen', 'orange']
 vcolors = ['blueviolet', 'deepskyblue', 'green', 'orange']
 legends = []
-option = 'complex'
+option = 'MPS'
 Vs = np.zeros(len(Ns))
 ns = [2, 3, 4]
-varianceNormalizations = [1.23, 1.57, 1.94]
 p2s = []
 for i in range(len(Ns)):
     p2s.append(toricCode.getPurity(i + 1))
 dops = True
 if dops:
-    # fig, axs = plt.subplots(4, 1, sharex='all')
-    # fig.subplots_adjust(hspace=0)
     for n in ns:
         precisions = []
         for i in range(len(Ns)):

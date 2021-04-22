@@ -66,29 +66,25 @@ def singleMeasurement(psi: List[tn.Node], vs: List[List[np.array]]):
     for copy in range(n):
         psiCopy = bops.copyState(psi)
         for alpha in range(NA - 1, -1, -1):
-            overlap = np.matmul(vs[copy][alpha], np.conj(vs[np.mod(copy+1, n)][alpha]))
             toEstimate = np.outer(vs[copy][alpha], np.conj(vs[np.mod(copy+1, n)][alpha]))
-            if np.abs(np.round(overlap, 8)) == 2:
-                measResult = makeMeasurement(psiCopy, alpha, toEstimate / overlap)
-                if measResult:
-                    result *= overlap
-                else:
-                    return 0
+            hermitianComponent = np.random.randint(2)
+            if hermitianComponent:
+                toMeasure = (toEstimate + np.conj(np.transpose(toEstimate)))
             else:
-                hermitianComponent = np.random.randint(2)
-                if hermitianComponent:
-                    toMeasure = (toEstimate + np.conj(np.transpose(toEstimate)))
-                else:
-                    toMeasure = (toEstimate - np.conj(np.transpose(toEstimate)))/1j
-                measureVals, measureVecs = np.linalg.eigh(toMeasure)
-                projector = np.outer(measureVecs[:, 0], np.conj(measureVecs[:, 0]))
-                measResult = makeMeasurement(psiCopy, alpha, projector)
-                if measResult:
-                    result *= measureVals[0]
-                else:
-                    result *= measureVals[1]
-                if not hermitianComponent:
-                    result *= 1j
+                toMeasure = (toEstimate - np.conj(np.transpose(toEstimate))) / 1j
+            measureVals, measureVecs = np.linalg.eigh(toMeasure)
+            projector = np.outer(measureVecs[:, 0], np.conj(measureVecs[:, 0]))
+            measResult = makeMeasurement(psiCopy, alpha, projector)
+            if measResult:
+                if np.abs(measureVals[0]) < 1e-8:
+                    return 0
+                result *= measureVals[0]
+            else:
+                if np.abs(measureVals[1]) < 1e-8:
+                    return 0
+                result *= measureVals[1]
+            if not hermitianComponent:
+                result *= 1j
             psiCopy = bops.shiftWorkingSite(psiCopy, alpha, '<<')
         bops.removeState(psiCopy)
     return result

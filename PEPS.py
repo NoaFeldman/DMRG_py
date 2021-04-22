@@ -1,14 +1,12 @@
 from typing import Optional
-
 from scipy import linalg
 import numpy as np
-
 import basicOperations as bops
 import randomMeasurements as rm
 import sys
 import tensornetwork as tn
 
-chi = 32
+chi = 16
 
 
 def bmpsRowStep(gammaL, lambdaMid, gammaR, lambdaSide, envOp):

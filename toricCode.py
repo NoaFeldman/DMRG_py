@@ -4,6 +4,8 @@ import tensornetwork as tn
 import PEPS as peps
 import randomUs as ru
 import pickle
+import pepsExpect as pe
+
 
 d = 2
 
@@ -38,96 +40,85 @@ baseTensor[1, 0, 0, 1] = 1 / 2**0.25
 baseTensor[0, 1, 1, 1] = 1 / 2**0.25
 baseTensor[1, 1, 1, 0] = 1 / 2**0.25
 base = tn.Node(baseTensor)
-ABTensor = bops.multiContraction(base, base, '3', '0').tensor[0]
-A = tn.Node(ABTensor)
-B = tn.Node(np.transpose(ABTensor, [1, 2, 3, 0, 4]))
 
+gs = [k * 0.1 for k in range(1, 11)]
+gs = np.round(gs, 1)
+for g in gs:
+    ABTensor = bops.multiContraction(base, base, '3', '0').tensor[0]
+    ABTensor[0, 0, 0, 0, 0] *= (1 + g)
+    ABTensor[1, 1, 1, 1, 0] *= (1 + g)
+    A = tn.Node(ABTensor)
+    B = tn.Node(np.transpose(ABTensor, [1, 2, 3, 0, 4]))
 
-def toEnvOperator(op):
-    result = bops.unifyLegs(bops.unifyLegs(bops.unifyLegs(bops.unifyLegs(
-        bops.permute(op, [0, 4, 1, 5, 2, 6, 3, 7]), 6, 7), 4, 5), 2, 3), 0, 1)
-    tn.remove_node(op)
-    return result
+    AEnv = pe.toEnvOperator(bops.multiContraction(A, A, '4', '4*'))
+    BEnv = pe.toEnvOperator(bops.multiContraction(B, B, '4', '4*'))
+    chi = 32
+    nonPhysicalLegs = 1
+    GammaTensor = np.ones((nonPhysicalLegs, d**2, nonPhysicalLegs), dtype=complex)
+    GammaC = tn.Node(GammaTensor, name='GammaC', backend=None)
+    LambdaC = tn.Node(np.eye(nonPhysicalLegs) / np.sqrt(nonPhysicalLegs), backend=None)
+    GammaD = tn.Node(GammaTensor, name='GammaD', backend=None)
+    LambdaD = tn.Node(np.eye(nonPhysicalLegs) / np.sqrt(nonPhysicalLegs), backend=None)
 
+    steps = 50
 
-AEnv = toEnvOperator(bops.multiContraction(A, A, '4', '4*'))
-BEnv = toEnvOperator(bops.multiContraction(B, B, '4', '4*'))
-chi = 32
-nonPhysicalLegs = 1
-GammaTensor = np.ones((nonPhysicalLegs, d**2, nonPhysicalLegs), dtype=complex)
-GammaC = tn.Node(GammaTensor, name='GammaC', backend=None)
-LambdaC = tn.Node(np.eye(nonPhysicalLegs) / np.sqrt(nonPhysicalLegs), backend=None)
-GammaD = tn.Node(GammaTensor, name='GammaD', backend=None)
-LambdaD = tn.Node(np.eye(nonPhysicalLegs) / np.sqrt(nonPhysicalLegs), backend=None)
+    envOpAB = bops.permute(bops.multiContraction(AEnv, BEnv, '1', '3'), [0, 3, 2, 4, 1, 5])
+    envOpBA = bops.permute(bops.multiContraction(BEnv, AEnv, '1', '3'), [0, 3, 2, 4, 1, 5])
+    curr = bops.permute(bops.multiContraction(envOpBA, envOpAB, '45', '01'), [0, 2, 4, 6, 1, 3, 5, 7])
 
+    for i in range(2):
+        [C, D, te] = bops.svdTruncation(curr, [0, 1, 2, 3], [4, 5, 6, 7], '>>', normalize=True)
+        curr = bops.permute(bops.multiContraction(D, C, '23', '12'), [1, 3, 0, 5, 2, 4])
+        curr = bops.permute(bops.multiContraction(curr, envOpAB, '45', '01'), [0, 2, 4, 6, 1, 3, 5, 7])
 
-steps = 50
+    currAB = curr
 
-envOpAB = bops.permute(bops.multiContraction(AEnv, BEnv, '1', '3'), [0, 3, 2, 4, 1, 5])
-envOpBA = bops.permute(bops.multiContraction(BEnv, AEnv, '1', '3'), [0, 3, 2, 4, 1, 5])
-b = 1
-#
-# curr = bops.permute(bops.multiContraction(envOpBA, envOpAB, '45', '01'), [0, 2, 4, 6, 1, 3, 5, 7])
-#
-# for i in range(50):
-#     [C, D, te] = bops.svdTruncation(curr, [0, 1, 2, 3], [4, 5, 6, 7], '>>', normalize=True)
-#     curr = bops.permute(bops.multiContraction(D, C, '23', '12'), [1, 3, 0, 5, 2, 4])
-#     curr = bops.permute(bops.multiContraction(curr, envOpAB, '45', '01'), [0, 2, 4, 6, 1, 3, 5, 7])
-#
-# currAB = curr
-# [C, D, te] = bops.svdTruncation(curr, [0, 1, 2, 3], [4, 5, 6, 7], '>>', normalize=True)
-# currBA = bops.permute(bops.multiContraction(D, C, '23', '12'), [1, 3, 0, 5, 2, 4])
-# currBA = bops.permute(bops.multiContraction(currBA, envOpAB, '45', '01'), [0, 2, 4, 6, 1, 3, 5, 7])
-#
-# opAB = np.reshape(np.transpose(currAB.tensor, [1, 2, 5, 6, 3, 7, 0, 4]), [16, 16, 16, 16])
-#
-# openA = tn.Node(np.transpose(np.reshape(np.kron(A.tensor, A.tensor), [d**2, d**2, d**2, d**2, d, d]), [4, 0, 1, 2, 3, 5]))
-# openB = tn.Node(np.transpose(np.reshape(np.kron(B.tensor, B.tensor), [d**2, d**2, d**2, d**2, d, d]), [4, 0, 1, 2, 3, 5]))
-#
-# rowTensor = np.zeros((11, 4, 4, 11), dtype=complex)
-# rowTensor[0, 0, 0, 0] = 1
-# rowTensor[1, 0, 0, 2] = 1
-# rowTensor[2, 0, 0, 3] = 1
-# rowTensor[3, 0, 3, 4] = 1
-# rowTensor[4, 3, 0, 1] = 1
-# rowTensor[5, 0, 0, 6] = 1
-# rowTensor[6, 0, 3, 7] = 1
-# rowTensor[7, 3, 0, 8] = 1
-# rowTensor[8, 0, 0, 5] = 1
-# row = tn.Node(rowTensor)
-#
-# upRow = bops.unifyLegs(bops.unifyLegs(bops.unifyLegs(bops.unifyLegs(
-#     bops.permute(bops.multiContraction(row, tn.Node(currAB.tensor), '12', '04'), [0, 2, 3, 4, 7, 1, 5, 6]), 5, 6), 5, 6), 0, 1), 0, 1)
-# [C, D, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>', normalize=True)
-# upRow = bops.multiContraction(D, C, '2', '0')
-# [cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>', normalize=True)
-#
-# GammaC, LambdaC, GammaD, LambdaD = peps.getBMPSRowOps(cUp, tn.Node(np.ones(cUp[2].dimension)), dUp,
-#                                             tn.Node(np.ones(dUp[2].dimension)), AEnv, BEnv, 50)
-# cUp = bops.multiContraction(GammaC, LambdaC, '2', '0', isDiag2=True)
-# dUp = bops.multiContraction(GammaD, LambdaD, '2', '0', isDiag2=True)
-# upRow = bops.multiContraction(cUp, dUp, '2', '0')
-# downRow = bops.copyState([upRow])[0]
-# rightRow = peps.bmpsCols(upRow, downRow, AEnv, BEnv, 50, option='right', X=upRow)
-# leftRow = peps.bmpsCols(upRow, downRow, AEnv, BEnv, 50, option='left', X=upRow)
-#
-# circle = bops.multiContraction(bops.multiContraction(bops.multiContraction(upRow, rightRow, '3', '0'), upRow, '5', '0'), leftRow, '70', '03')
-# ABNet = bops.permute(
-#         bops.multiContraction(bops.multiContraction(openB, openA, '2', '4'), bops.multiContraction(openA, openB, '2', '4'), '28', '16',
-#                               cleanOr1=True, cleanOr2=True),
-#         [1, 5, 6, 13, 14, 9, 10, 2, 0, 4, 8, 12, 3, 7, 11, 15])
-# dm = bops.multiContraction(circle, ABNet, '01234567', '01234567')
-# ordered = np.round(np.reshape(dm.tensor, [16, 16]), 14)
-# ordered /= np.trace(ordered)
-# b = 1
-#
-# with open('toricBoundaries', 'wb') as f:
-#     pickle.dump([upRow, downRow, leftRow, rightRow, openA, openB], f)
-#
+    openA = tn.Node(np.transpose(np.reshape(np.kron(A.tensor, A.tensor), [d**2, d**2, d**2, d**2, d, d]), [4, 0, 1, 2, 3, 5]))
+    openB = tn.Node(np.transpose(np.reshape(np.kron(B.tensor, B.tensor), [d**2, d**2, d**2, d**2, d, d]), [4, 0, 1, 2, 3, 5]))
+
+    rowTensor = np.zeros((11, 4, 4, 11), dtype=complex)
+    rowTensor[0, 0, 0, 0] = 1
+    rowTensor[1, 0, 0, 2] = 1
+    rowTensor[2, 0, 0, 3] = 1
+    rowTensor[3, 0, 3, 4] = 1
+    rowTensor[4, 3, 0, 1] = 1
+    rowTensor[5, 0, 0, 6] = 1
+    rowTensor[6, 0, 3, 7] = 1
+    rowTensor[7, 3, 0, 8] = 1
+    rowTensor[8, 0, 0, 5] = 1
+    row = tn.Node(rowTensor)
+
+    upRow = bops.unifyLegs(bops.unifyLegs(bops.unifyLegs(bops.unifyLegs(
+        bops.permute(bops.multiContraction(row, tn.Node(currAB.tensor), '12', '04'), [0, 2, 3, 4, 7, 1, 5, 6]), 5, 6), 5, 6), 0, 1), 0, 1)
+    [C, D, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>', normalize=True)
+    upRow = bops.multiContraction(D, C, '2', '0')
+    [cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>', normalize=True)
+    GammaC, LambdaC, GammaD, LambdaD = peps.getBMPSRowOps(cUp, tn.Node(np.ones(cUp[2].dimension)), dUp,
+                                                tn.Node(np.ones(dUp[2].dimension)), AEnv, BEnv, 50)
+    cUp = bops.multiContraction(GammaC, LambdaC, '2', '0', isDiag2=True)
+    dUp = bops.multiContraction(GammaD, LambdaD, '2', '0', isDiag2=True)
+    upRow = bops.multiContraction(cUp, dUp, '2', '0')
+    downRow = bops.copyState([upRow])[0]
+    rightRow = peps.bmpsCols(upRow, downRow, AEnv, BEnv, steps, option='right', X=upRow)
+    leftRow = peps.bmpsCols(upRow, downRow, AEnv, BEnv, steps, option='left', X=upRow)
+    print('111')
+    # circle = bops.multiContraction(bops.multiContraction(bops.multiContraction(upRow, rightRow, '3', '0'), upRow, '5', '0'), leftRow, '70', '03')
+    # ABNet = bops.permute(
+    #         bops.multiContraction(bops.multiContraction(openB, openA, '2', '4'), bops.multiContraction(openA, openB, '2', '4'), '28', '16',
+    #                               cleanOr1=True, cleanOr2=True),
+    #         [1, 5, 6, 13, 14, 9, 10, 2, 0, 4, 8, 12, 3, 7, 11, 15])
+    # dm = bops.multiContraction(circle, ABNet, '01234567', '01234567')
+    # ordered = np.round(np.reshape(dm.tensor, [16, 16]), 14)
+    # ordered /= np.trace(ordered)
+    # b = 1
+
+    with open('results/toricBoundaries_g_' + str(g), 'wb') as f:
+        pickle.dump([upRow, downRow, leftRow, rightRow, openA, openB, A, B], f)
+    print(g)
 
 
 def applyOpTosite(site, op):
-    return toEnvOperator(bops.multiContraction(bops.multiContraction(site, op, '4', '1'), site, '4', '4*'))
+    return pe.toEnvOperator(bops.multiContraction(bops.multiContraction(site, op, '4', '1'), site, '4', '4*'))
 
 
 def applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, l, ops):
@@ -151,6 +142,12 @@ def applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, l, ops)
 
     return bops.multiContraction(left, rightRow, '0123', '3210').tensor * 1
 
+
+def applyVecsToSite(site: tn.Node, vecUp: np.array, vecDown: np.array):
+    up = bops.multiContraction(site, tn.Node(vecUp), '4', '0', cleanOr2=True)
+    down = bops.multiContraction(site, tn.Node(vecDown), '4*', '0*', cleanOr2=True)
+    dm = tn.Node(np.kron(up.tensor, down.tensor))
+    return dm
 
 
 def horizontalPair(leftSite, rightSite, cleanLeft=True, cleanRight=True):
@@ -191,3 +188,5 @@ def getPurity(l):
     N = 2**l
     purity = N * res
     return purity
+
+# print(getPurity(2))

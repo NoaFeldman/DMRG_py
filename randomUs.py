@@ -82,6 +82,8 @@ def getP(d, s, us, estimateFunc, arguments):
 hadamard = np.ones((2, 2)) * np.sqrt(0.5)
 hadamard[1, 1] *= -1
 def getNonUnitaryRandomOps(d, randOption, vecsNum=2, direction=0):
+    if randOption == 'identity':
+        return [tn.Node(np.eye(d, dtype=complex)) for i in range(vecsNum)]
     vecs = [np.zeros((d), dtype=complex) for i in range(vecsNum)]
     for i in range(vecsNum):
         if randOption == 'complex' or randOption == 'experimental':
@@ -90,11 +92,6 @@ def getNonUnitaryRandomOps(d, randOption, vecsNum=2, direction=0):
             vecs[i] = np.random.randint(2, size=d) * 2 - 1
         elif randOption == 'gaussian':
             vecs[i] = np.random.randn(2)
-        elif randOption == 'unitCircle':
-            vecs[i] = np.exp(1j * 2 * np.pi * np.random.uniform(size=d))
-        elif randOption == 'complexTwist':
-            vecs[i] = (np.random.randint(2, size=d) * 2 - 1 + 1j * (np.random.randint(2, size=d) * 2 - 1)) / np.sqrt(2)
-            vecs[i] = np.matmul(hadamard, vecs[i])
     res = [tn.Node(np.zeros((d, d), dtype=complex)) for i in range(vecsNum)]
     if direction == 0:
         for i in range(vecsNum):
@@ -119,10 +116,11 @@ def getNonUnitaryRandomOps(d, randOption, vecsNum=2, direction=0):
     return res
 
 
-def renyiEntropy(n, N, M, randOption, estimateFunc, arguments, filename, d=2):
+def renyiEntropy(n, w, h, M, randOption, estimateFunc, arguments, filename, d=2):
     start = datetime.now()
     avg = 0
-    for m in range(M):
+    N = w * h
+    for m in range(M * 2**N):
         ops = [getNonUnitaryRandomOps(d, randOption, vecsNum=n) for i in range(N)]
         estimation = 1
         for i in range(n):
@@ -131,7 +129,7 @@ def renyiEntropy(n, N, M, randOption, estimateFunc, arguments, filename, d=2):
         mc = m % M
         avg = (avg * mc + estimation) / (mc + 1)
         if m % M == M - 1:
-            with open(filename + '_n_' + str(n) + '_N_' + str(N) + '_' + randOption + '_M_' + str(M) + '_m_' + str(m), 'wb') as f:
+            with open(filename + '_n_' + str(n) + '_w_' + str(w) + '_h_' + str(h) + '_' + randOption + '_M_' + str(M) + '_m_' + str(m), 'wb') as f:
                 pickle.dump(avg, f)
                 print(avg)
                 avg = 0
@@ -184,6 +182,27 @@ def localNonUnitaries(N, M, randOption, estimateFunc, arguments, filename, d=2):
     with open(filename + '_time_N_' + str(N) + '_M_' + str(M), 'wb') as f:
         pickle.dump((end - start).total_seconds(), f)
 
+
+def exactPurity(l, xRight, xLeft, upRow, downRow, A, filename, d=2):
+    curr = xLeft
+    pair = bops.permute(bops.multiContraction(A, A, '2', '4'), [1, 6, 3, 7, 2, 8, 0, 5, 4, 9])
+    for i in range(int(l / 2)):
+        curr = bops.multiContraction(bops.multiContraction(curr, upRow, '0', '0'), downRow, '1', '0')
+        curr = bops.multiContraction(curr, pair, [0, i * 4 + 1, i * 4 + 2, i * 4 + 4, i * 4 + 5], '20145')
+        curr = bops.permute(curr, [i * 4, i * 4 + 2, i * 4 + 1] + list(range(i * 2)) + [i * 4 + 3, i * 4 + 4] +
+                            list(range(i * 2, i * 4)) + [i * 4 + 5, i * 4 + 6])
+    dm = bops.multiContraction(curr, xRight, '012', '012')
+    ordered = np.reshape(dm.tensor, [d**l, d**l]) / np.trace(np.reshape(dm.tensor, [d**l, d**l]))
+    purity = sum(np.linalg.eigvalsh(np.matmul(ordered, ordered)))
+    with open(filename + '_l_' + str(l), 'wb') as f:
+        pickle.dump(purity, f)
+    return purity
+
+
+def getPairUnitary(d):
+    return tn.Node(np.reshape(haar_measure(d ** 2), [d] * 4))
+
+##### Deprecated below #####
 
 def localUnitariesFull(N, M, estimateFunc, arguments, filename, d=2):
     start = datetime.now()
@@ -243,22 +262,3 @@ def localUnitariesMC(N, M, estimateFunc, arguments, filename, chi, d=2):
     with open(filename + '_time_N_' + str(N) + '_M_' + str(M) + '_chi_' + str(chi), 'wb') as f:
         pickle.dump((end - start).total_seconds(), f)
 
-
-def exactPurity(l, xRight, xLeft, upRow, downRow, A, filename, d=2):
-    curr = xLeft
-    pair = bops.permute(bops.multiContraction(A, A, '2', '4'), [1, 6, 3, 7, 2, 8, 0, 5, 4, 9])
-    for i in range(int(l / 2)):
-        curr = bops.multiContraction(bops.multiContraction(curr, upRow, '0', '0'), downRow, '1', '0')
-        curr = bops.multiContraction(curr, pair, [0, i * 4 + 1, i * 4 + 2, i * 4 + 4, i * 4 + 5], '20145')
-        curr = bops.permute(curr, [i * 4, i * 4 + 2, i * 4 + 1] + list(range(i * 2)) + [i * 4 + 3, i * 4 + 4] +
-                            list(range(i * 2, i * 4)) + [i * 4 + 5, i * 4 + 6])
-    dm = bops.multiContraction(curr, xRight, '012', '012')
-    ordered = np.reshape(dm.tensor, [d**l, d**l]) / np.trace(np.reshape(dm.tensor, [d**l, d**l]))
-    purity = sum(np.linalg.eigvalsh(np.matmul(ordered, ordered)))
-    with open(filename + '_l_' + str(l), 'wb') as f:
-        pickle.dump(purity, f)
-    return purity
-
-
-def getPairUnitary(d):
-    return tn.Node(np.reshape(haar_measure(d ** 2), [d] * 4))
