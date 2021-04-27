@@ -42,9 +42,7 @@ with open(homedir + '/psiXX_' + str(NA * 2), 'rb') as f:
 Sn = bops.getRenyiEntropy(psi, n, NA)
 mySum = 0
 M = 1000
-steps = int(2**(NA * n) / 10)
-results = np.zeros(steps + 1, dtype=complex)
-results[0] = Sn
+steps = int(2**(NA * n) / 1)
 for k in range(len(psi) - 1, NA - 1, -1):
     psi = bops.shiftWorkingSite(psi, k, '<<')
 for m in range(M * steps):

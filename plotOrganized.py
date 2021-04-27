@@ -17,7 +17,7 @@ def linearRegression(Ns, Vs, color, label):
     plt.xticks(Ns)
 
 option = 'MPS'
-n = 2
+n = 4
 Ns = [4, 8, 12, 16, 20, 24]
 Vs = np.zeros(len(Ns))
 for i in range(len(Ns)):
@@ -25,10 +25,15 @@ for i in range(len(Ns)):
     with open('results/expected_' + option + '_NA_' + str(N) + '_n_' + str(n), 'rb') as f:
         expected = pickle.load(f)
     with open('results/organized_' + option + '_' + str(n) + '_' + str(N), 'rb') as f:
-        organized = pickle.load(f)
-    with open('results/conserved_' + option + '_' + str(n) + '_' + str(N), 'rb') as f:
-        converged = pickle.load(f)
-    Vs[i] = np.sum(np.abs(organized - expected)**2) / expected**2
+        organized = np.array(pickle.load(f))
+    # Vs[i] = np.sum(np.abs(organized - expected)**2) / expected**2
+    # plt.plot((converged - expected) / 2**N)
+    # plt.plot(organized)
+    avg = np.average(organized)
+    var = np.sum(np.abs(organized - avg) ** 2) / (len(organized) - 1)
+    Vs[i] = var / expected**2
+    print(N, avg, var, var / len(organized))
+plt.show()
 linearRegression(Ns[1:], Vs[1:], 'blueviolet', r'$p_2$')
 plt.scatter(Ns, Vs)
 plt.yscale('log')

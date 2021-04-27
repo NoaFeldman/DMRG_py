@@ -126,6 +126,8 @@ def renyiEntropy(n, w, h, M, randOption, estimateFunc, arguments, filename, d=2)
         for i in range(n):
             expectation = wrapper(estimateFunc, arguments + [[op[i] for op in ops]])
             estimation *= expectation
+            if estimation > 40:
+                b = 1
         avg += estimation
         if m % M == M - 1:
             with open(filename + '_n_' + str(n) + '_w_' + str(w) + '_h_' + str(h) + '_' + randOption + '_M_' + str(M) + '_m_' + str(m), 'wb') as f:

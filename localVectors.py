@@ -25,6 +25,10 @@ if option == 'ising':
 elif option == 'toric':
     boundaryFile = 'toricBoundaries'
     newdir = dirname + 'toric_n_' + str(n) + '_w_' + str(w) + '_h_' + str(h)
+elif option == 'toricG':
+    g = np.round(float(sys.argv[8]), 1)
+    boundaryFile = 'toricBoundaries_g_' + str(g)
+    newdir = dirname + 'toric_g_' + str(g) + '_n_' + str(n) + '_w_' + str(w) + '_h_' + str(h)
 
 with open(dirname + boundaryFile, 'rb') as f:
     [upRow, downRow, leftRow, rightRow, openA, openB, A, B] = pickle.load(f)

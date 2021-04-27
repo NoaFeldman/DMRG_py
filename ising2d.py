@@ -30,7 +30,7 @@ def getBMPS(hs):
         AEnv = toEnvOperator(bops.multiContraction(A, A, '4', '4*'))
         BEnv = toEnvOperator(bops.multiContraction(B, B, '4', '4*'))
 
-        steps = 30
+        steps = 100
 
         envOpAB = bops.permute(bops.multiContraction(AEnv, BEnv, '1', '3'), [0, 3, 2, 4, 1, 5])
         envOpBA = bops.permute(bops.multiContraction(BEnv, AEnv, '1', '3'), [0, 3, 2, 4, 1, 5])
@@ -98,5 +98,5 @@ def getM(orderedDM: np.array, NA=4):
         M += orderedDM[i, i] * bin(i).count("1") - orderedDM[i, i] * (NA - bin(i).count("1"))
     return M
 
-hs = [k * 0.1 for k in range(51)]
+hs = [2.9]
 getBMPS(hs)
