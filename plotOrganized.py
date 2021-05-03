@@ -17,7 +17,7 @@ def linearRegression(Ns, Vs, color, label):
     plt.xticks(Ns)
 
 option = 'MPS'
-n = 4
+n = 2
 Ns = [4, 8, 12, 16, 20, 24]
 Vs = np.zeros(len(Ns))
 for i in range(len(Ns)):
@@ -30,11 +30,11 @@ for i in range(len(Ns)):
     # plt.plot((converged - expected) / 2**N)
     # plt.plot(organized)
     avg = np.average(organized)
-    var = np.sum(np.abs(organized - avg) ** 2) / (len(organized) - 1)
+    var = np.sum(np.abs(organized - expected) ** 2) / (len(organized) - 1)
     Vs[i] = var / expected**2
-    print(N, avg, var, var / len(organized))
+    print(N, len(organized), avg/expected, expected, np.sqrt(var / (len(organized))))
 plt.show()
-linearRegression(Ns[1:], Vs[1:], 'blueviolet', r'$p_2$')
+linearRegression(Ns, Vs, 'blueviolet', r'$p_2$')
 plt.scatter(Ns, Vs)
 plt.yscale('log')
 plt.show()
