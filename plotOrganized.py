@@ -18,13 +18,13 @@ def linearRegression(Ns, Vs, color, label):
 
 option = 'MPS'
 n = 2
-Ns = [4, 8, 12, 16, 20, 24]
+Ns = [4]
 Vs = np.zeros(len(Ns))
 for i in range(len(Ns)):
     N = Ns[i]
     with open('results/expected_' + option + '_NA_' + str(N) + '_n_' + str(n), 'rb') as f:
         expected = pickle.load(f)
-    with open('results/organized_' + option + '_' + str(n) + '_' + str(N), 'rb') as f:
+    with open('results/mpsRightTest/organized_' + option + '_' + str(n) + '_' + str(N), 'rb') as f:
         organized = np.array(pickle.load(f))
     # Vs[i] = np.sum(np.abs(organized - expected)**2) / expected**2
     # plt.plot((converged - expected) / 2**N)

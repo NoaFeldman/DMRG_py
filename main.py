@@ -57,16 +57,23 @@ def fullState(psi):
     return ten
 
 
+for NB in [2, 4, 8]:
+    for NA in [24]:
+        N = NA + NB
+        onsiteTermsXX, neighborTermsXX = getXXHamiltonianMatrices(1, 0)
+        psi = bops.getStartupState(N)
+        HXX = dmrg.getDMRGH(N, onsiteTermsXX, neighborTermsXX)
+        HLs, HRs = dmrg.getHLRs(HXX, psi)
+        psiXX, E0, truncErrs = dmrg.getGroundState(HXX, HLs, HRs, psi, None)
+        with open('results/psiXX_NA' + str(NA) + '_NB_' + str(NB), 'wb') as f:
+            pickle.dump(psiXX, f)
+        n = 3
+        print(bops.getRenyiEntropy(psiXX, n, NA))
+        print(bops.getRenyiEntropy(psiXX, n, NB))
+        print(bops.getOverlap(psiXX,psiXX))
+        with open('results/expected_MPS_NA_' + str(NA) + '_NB_' + str(NB) + '_n_' + str(n), 'wb') as f:
+            pickle.dump(bops.getRenyiEntropy(psiXX, n, NA), f)
 
-for NA in [16]:
-    N = NA * 2
-    onsiteTermsXX, neighborTermsXX = getXXHamiltonianMatrices(1, 0)
-    psi = bops.getStartupState(N)
-    HXX = dmrg.getDMRGH(N, onsiteTermsXX, neighborTermsXX)
-    HLs, HRs = dmrg.getHLRs(HXX, psi)
-    psiXX, E0, truncErrs = dmrg.getGroundState(HXX, HLs, HRs, psi, None)
-    with open('results/experimental/psiXX_' + str(N), 'wb') as f:
-        pickle.dump(psiXX, f)
 
 
 ASize = int(sys.argv[1])
