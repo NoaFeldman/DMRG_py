@@ -71,6 +71,6 @@ for m in range(M * steps):
     mySum += currEstimation
     if m % M == M - 1:
         print(m)
-        with open(mydir + '/NA_' + str(NA) + '_n_' + str(n) + '_' + rep + '_m_' + str(m), 'wb') as f:
+        with open(mydir + '/NA_' + str(NA) + '_n_' + str(n) + '_' + rep + '_' + half + '_m_' + str(m), 'wb') as f:
             pickle.dump(mySum / M, f)
         mySum = 0
