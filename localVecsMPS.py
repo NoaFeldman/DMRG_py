@@ -43,7 +43,7 @@ NB = int(sys.argv[3])
 half = sys.argv[4]
 rep = sys.argv[5]
 homedir = sys.argv[6]
-mydir = homedir + '/XX_MPS_NA_' + str(NA) + '_NB_' + str(NB) + '_n_' + str(n)
+mydir = homedir + '/XX_MPS_NA_' + str(NA) + '_NB_' + str(NB) + '_n_' + str(n) + '_' + half
 try:
     os.mkdir(mydir)
 except FileExistsError:
@@ -52,7 +52,7 @@ except FileExistsError:
 with open(homedir + '/psiXX_NA_' + str(NA) + '_NB_' + str(NB), 'rb') as f:
     psi = pickle.load(f)
 Sn = bops.getRenyiEntropy(psi, n, NA)
-with open(homedir + '/expected_MPS_NA_' + str(NA) + '_NB_' + str(NB), 'wb') as f:
+with open(homedir + '/expected_MPS_NA_' + str(NA) + '_NB_' + str(NB) + '_n_' + str(n) + '_' + half, 'wb') as f:
     pickle.dump(Sn, f)
 mySum = 0
 M = 1000

@@ -16,25 +16,26 @@ def linearRegression(Ns, Vs, color, label):
     plt.yscale('log')
     plt.xticks(Ns)
 
-option = 'MPS'
-n = 2
-Ns = [4]
+option = 'MPS_NB_4_left'
+n = 3
+Ns = [24]
 Vs = np.zeros(len(Ns))
 for i in range(len(Ns)):
     N = Ns[i]
     with open('results/expected_' + option + '_NA_' + str(N) + '_n_' + str(n), 'rb') as f:
         expected = pickle.load(f)
-    with open('results/mpsRightTest/organized_' + option + '_' + str(n) + '_' + str(N), 'rb') as f:
+    with open('results/organized_' + option + '_' + str(n) + '_' + str(N), 'rb') as f:
         organized = np.array(pickle.load(f))
+    with open('results/conserved_' + option + '_' + str(n) + '_' + str(N), 'rb') as f:
+        converged = np.array(pickle.load(f))
     # Vs[i] = np.sum(np.abs(organized - expected)**2) / expected**2
-    # plt.plot((converged - expected) / 2**N)
-    # plt.plot(organized)
+    plt.scatter(np.array(range(len(organized))), organized)
     avg = np.average(organized)
     var = np.sum(np.abs(organized - expected) ** 2) / (len(organized) - 1)
     Vs[i] = var / expected**2
-    print(N, len(organized), avg/expected, expected, np.sqrt(var / (len(organized))))
+    print(N, len(organized), avg/expected, expected, avg, np.sqrt(var / (len(organized))))
 plt.show()
-linearRegression(Ns, Vs, 'blueviolet', r'$p_2$')
-plt.scatter(Ns, Vs)
-plt.yscale('log')
-plt.show()
+# linearRegression(Ns, Vs, 'blueviolet', r'$p_2$')
+# plt.scatter(Ns, Vs)
+# plt.yscale('log')
+# plt.show()
