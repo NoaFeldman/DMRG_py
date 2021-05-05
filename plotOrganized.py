@@ -16,7 +16,7 @@ def linearRegression(Ns, Vs, color, label):
     plt.yscale('log')
     plt.xticks(Ns)
 
-option = 'MPS_NB_4_left'
+option = 'MPS_NB_2_right'
 n = 3
 Ns = [24]
 Vs = np.zeros(len(Ns))

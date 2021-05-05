@@ -60,13 +60,15 @@ if half == 'left':
     steps = int(2 ** (NA * n))
     for k in range(len(psi) - 1, NA - 1, -1):
         psi = bops.shiftWorkingSite(psi, k, '<<')
-    vs = [[np.array([np.exp(1j * np.pi * np.random.randint(4) / 2), np.exp(1j * np.pi * np.random.randint(4) / 2)]) \
-           for alpha in range(NA)] for copy in range(n)]
 else:
     steps = int(2 ** (NB * n))
-    vs = [[np.array([np.exp(1j * np.pi * np.random.randint(4) / 2), np.exp(1j * np.pi * np.random.randint(4) / 2)]) \
-           for alpha in range(NB)] for copy in range(n)]
 for m in range(M * steps):
+    if half == 'left':
+        vs = [[np.array([np.exp(1j * np.pi * np.random.randint(4) / 2), np.exp(1j * np.pi * np.random.randint(4) / 2)]) \
+               for alpha in range(NA)] for copy in range(n)]
+    else:
+        vs = [[np.array([np.exp(1j * np.pi * np.random.randint(4) / 2), np.exp(1j * np.pi * np.random.randint(4) / 2)]) \
+               for alpha in range(NB)] for copy in range(n)]
     currEstimation = localVecsEstimate(psi, vs, half=half)
     mySum += currEstimation
     if m % M == M - 1:
