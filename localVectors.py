@@ -37,6 +37,7 @@ excludeIndices = []
 if len(sys.argv) > argvl:
     for i in range(argvl, len(sys.argv)):
         excludeIndices.append(int(sys.argv[i]))
+    newdir = newdir + '_excluded_' + str(excludeIndices[0])
 
 with open(dirname + boundaryFile, 'rb') as f:
     [upRow, downRow, leftRow, rightRow, openA, openB, A, B] = pickle.load(f)
