@@ -70,7 +70,6 @@ def getBMPS(hs, steps):
         downRow = bops.copyState([upRow])[0]
         rightRow = peps.bmpsCols(upRow, downRow, AEnv, BEnv, steps, option='right', X=upRow)
         leftRow = peps.bmpsCols(upRow, downRow, AEnv, BEnv, steps, option='left', X=upRow)
-        print('75')
         circle = bops.multiContraction(
             bops.multiContraction(bops.multiContraction(upRow, rightRow, '3', '0'), upRow, '5', '0'), leftRow, '70',
             '03')
@@ -96,6 +95,35 @@ def getM(orderedDM: np.array, NA=4):
         M += orderedDM[i, i] * bin(i).count("1") - orderedDM[i, i] * (NA - bin(i).count("1"))
     return M
 
-hs = [2.7]
-for steps in [30, 50, 70, 80, 90, 100]:
-    getBMPS(hs, steps)
+hs = [0.1 * k for k in range(51)]
+Ms = [0] * len(hs)
+p2s = [0] * len(hs)
+for i in range(len(hs)):
+    h = np.round(hs[i], 1)
+    if h == int(h):
+        h = int(h)
+    with open('ising/bmpsResults_' + str(h), 'rb') as f:
+        [upRow, downRow, leftRow, rightRow, openA, openB, A, B] = pickle.load(f)
+    circle = bops.multiContraction(
+        bops.multiContraction(bops.multiContraction(upRow, rightRow, '3', '0'), upRow, '5', '0'), leftRow, '70',
+        '03')
+
+    openA = tn.Node(
+        np.transpose(np.reshape(np.kron(A.tensor, np.conj(A.tensor)), [d ** 2, d ** 2, d ** 2, d ** 2, d, d]),
+                     [4, 0, 1, 2, 3, 5]))
+    openB = tn.Node(
+        np.transpose(np.reshape(np.kron(B.tensor, np.conj(B.tensor)), [d ** 2, d ** 2, d ** 2, d ** 2, d, d]),
+                     [4, 0, 1, 2, 3, 5]))
+    ABNet = bops.permute(
+        bops.multiContraction(bops.multiContraction(openB, openA, '2', '4'),
+                              bops.multiContraction(openA, openB, '2', '4'), '28', '16',
+                              cleanOr1=True, cleanOr2=True),
+        [1, 5, 6, 13, 14, 9, 10, 2, 0, 4, 8, 12, 3, 7, 11, 15])
+    dm = bops.multiContraction(circle, ABNet, '01234567', '01234567')
+    ordered = np.round(np.reshape(dm.tensor, [16, 16]), 14)
+    ordered /= np.trace(ordered)
+    Ms[i] = getM(ordered)
+    p2s[i] = np.trace(np.matmul(ordered, ordered))
+plt.scatter(hs, np.abs(Ms))
+plt.plot(hs, p2s)
+plt.show()
