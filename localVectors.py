@@ -22,13 +22,21 @@ if option == 'ising':
         magField = int(magField)
     boundaryFile = 'bmpsResults_' + str(magField)
     newdir = dirname + 'ising_hf_' + str(magField) + '_n_' + str(n) + '_w_' + str(w) + '_h_' + str(h)
+    argvl = 9
 elif option == 'toric':
     boundaryFile = 'toricBoundaries'
     newdir = dirname + 'toric_n_' + str(n) + '_w_' + str(w) + '_h_' + str(h)
+    argvl = 8
 elif option == 'toricG':
     g = np.round(float(sys.argv[8]), 1)
     boundaryFile = 'toricBoundaries_g_' + str(g)
     newdir = dirname + 'toric_g_' + str(g) + '_n_' + str(n) + '_w_' + str(w) + '_h_' + str(h)
+    argvl = 9
+
+excludeIndices = []
+if len(sys.argv) > argvl:
+    for i in range(argvl, len(sys.argv)):
+        excludeIndices.append(int(sys.argv[i]))
 
 with open(dirname + boundaryFile, 'rb') as f:
     [upRow, downRow, leftRow, rightRow, openA, openB, A, B] = pickle.load(f)
@@ -46,6 +54,6 @@ except FileExistsError:
     pass
 option = 'complex'
 ru.renyiEntropy(n, w, h, M, option, pe.applyLocalOperators, [cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h],
-                      newdir + '/rep_' + str(rep))
+                      newdir + '/rep_' + str(rep), excludeIndices=excludeIndices)
 # ru.renyiNegativity(n, l * 4, M, option, toricCode.applyLocalOperators, [cUp, dUp, cDown, dDown, leftRow, rightRow, toricCode.A, toricCode.B, l],
 #                    newdir + '/')

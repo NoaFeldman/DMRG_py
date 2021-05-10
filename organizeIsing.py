@@ -5,6 +5,7 @@ from matplotlib import pyplot as plt
 hfs = [0.4 * k for k in range(6)] + [2.6 + 0.1 * k for k in range(10)] + [3.8 + 0.4 * k for k in range(4)]
 
 avgs = []
+yerrs = []
 for hf in hfs:
     hf = np.round(hf, 1)
     if hf == int(hf):
@@ -20,8 +21,9 @@ for hf in hfs:
     avg = np.average(org)
     var = np.sum(np.abs(org - avg) ** 2) / (len(org) - 1)
     print(hf, avg, np.sqrt(var / len(org)), np.round(np.sqrt(var / len(org)) / avg, 3))
+    yerrs.append(np.sqrt(var / len(org)))
     avgs.append(avg)
-plt.plot(hfs, avgs)
+plt.errorbar(hfs, avgs, yerr=yerrs)
 plt.xlabel(r'$h$')
 plt.ylabel(r'$p_2$')
 plt.scatter(hfs, avgs)

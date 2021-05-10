@@ -116,12 +116,14 @@ def getNonUnitaryRandomOps(d, randOption, vecsNum=2, direction=0):
     return res
 
 
-def renyiEntropy(n, w, h, M, randOption, estimateFunc, arguments, filename, d=2):
+def renyiEntropy(n, w, h, M, randOption, estimateFunc, arguments, filename, d=2, excludeIndices=[]):
     start = datetime.now()
     avg = 0
     N = w * h
     for m in range(M * 2**N):
         ops = [getNonUnitaryRandomOps(d, randOption, vecsNum=n) for i in range(N)]
+        for ind in excludeIndices:
+            ops[ind] = [tn.Node(np.eye(d, dtype=complex)) for i in range(n)]
         estimation = 1
         for i in range(n):
             expectation = wrapper(estimateFunc, arguments + [[op[i] for op in ops]])
