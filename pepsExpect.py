@@ -22,7 +22,7 @@ def applyOpTosite(site, op):
 def applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h, ops):
     if w == 2:
         left = leftRow
-        for i in range(h):
+        for i in range(int(h/2)):
             left = bops.multiContraction(left, cUp, '3', '0', cleanOr1=True)
             leftUp = applyOpTosite(B, ops[i * 4])
             leftDown = applyOpTosite(A, ops[i * 4 + 1])
