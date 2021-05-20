@@ -39,11 +39,13 @@ def localVecsEstimate(psi: List[tn.Node], vs: List[List[np.array]], half='left')
 
 n = int(sys.argv[1])
 NA = int(sys.argv[2])
-NB = int(sys.argv[3])
-half = sys.argv[4]
-rep = sys.argv[5]
-homedir = sys.argv[6]
-mydir = homedir + '/XX_MPS_NA_' + str(NA) + '_NB_' + str(NB) + '_n_' + str(n) + '_' + half
+NB = NA
+# NB = int(sys.argv[3])
+half = 'left'
+# half = sys.argv[4]
+rep = sys.argv[3]
+homedir = sys.argv[4]
+mydir = homedir + '/XX_MPS_NA_' + str(NA) + '_NB_' + str(NB) + '_n_' + str(n)
 try:
     os.mkdir(mydir)
 except FileExistsError:
