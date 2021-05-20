@@ -30,8 +30,9 @@ elif option == 'toric':
 elif option == 'toricG':
     g = np.round(float(sys.argv[8]), 1)
     boundaryFile = 'toricBoundaries_g_' + str(g)
-    newdir = dirname + 'toric_g_' + str(g) + '_n_' + str(n) + '_w_' + str(w) + '_h_' + str(h)
-    argvl = 9
+    topoOpt = sys.argv[9]
+    newdir = dirname + 'toric_g_' + str(g) + '_n_' + str(n) + '_w_' + str(w) + '_h_' + str(h) + '_' + topoOpt
+    argvl = 10
 
 excludeIndices = []
 if len(sys.argv) > argvl:

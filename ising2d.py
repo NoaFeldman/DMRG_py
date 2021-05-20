@@ -127,3 +127,4 @@ for i in range(len(hs)):
 plt.scatter(hs, np.abs(Ms))
 plt.plot(hs, p2s)
 plt.show()
+
