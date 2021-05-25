@@ -73,6 +73,23 @@ def getP(d, s, us, estimateFunc, arguments):
     return result
 
 
+def getUTheta(theta, d):
+    if d == 2:
+        u = np.zeros((d, d))
+        u[0, 0] = np.cos(theta)
+        u[0, 1] = np.sin(theta)
+        u[1, 0] = -np.sin(theta)
+        u[1, 1] = np.cos(theta)
+        return u
+
+def getUPhi(phi, d):
+    if d == 2:
+        u = np.zeros((d, d), dtype=complex)
+        u[0, 0] = np.cos(phi)
+        u[0, 1] = 1j * np.sin(phi)
+        u[1, 0] = -np.sin(phi)
+        u[1, 1] = 1j * np.sin(phi)
+        return u
 
 # Based on my analysis in unitary_alternatives.
 # We eventually calculate for each site M_i \rho_ij G_j M_k \rho_kl G_l
@@ -81,17 +98,21 @@ def getP(d, s, us, estimateFunc, arguments):
 # This function returns mat_ij = M_iG_j
 hadamard = np.ones((2, 2)) * np.sqrt(0.5)
 hadamard[1, 1] *= -1
-def getNonUnitaryRandomOps(d, randOption, vecsNum=2, direction=0):
+def getNonUnitaryRandomOps(d, randOption, theta=None, phi=None, vecsNum=2, direction=0):
     if randOption == 'identity':
         return [tn.Node(np.eye(d, dtype=complex)) for i in range(vecsNum)]
     vecs = [np.zeros((d), dtype=complex) for i in range(vecsNum)]
     for i in range(vecsNum):
-        if randOption == 'complex' or randOption == 'experimental':
+        if randOption == 'complex':
             vecs[i] = (np.random.randint(2, size=d) * 2 - 1 + 1j * (np.random.randint(2, size=d) * 2 - 1)) / np.sqrt(2)
         elif randOption == 'real':
             vecs[i] = np.random.randint(2, size=d) * 2 - 1
         elif randOption == 'gaussian':
             vecs[i] = np.random.randn(2)
+    if not theta == None and phi == None:
+        u = np.matmul(getUTheta(theta, d), getUPhi(phi, d))
+        for i in range(len(vecs)):
+            vecs[i] = np.matmul(u, vecs[i])
     res = [tn.Node(np.zeros((d, d), dtype=complex)) for i in range(vecsNum)]
     if direction == 0:
         for i in range(vecsNum):
@@ -107,21 +128,15 @@ def getNonUnitaryRandomOps(d, randOption, vecsNum=2, direction=0):
             else:
                 prev = i - 1
             res[i].tensor = np.kron(vecs[prev], np.conj(np.reshape(vecs[i], [2, 1])))
-    if randOption == 'experimental':
-        for i in range(vecsNum):
-            if np.random.randint(2) == 0:
-                res[i].tensor = (res[i].tensor + np.conj(np.transpose(res[i].tensor))) / 2
-            else:
-                res[i].tensor = (res[i].tensor - np.conj(np.transpose(res[i].tensor))) / 2
     return res
 
 
-def renyiEntropy(n, w, h, M, randOption, estimateFunc, arguments, filename, d=2, excludeIndices=[]):
+def renyiEntropy(n, w, h, M, randOption, theta, phi, estimateFunc, arguments, filename, d=2, excludeIndices=[]):
     start = datetime.now()
     avg = 0
     N = w * h
-    for m in range(M * 2**N):
-        ops = [getNonUnitaryRandomOps(d, randOption, vecsNum=n) for i in range(N)]
+    for m in range(M * 2**N * 10):
+        ops = [getNonUnitaryRandomOps(d, randOption, theta, phi, vecsNum=n) for i in range(N)]
         for ind in excludeIndices:
             ops[ind] = [tn.Node(np.eye(d, dtype=complex)) for i in range(n)]
         estimation = 1
@@ -133,7 +148,7 @@ def renyiEntropy(n, w, h, M, randOption, estimateFunc, arguments, filename, d=2,
         avg += estimation
         if m % M == M - 1:
             with open(filename + '_n_' + str(n) + '_w_' + str(w) + '_h_' + str(h) + '_' + randOption + '_M_' + str(M) + '_m_' + str(m), 'wb') as f:
-                pickle.dump(avg, f)
+                pickle.dump(avg / M, f)
                 avg = 0
         for op in ops:
             bops.removeState(op)

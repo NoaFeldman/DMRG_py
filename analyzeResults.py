@@ -2,7 +2,7 @@ import pickle
 from matplotlib import pyplot as plt
 import numpy as np
 import os
-import toricCode
+# import toricCode
 import re
 
 d = 2
@@ -53,22 +53,22 @@ if dops:
             organized = []
             with open('./results/' + str(findResults(n, N)), 'rb') as f:
                 organized = np.array(pickle.load(f))
-            organized = organized[organized < 50]
+            # organized = organized[organized < 50]
             p2 = p2s[i]
             expected = p2**(n-1)
-            # numOfExperiments = 10
-            # numOfMixes = 20
-            # precision = np.zeros(int(len(organized) / numOfExperiments))
-            # for mix in range(numOfMixes):
-            #     np.random.shuffle(organized)
-            #     for j in range(1, int(len(organized)/numOfExperiments)):
-            #         currPrecision= np.average([np.abs(np.average( \
-            #             organized[c * int(len(organized)/numOfExperiments):c * int(len(organized)/numOfExperiments)+j]) - expected) \
-            #                                    for c in range(numOfExperiments)])
-            #         if mix == 0:
-            #             precision[j] = currPrecision
-            #         else:
-            #             precision[j] = (precision[j] * mix + currPrecision) / (mix + 1)
+            numOfExperiments = 10
+            numOfMixes = 20
+            precision = np.zeros(int(len(organized) / numOfExperiments))
+            for mix in range(numOfMixes):
+                np.random.shuffle(organized)
+                for j in range(1, int(len(organized)/numOfExperiments)):
+                    currPrecision= np.average([np.abs(np.average( \
+                        organized[c * int(len(organized)/numOfExperiments):c * int(len(organized)/numOfExperiments)+j]) - expected) \
+                                               for c in range(numOfExperiments)])
+                    if mix == 0:
+                        precision[j] = currPrecision
+                    else:
+                        precision[j] = (precision[j] * mix + currPrecision) / (mix + 1)
             with open('results/precision_N_' + str(N) + '_n_' + str(n), 'rb') as f:
                 precision = pickle.load(f)
             # axs[n-2].plot([(m * M + M - 1) / (varianceNormalizations[n - 2] ** N) for m in range(len(precision) - 1)],

@@ -41,8 +41,8 @@ baseTensor[0, 1, 1, 1] = 1 / 2**0.25
 baseTensor[1, 1, 1, 0] = 1 / 2**0.25
 base = tn.Node(baseTensor)
 
-gs = [k * 0.1 for k in range(1, 11)]
-gs = np.round(gs, 1)
+gs = [0.0, 0.15, 0.25, 0.35, 0.45, 0.55]
+gs = np.round(gs, 2)
 for g in gs:
     ABTensor = bops.multiContraction(base, base, '3', '0').tensor[0]
     ABTensor[0, 0, 0, 0, 0] *= (1 + g)
@@ -121,28 +121,6 @@ def applyOpTosite(site, op):
     return pe.toEnvOperator(bops.multiContraction(bops.multiContraction(site, op, '4', '1'), site, '4', '4*'))
 
 
-def applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, l, ops):
-    left = leftRow
-    for i in range(l):
-        left = bops.multiContraction(left, cUp, '3', '0', cleanOr1=True)
-        leftUp = applyOpTosite(B, ops[i * 4])
-        leftDown = applyOpTosite(A, ops[i * 4 + 1])
-        left = bops.multiContraction(left, leftUp, '23', '30', cleanOr1=True)
-        left = bops.multiContraction(left, leftDown, '14', '30', cleanOr1=True)
-        left = bops.permute(bops.multiContraction(left, dDown, '04', '21', cleanOr1=True), [3, 2, 1, 0])
-
-        left = bops.multiContraction(left, dUp, '3', '0', cleanOr1=True)
-        rightUp = applyOpTosite(A, ops[i * 4 + 2])
-        rightDown = applyOpTosite(B, ops[i * 4 + 3])
-        left = bops.multiContraction(left, rightUp, '23', '30', cleanOr1=True)
-        left = bops.multiContraction(left, rightDown, '14', '30', cleanOr1=True)
-        left = bops.permute(bops.multiContraction(left, cDown, '04', '21', cleanOr1=True), [3, 2, 1, 0])
-
-        bops.removeState([leftUp, leftDown, rightDown, rightUp])
-
-    return bops.multiContraction(left, rightRow, '0123', '3210').tensor * 1
-
-
 def applyVecsToSite(site: tn.Node, vecUp: np.array, vecDown: np.array):
     up = bops.multiContraction(site, tn.Node(vecUp), '4', '0', cleanOr2=True)
     down = bops.multiContraction(site, tn.Node(vecDown), '4*', '0*', cleanOr2=True)
@@ -167,7 +145,7 @@ def verticalPair(topSite, bottomSite, cleanTop=True, cleanBottom=True):
 
 def getPurity(l):
     with open('results/toricBoundaries', 'rb') as f:
-        [upRow, downRow, leftRow, rightRow, openA, openB] = pickle.load(f)
+        [upRow, downRow, leftRow, rightRow, openA, openB, A, B] = pickle.load(f)
 
     upRow = tn.Node(upRow)
     downRow = tn.Node(downRow)

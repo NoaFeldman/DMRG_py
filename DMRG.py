@@ -362,7 +362,7 @@ def getHLRs(H, psi, workingSite=None):
     return HLs, HRs
 
 
-def getGroundState(H, HLs, HRs, psi, psiCompare=None, accuration=10**(-2)):
+def getGroundState(H, HLs, HRs, psi, psiCompare=None, accuration=10**(-7)):
     truncErrs = []
     [psi, E0, truncErr, HLs, HRs] = dmrgSweep(psi, H, HLs, HRs, psiCompare)
     truncErrs.append(truncErr)
