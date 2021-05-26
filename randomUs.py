@@ -148,7 +148,7 @@ def renyiEntropy(n, w, h, M, randOption, theta, phi, estimateFunc, arguments, fi
         avg += estimation
         if m % M == M - 1:
             with open(filename + '_n_' + str(n) + '_w_' + str(w) + '_h_' + str(h) + '_' + randOption + '_M_' + str(M) + '_m_' + str(m), 'wb') as f:
-                pickle.dump(avg / M, f)
+                pickle.dump(avg, f)
                 avg = 0
         for op in ops:
             bops.removeState(op)
