@@ -23,10 +23,10 @@ if option == 'ising':
     if int(magField) == magField:
         magField = int(magField)
     boundaryFile = 'bmpsResults_' + str(magField)
-    theta = float(sys.argv[8]) * np.pi
-    phi = float(sys.argv[9]) * np.pi
+    theta = float(sys.argv[9]) * np.pi
+    phi = float(sys.argv[10]) * np.pi
     newdir = dirname + 'ising_hf_' + str(magField) + '_n_' + str(n) + '_w_' + str(w) + '_h_' + str(h) \
-             + '_theta_' + sys.argv[8] +'_phi_' + sys.argv[9]
+             + '_theta_' + sys.argv[9] +'_phi_' + sys.argv[10]
     argvl = 11
 elif option == 'toric':
     boundaryFile = 'toricBoundaries'
