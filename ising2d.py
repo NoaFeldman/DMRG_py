@@ -125,6 +125,7 @@ for i in range(len(hs)):
     Ms[i] = getM(ordered)
     p2s[i] = np.trace(np.matmul(ordered, ordered))
 plt.scatter(hs, np.abs(Ms))
+plt.show()
 plt.plot(hs, p2s)
 plt.show()
 

@@ -41,8 +41,9 @@ baseTensor[0, 1, 1, 1] = 1 / 2**0.25
 baseTensor[1, 1, 1, 0] = 1 / 2**0.25
 base = tn.Node(baseTensor)
 
-gs = [0.0, 0.15, 0.25, 0.35, 0.45, 0.55]
+gs = [k * 0.1 for k in range(11)]
 gs = np.round(gs, 2)
+renyis = []
 for g in gs:
     ABTensor = bops.multiContraction(base, base, '3', '0').tensor[0]
     ABTensor[0, 0, 0, 0, 0] *= (1 + g)
@@ -101,20 +102,26 @@ for g in gs:
     downRow = bops.copyState([upRow])[0]
     rightRow = peps.bmpsCols(upRow, downRow, AEnv, BEnv, steps, option='right', X=upRow)
     leftRow = peps.bmpsCols(upRow, downRow, AEnv, BEnv, steps, option='left', X=upRow)
-    print('111')
-    # circle = bops.multiContraction(bops.multiContraction(bops.multiContraction(upRow, rightRow, '3', '0'), upRow, '5', '0'), leftRow, '70', '03')
-    # ABNet = bops.permute(
-    #         bops.multiContraction(bops.multiContraction(openB, openA, '2', '4'), bops.multiContraction(openA, openB, '2', '4'), '28', '16',
-    #                               cleanOr1=True, cleanOr2=True),
-    #         [1, 5, 6, 13, 14, 9, 10, 2, 0, 4, 8, 12, 3, 7, 11, 15])
-    # dm = bops.multiContraction(circle, ABNet, '01234567', '01234567')
-    # ordered = np.round(np.reshape(dm.tensor, [16, 16]), 14)
-    # ordered /= np.trace(ordered)
-    # b = 1
-
     with open('results/toricBoundaries_g_' + str(g), 'wb') as f:
         pickle.dump([upRow, downRow, leftRow, rightRow, openA, openB, A, B], f)
     print(g)
+    with open('results/toricBoundaries_g_' + str(g), 'rb') as f:
+        [upRow, downRow, leftRow, rightRow, openA, openB, A, B] = pickle.load(f)
+    circle = bops.multiContraction(bops.multiContraction(bops.multiContraction(upRow, rightRow, '3', '0'), upRow, '5', '0'), leftRow, '70', '03')
+    ABNet = bops.permute(
+            bops.multiContraction(bops.multiContraction(openB, openA, '2', '4'), bops.multiContraction(openA, openB, '2', '4'), '28', '16',
+                                  cleanOr1=True, cleanOr2=True),
+            [1, 5, 6, 13, 14, 9, 10, 2, 0, 4, 8, 12, 3, 7, 11, 15])
+    dm = bops.multiContraction(circle, ABNet, '01234567', '01234567')
+    ordered = np.round(np.reshape(dm.tensor, [16, 16]), 14)
+    ordered /= np.trace(ordered)
+    p2 = np.trace(np.matmul(ordered, ordered))
+    renyi2 = -np.log(p2)
+    renyis.append(renyi2)
+
+import matplotlib.pyplot as plt
+plt.plot(gs, renyis)
+plt.show()
 
 
 def applyOpTosite(site, op):

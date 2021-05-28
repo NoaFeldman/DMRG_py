@@ -40,7 +40,8 @@ Vs = np.zeros(len(Ns))
 ns = [2, 3, 4]
 p2s = []
 for i in range(len(Ns)):
-    p2s.append(toricCode.getPurity(i + 1))
+    # p2s.append(toricCode.getPurity(i + 1))
+    p2s.append(0)
 dops = True
 if dops:
     for n in ns:
@@ -56,25 +57,25 @@ if dops:
             # organized = organized[organized < 50]
             p2 = p2s[i]
             expected = p2**(n-1)
-            numOfExperiments = 10
-            numOfMixes = 20
-            precision = np.zeros(int(len(organized) / numOfExperiments))
-            for mix in range(numOfMixes):
-                np.random.shuffle(organized)
-                for j in range(1, int(len(organized)/numOfExperiments)):
-                    currPrecision= np.average([np.abs(np.average( \
-                        organized[c * int(len(organized)/numOfExperiments):c * int(len(organized)/numOfExperiments)+j]) - expected) \
-                                               for c in range(numOfExperiments)])
-                    if mix == 0:
-                        precision[j] = currPrecision
-                    else:
-                        precision[j] = (precision[j] * mix + currPrecision) / (mix + 1)
-            with open('results/precision_N_' + str(N) + '_n_' + str(n), 'rb') as f:
-                precision = pickle.load(f)
+            # numOfExperiments = 10
+            # numOfMixes = 20
+            # precision = np.zeros(int(len(organized) / numOfExperiments))
+            # for mix in range(numOfMixes):
+            #     np.random.shuffle(organized)
+            #     for j in range(1, int(len(organized)/numOfExperiments)):
+            #         currPrecision= np.average([np.abs(np.average( \
+            #             organized[c * int(len(organized)/numOfExperiments):c * int(len(organized)/numOfExperiments)+j]) - expected) \
+            #                                    for c in range(numOfExperiments)])
+            #         if mix == 0:
+            #             precision[j] = currPrecision
+            #         else:
+            #             precision[j] = (precision[j] * mix + currPrecision) / (mix + 1)
+            # with open('results/precision_N_' + str(N) + '_n_' + str(n), 'rb') as f:
+            #     precision = pickle.load(f)
             # axs[n-2].plot([(m * M + M - 1) / (varianceNormalizations[n - 2] ** N) for m in range(len(precision) - 1)],
             #          precision[1:] / expected, color=colors[i])
-            variance = np.real(np.average((np.array(organized) - expected)**2 * M))
-            Vs[i] = np.real(variance / expected**2)
+            # variance = np.real(np.average((np.array(organized) - expected)**2 * M))
+            # Vs[i] = np.real(variance / expected**2)
         # axs[n-2].set_ylabel(r'$\frac{|p_' + str(n) + ' - \\mathrm{est}|}{p_' + str(n) + '}$', fontsize=18)
         # plt.xscale('log')
         # axs[n-2].set_yscale('log')
