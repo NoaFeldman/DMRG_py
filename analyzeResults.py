@@ -2,11 +2,10 @@ import pickle
 from matplotlib import pyplot as plt
 import numpy as np
 import os
-# import toricCode
+import toricCode
 import re
 
 d = 2
-
 
 # Linear regression, based on https://stackoverflow.com/questions/6148207/linear-regression-with-matplotlib-numpy
 def linearRegression(Ns, Vs, color, label):
@@ -18,6 +17,7 @@ def linearRegression(Ns, Vs, color, label):
     plt.plot(Ns, 2 ** poly1d_fn(Ns), '--k', color=color)
     plt.yscale('log')
     plt.xticks(Ns)
+    plt.show()
 
 
 rootdir = './results'
@@ -31,17 +31,16 @@ def findResults(n, N, opt='p'):
 
 
 M = 1000
-Ns = [4, 8, 12, 16, 20, 24]
+Ns = [4 * k for k in range(9, 13)]
 colors = ['blueviolet', 'blue', 'deepskyblue', 'green', 'yellowgreen', 'orange']
 vcolors = ['blueviolet', 'deepskyblue', 'green', 'orange']
 legends = []
-option = 'MPS'
+option = 'toric'
 Vs = np.zeros(len(Ns))
-ns = [2, 3, 4]
+ns = [1, 2, 3, 4]
 p2s = []
 for i in range(len(Ns)):
-    # p2s.append(toricCode.getPurity(i + 1))
-    p2s.append(0)
+    p2s.append(toricCode.getPurity(2, (i + 1) * 2))
 dops = True
 if dops:
     for n in ns:
@@ -51,10 +50,11 @@ if dops:
             spaceSize = d**N
             if n == 2:
                 legends.append(r'$N_A = ' + str(N) + '$')
-            organized = []
-            with open('./results/' + str(findResults(n, N)), 'rb') as f:
-                organized = np.array(pickle.load(f))
-            # organized = organized[organized < 50]
+            with open('./results/organized_' + option + '_' + str(n) + '_' + str(N), 'rb') as f:
+                organized = np.array(pickle.load(f)) / 1000
+            # plt.plot(organized)
+            # plt.title(str(n) + ' ' + str(N))
+            # plt.show()
             p2 = p2s[i]
             expected = p2**(n-1)
             # numOfExperiments = 10
@@ -74,21 +74,13 @@ if dops:
             #     precision = pickle.load(f)
             # axs[n-2].plot([(m * M + M - 1) / (varianceNormalizations[n - 2] ** N) for m in range(len(precision) - 1)],
             #          precision[1:] / expected, color=colors[i])
-            # variance = np.real(np.average((np.array(organized) - expected)**2 * M))
-            # Vs[i] = np.real(variance / expected**2)
-        # axs[n-2].set_ylabel(r'$\frac{|p_' + str(n) + ' - \\mathrm{est}|}{p_' + str(n) + '}$', fontsize=18)
-        # plt.xscale('log')
-        # axs[n-2].set_yscale('log')
+            variance = np.sum(np.abs(organized - expected)**2) / (len(organized) - 1)
+            Vs[i] = np.real(variance / expected**2)
         linearRegression(Ns, Vs, vcolors[n - 2], r'$p_' + str(n) + '$')
 
         if n == 3:
             v3s = np.copy(Vs)
 
-vRs = [v3s[i] * np.random.uniform(0.8, 1.2) for i in range(len(v3s))]
-linearRegression(Ns, vRs, vcolors[3], r'$R_3$')
-plt.legend(fontsize=14)
-plt.xlabel(r'$N_A$', fontsize=16)
-plt.ylabel(r'Var$(p)/p^2$', fontsize=16)
 
 doR3 = False
 if doR3:
@@ -116,12 +108,12 @@ if doR3:
         #                 precision[j] = currPrecision
         #             else:
         #                 precision[j] = (precision[j] * mix + currPrecision) / (mix + 1)
-        with open('results/precision_N_' + str(N) + '_Rn_' + str(n), 'rb') as f:
-            precision = pickle.load(f)
-        axs[3].plot([(m * M + M - 1) / 1.56**N for m in range(len(precision) - 1)],
-                 precision[1:] / expected, color=colors[i])
-        axs[3].set_yscale('log')
-        axs[3].set_ylabel(r'$\frac{|R_' + str(n) + ' - \\mathrm{est}|}{R_' + str(n) + '}$', fontsize=18)
+        # with open('results/precision_N_' + str(N) + '_Rn_' + str(n), 'rb') as f:
+        #     precision = pickle.load(f)
+        # axs[3].plot([(m * M + M - 1) / 1.56**N for m in range(len(precision) - 1)],
+        #          precision[1:] / expected, color=colors[i])
+        # axs[3].set_yscale('log')
+        # axs[3].set_ylabel(r'$\frac{|R_' + str(n) + ' - \\mathrm{est}|}{R_' + str(n) + '}$', fontsize=18)
 
 # plt.xlabel(r'$M/(V^{N_A})$', fontsize=16)
 # legend = plt.legend(legends, loc=0,
