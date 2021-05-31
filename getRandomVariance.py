@@ -102,7 +102,7 @@ def XXVar(statesDir: str, outDir: str):
     vs = np.zeros(len(NAs), dtype=complex)
     for i in range(len(NAs)):
         NA = NAs[i]
-        with open(statesDir + 'psiXX_' + str(NA*2), 'rb') as f:
+        with open(statesDir + 'psiXX_NA_' + str(NA) + '_NB_' + str(NA), 'rb') as f:
             psi = pickle.load(f)
             for k in range(NA * 2 - 1, NA, -1):
                 psi = bops.shiftWorkingSite(psi, k, '<<')
