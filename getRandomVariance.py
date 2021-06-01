@@ -5,18 +5,8 @@ import tensornetwork as tn
 import pepsExpect as pe
 import matplotlib.pyplot as plt
 import sys
+import basicAnalysis as ban
 
-# Linear regression, based on https://stackoverflow.com/questions/6148207/linear-regression-with-matplotlib-numpy
-def linearRegression(Ns, Vs):
-    coef = np.polyfit(Ns, np.log2(Vs), 1)
-    print(coef)
-    poly1d_fn = np.poly1d(coef)
-    # plt.plot(Ns, Vs, 'yo', Ns, 2**poly1d_fn(Ns), '--k', color=color, label='p2')
-    plt.scatter(Ns, Vs)
-    plt.plot(Ns, 2 ** poly1d_fn(Ns), '--k')
-    plt.yscale('log')
-    plt.xticks(Ns)
-    plt.show()
 eMat = np.eye(4)
 eMat[1, 2] = 1
 eMat[2, 1] = 1
@@ -73,7 +63,7 @@ def toricVar(ls: np.array):
     # [qCDown, qDDown, te] = bops.svdTruncation(qDownRow, [0, 1], [2, 3], '>>')
 
 
-    hs = ls / 2
+    hs = ls * 2
     vs = np.zeros(len(hs))
     v2s = np.zeros(len(hs))
     for i in range(len(hs)):
@@ -90,7 +80,9 @@ def toricVar(ls: np.array):
         # ops = [tn.Node(np.eye(d**4)) for i in range(w * h)]
         # v2s[i] = pe.applyLocalOperators(qCUp, qDUp, qCDown, qDDown, qLeftRow, qRightRow, qA, qB, w, h, ops)
 
-    linearRegression(ls, vs)
+    print(vs - 1)
+    print(ls*4)
+    ban.linearRegression(ls * 4, vs)
 
 def doubleMPSSite(site):
     return tn.Node(np.reshape(np.transpose(np.reshape(np.outer(site.tensor, site.tensor),
@@ -104,7 +96,7 @@ def XXVar(statesDir: str, outDir: str, NAs):
         with open(statesDir + 'psiXX_NA_' + str(NA) + '_NB_' + str(NA), 'rb') as f:
             psi = pickle.load(f)
             psiCopy = bops.copyState(psi)
-            for k in range(NA * 2 - 1, NA - 1, -1):
+            for k in range(NA * 2 - 1, 1, -1):
                 psi = bops.shiftWorkingSite(psi, k, '<<', maxBondDim=64)
             vs[2 * i] = bops.getOverlap(psi, psiCopy)
             bops.removeState(psiCopy)
@@ -121,6 +113,8 @@ def XXVar(statesDir: str, outDir: str, NAs):
     with open(outDir + 'XX_n1_Error', 'wb') as f:
         pickle.dump(vs, f)
     print(vs)
+
+# toricVar(np.array(range(1, 20)))
 
 statesDir = sys.argv[1]
 outDir = sys.argv[2]
