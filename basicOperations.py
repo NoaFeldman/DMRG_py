@@ -400,10 +400,13 @@ def getEdgeNames(node: tn.Node):
 
 
 # k is curr working site, shift it by one in dir direction.
-def shiftWorkingSite(psi: List[tn.Node], k, dir):
+def shiftWorkingSite(psi: List[tn.Node], k, dir, maxBondDim=None):
     if dir == '<<':
         pair = multiContraction(psi[k-1], psi[k], [2], [0], cleanOr1=True, cleanOr2=True)
-        [l, r, I] = svdTruncation(pair, [0, 1], [2, 3], '<<')
+        if maxBondDim is None:
+            [l, r, I] = svdTruncation(pair, [0, 1], [2, 3], '<<')
+        else:
+            [l, r, I] = svdTruncation(pair, [0, 1], [2, 3], '<<', maxBondDim=maxBondDim)
         psi[k - 1] = l
         psi[k] = r
         tn.remove_node(pair)
