@@ -95,29 +95,34 @@ def toricVar(ls: np.array):
 def doubleMPSSite(site):
     return tn.Node(np.reshape(np.transpose(np.reshape(np.outer(site.tensor, site.tensor),
                             np.shape(site.tensor) + np.shape(site.tensor)), [0, 3, 1, 4, 2, 5]),
-               [np.shape(site.tensor)[0]**2, np.shape(site.tensor)[1]**2, np.shape(site.tensor)[2                                                               ]**2]))
+               [np.shape(site.tensor)[0]**2, np.shape(site.tensor)[1]**2, np.shape(site.tensor)[2]**2]))
 
-def XXVar(statesDir: str, outDir: str):
-    NAs = [4, 8]
-    vs = np.zeros(len(NAs), dtype=complex)
+def XXVar(statesDir: str, outDir: str, NAs):
+    vs = np.zeros(len(NAs) * 2, dtype=complex)
     for i in range(len(NAs)):
         NA = NAs[i]
         with open(statesDir + 'psiXX_NA_' + str(NA) + '_NB_' + str(NA), 'rb') as f:
             psi = pickle.load(f)
-            for k in range(NA * 2 - 1, NA, -1):
-                psi = bops.shiftWorkingSite(psi, k, '<<')
+            psiCopy = bops.copyState(psi)
+            for k in range(NA * 2 - 1, NA - 1, -1):
+                psi = bops.shiftWorkingSite(psi, k, '<<', maxBondDim=64)
+            vs[2 * i] = bops.getOverlap(psi, psiCopy)
+            bops.removeState(psiCopy)
+            bops.removeState(psi[NA:])
+            psi = psi[:NA]
         doublePsi = [None for j in range(len(psi))]
         for j in range(len(psi)):
             doublePsi[j] = doubleMPSSite(psi[j])
         doubleCopy = bops.copyState(doublePsi)
         for j in range(NA):
-            doublePsi[j] = bops.permute(bops.multiContraction(doublePsi[j], E,
-                                        '1', '0', cleanOr1=True), [0, 2, 1])
-        vs[i] = bops.getOverlap(doublePsi, doubleCopy)
+            doublePsi[j] = bops.permute(bops.multiContraction(doublePsi[j], E, '1', '0', cleanOr1=True), [0, 2, 1])
+        vs[2 * i + 1] = bops.getOverlap(doublePsi, doubleCopy)
+
     with open(outDir + 'XX_n1_Error', 'wb') as f:
         pickle.dump(vs, f)
     print(vs)
 
 statesDir = sys.argv[1]
 outDir = sys.argv[2]
-XXVar(statesDir, outDir)
+NAs = [int(N) for N in sys.argv[3:]]
+XXVar(statesDir, outDir, NAs)
