@@ -13,3 +13,10 @@ def linearRegression(Ns, Vs, color='blue', label='', show=True):
     plt.xticks(Ns)
     if show:
         plt.show()
+
+def variance(organized, expected=None):
+    organized = np.array(organized)
+    if expected is None:
+        expected = np.average(organized)
+    variance = np.sum(np.abs(organized - expected) ** 2) / (len(organized) - 1)
+    return variance

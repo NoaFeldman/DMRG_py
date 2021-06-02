@@ -4,21 +4,9 @@ import numpy as np
 import os
 import toricCode
 import re
+import basicAnalysis as ban
 
 d = 2
-
-# Linear regression, based on https://stackoverflow.com/questions/6148207/linear-regression-with-matplotlib-numpy
-def linearRegression(Ns, Vs, color, label):
-    coef = np.polyfit(Ns, np.log2(Vs), 1)
-    print(coef)
-    poly1d_fn = np.poly1d(coef)
-    # plt.plot(Ns, Vs, 'yo', Ns, 2**poly1d_fn(Ns), '--k', color=color, label='p2')
-    plt.scatter(Ns, Vs, color=color, label=label)
-    plt.plot(Ns, 2 ** poly1d_fn(Ns), '--k', color=color)
-    plt.yscale('log')
-    plt.xticks(Ns)
-    plt.show()
-
 
 rootdir = './results'
 def findResults(n, N, opt='p'):
@@ -31,7 +19,7 @@ def findResults(n, N, opt='p'):
 
 
 M = 1000
-Ns = [4 * k for k in range(9, 13)]
+Ns = [4 * k for k in range(1, 7)]
 colors = ['blueviolet', 'blue', 'deepskyblue', 'green', 'yellowgreen', 'orange']
 vcolors = ['blueviolet', 'deepskyblue', 'green', 'orange']
 legends = []
@@ -51,7 +39,7 @@ if dops:
             if n == 2:
                 legends.append(r'$N_A = ' + str(N) + '$')
             with open('./results/organized_' + option + '_' + str(n) + '_' + str(N), 'rb') as f:
-                organized = np.array(pickle.load(f)) / 1000
+                organized = np.array(pickle.load(f))
             # plt.plot(organized)
             # plt.title(str(n) + ' ' + str(N))
             # plt.show()
@@ -74,12 +62,10 @@ if dops:
             #     precision = pickle.load(f)
             # axs[n-2].plot([(m * M + M - 1) / (varianceNormalizations[n - 2] ** N) for m in range(len(precision) - 1)],
             #          precision[1:] / expected, color=colors[i])
-            variance = np.sum(np.abs(organized - expected)**2) / (len(organized) - 1)
+            variance = np.sum(np.abs(organized - np.average(organized))**2) / (len(organized) - 1)
             Vs[i] = np.real(variance / expected**2)
-        linearRegression(Ns, Vs, vcolors[n - 2], r'$p_' + str(n) + '$')
-
-        if n == 3:
-            v3s = np.copy(Vs)
+        Vs = Vs * M
+        ban.linearRegression(Ns, Vs + 1, vcolors[n - 2], r'$p_' + str(n) + '$')
 
 
 doR3 = False

@@ -26,7 +26,7 @@ swap[1, 2] = 1
 swap[2, 1] = 1
 swap[3, 3] = 1
 
-def toricVar(ls: np.array):
+def toricVar(ls: np.array, op=E, color='blue'):
     w = 2
     d = 2
     chi = 4
@@ -73,16 +73,14 @@ def toricVar(ls: np.array):
         leftRow = bops.multNode(leftRow, 1 / norm**(2/w))
 
         doubleLeftRow = getDoubleRow(leftRow, chi, d)
-        ops = [tn.Node(eMat) for i in range(w * h)]
+        ops = [op for i in range(w * h)]
         vs[i] = pe.applyLocalOperators(doubleCUp, doubleDUp, doubleCDown, doubleDDown, doubleLeftRow, doubleRightRow, doubleA, doubleB, w, h, ops)
 
         # qLeftRow = getDoubleRow(doubleLeftRow, chi**2, d**2)
         # ops = [tn.Node(np.eye(d**4)) for i in range(w * h)]
         # v2s[i] = pe.applyLocalOperators(qCUp, qDUp, qCDown, qDDown, qLeftRow, qRightRow, qA, qB, w, h, ops)
 
-    print(vs - 1)
-    print(ls*4)
-    ban.linearRegression(ls * 4, vs)
+    ban.linearRegression(ls * 4, vs, show=False, color=color)
 
 def doubleMPSSite(site):
     return tn.Node(np.reshape(np.transpose(np.reshape(np.outer(site.tensor, site.tensor),
@@ -114,7 +112,16 @@ def XXVar(statesDir: str, outDir: str, NAs):
         pickle.dump(vs, f)
     print(vs)
 
-# toricVar(np.array(range(1, 20)))
+mat = np.eye(4) + 0.5*np.kron(X, X) + 0.5*np.kron(Y, Y)
+print(mat)
+toricVar(np.array(range(1, 20)), tn.Node(mat))
+mat = np.eye(4) + 0.5*np.kron(X, X) + 0.5*np.kron(Z, Z)
+print(mat)
+toricVar(np.array(range(1, 20)), tn.Node(mat), color='orange')
+mat = np.eye(4) + 0.5*np.kron(Y, Y) + 0.5*np.kron(Z, Z)
+print(mat)
+toricVar(np.array(range(1, 20)), tn.Node(mat), color='green')
+plt.show()
 
 statesDir = sys.argv[1]
 outDir = sys.argv[2]

@@ -87,8 +87,8 @@ def getUPhi(phi, d):
         u = np.zeros((d, d), dtype=complex)
         u[0, 0] = np.cos(phi)
         u[0, 1] = 1j * np.sin(phi)
-        u[1, 0] = -np.sin(phi)
-        u[1, 1] = 1j * np.sin(phi)
+        u[1, 0] = 1j * np.sin(phi)
+        u[1, 1] = np.cos(phi)
         return u
 
 # Based on my analysis in unitary_alternatives.

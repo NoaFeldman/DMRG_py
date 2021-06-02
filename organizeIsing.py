@@ -19,7 +19,7 @@ for hf in hfs:
     # plt.title(str(hf))
     # plt.show()
     avg = np.average(org)
-    var = np.sum(np.abs(org - avg) ** 2) / (len(org) - 1)
+    var = np.sum(np.abs(org - avg) ** 2) / (len(org) - 1) * np.sqrt(1000)
     print(hf, avg, np.sqrt(var / len(org)), np.round(np.sqrt(var / len(org)) / avg, 3))
     yerrs.append(np.sqrt(var / len(org)))
     avgs.append(avg)
