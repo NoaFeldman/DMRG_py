@@ -12,6 +12,7 @@ for hf in hfs:
         hf = int(hf)
     with open('ising/organized_hf_' + str(hf) + '_2_16', 'rb') as f:
         org = np.array(pickle.load(f)) / 1000
+        org = org[org < 400]
     with open('ising/conserved_hf_' + str(hf) + '_2_16', 'rb') as f:
         con = np.array(pickle.load(f)) / 1000
     # plt.plot(np.real(org))
@@ -19,7 +20,7 @@ for hf in hfs:
     # plt.title(str(hf))
     # plt.show()
     avg = np.average(org)
-    var = np.sum(np.abs(org - avg) ** 2) / (len(org) - 1) * np.sqrt(1000)
+    var = np.sum(np.abs(org - avg) ** 2) / (len(org) - 1) # * sqrt(1000)
     print(hf, avg, np.sqrt(var / len(org)), np.round(np.sqrt(var / len(org)) / avg, 3))
     yerrs.append(np.sqrt(var / len(org)))
     avgs.append(avg)

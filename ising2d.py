@@ -125,7 +125,12 @@ for i in range(len(hs)):
     Ms[i] = getM(ordered)
     p2s[i] = np.trace(np.matmul(ordered, ordered))
 plt.scatter(hs, np.abs(Ms))
+plt.xlabel('h')
+plt.ylabel('|M|')
 plt.show()
 plt.plot(hs, p2s)
+plt.xlabel('h')
+plt.ylabel(r'$p_2$')
+plt.title(r'2nd Renyi moment for a $2\times2$ system (calculated with the explicit RDM)')
 plt.show()
 

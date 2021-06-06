@@ -28,8 +28,8 @@ for n in [1, 2, 3, 4]:
         # Vs[i] = np.sum(np.abs(organized - expected)**2) / expected**2
         # plt.scatter(np.array(range(len(organized))), organized)
         avg = np.average(organized)
-        var = np.sum(np.abs(organized - expected) ** 2) / (len(organized) - 1)
-        Vs[i] = var / expected**2 * np.sqrt(1000)
+        var = np.sum(np.abs(organized - np.average(organized)) ** 2) / (len(organized) - 1)
+        Vs[i] = var / expected**2 * 1000
         print(N, len(organized), avg/expected, expected, avg, np.sqrt(var / (len(organized))))
         # numOfExperiments = 10
         # numOfMixes = 20
@@ -55,7 +55,7 @@ for n in [1, 2, 3, 4]:
     plt.title(r'$p_' + str(n) + '$')
     plt.savefig('/home/noa/Documents/randomPeps/XX_p' + str(n) + '.png')
     plt.clf()
-    varCoef = ban.linearRegression(Ns, Vs, 'blueviolet', r'$p_2$')
+    varCoef = ban.linearRegression(Ns, Vs + 1, 'blueviolet', r'$p_2$')
     # plt.scatter(Ns, Vs)
     # plt.yscale('log')
     # plt.xlabel(r'$N_A$', fontsize=16)

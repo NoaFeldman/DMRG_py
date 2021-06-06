@@ -41,10 +41,53 @@ baseTensor[0, 1, 1, 1] = 1 / 2**0.25
 baseTensor[1, 1, 1, 0] = 1 / 2**0.25
 base = tn.Node(baseTensor)
 
+
+def get2ByNExplicit(l: int):
+    with open('results/toricBoundaries', 'rb') as f:
+        [upRow, downRow, leftRow, rightRow, openA, openB, A, B] = pickle.load(f)
+    left = bops.multiContraction(downRow, bops.multiContraction(leftRow, upRow, '3', '0'), '3', '0')
+    for i in range(1, l):
+        left = bops.multiContraction(downRow, bops.multiContraction(left, upRow, [3 + 4 * i], '0', cleanOr1=True), '3', '0')
+    circle = bops.multiContraction(left, downRow, [3 + 4 * l, 0], '03')
+    openA = tn.Node(np.transpose(np.reshape(np.kron(A.tensor, A.tensor), [d ** 2, d ** 2, d ** 2, d ** 2, d, d]),
+                                 [4, 0, 1, 2, 3, 5]))
+    openB = tn.Node(np.transpose(np.reshape(np.kron(B.tensor, B.tensor), [d ** 2, d ** 2, d ** 2, d ** 2, d, d]),
+                                 [4, 0, 1, 2, 3, 5]))
+    ABNet = bops.permute(
+        bops.multiContraction(bops.multiContraction(openB, openA, '2', '4'),
+                              bops.multiContraction(openA, openB, '2', '4'), '28', '16',
+                              cleanOr1=True, cleanOr2=True),
+        [1, 5, 6, 13, 14, 9, 10, 2, 0, 4, 8, 12, 3, 7, 11, 15])
+    if l == 2:
+        curr = bops.multiContraction(circle, ABNet, '234567', '456701')
+        res = bops.permute(bops.multiContraction(curr, ABNet, '23450176', '01234567'), [0, 1, 2, 3, 8, 9, 10, 11, 4, 5, 6, 7, 12, 13, 14, 15])
+        rdm = np.reshape(res.tensor, [2**8, 2**8])
+        rdm = rdm / np.trace(rdm)
+    return rdm
+
+def getExplicit2by2(g=0):
+    if g == 0:
+        with open('results/toricBoundaries', 'rb') as f:
+            [upRow, downRow, leftRow, rightRow, openA, openB, A, B] = pickle.load(f)
+    else:
+        with open('results/toricBoundaries_g_' + str(g), 'rb') as f:
+            [upRow, downRow, leftRow, rightRow, openA, openB, A, B] = pickle.load(f)
+    circle = bops.multiContraction(bops.multiContraction(bops.multiContraction(upRow, rightRow, '3', '0'), downRow, '5', '0'), leftRow, '70', '03')
+    ABNet = bops.permute(
+            bops.multiContraction(bops.multiContraction(openB, openA, '2', '4'), bops.multiContraction(openA, openB, '2', '4'), '28', '16',
+                                  cleanOr1=True, cleanOr2=True),
+            [1, 5, 6, 13, 14, 9, 10, 2, 0, 4, 8, 12, 3, 7, 11, 15])
+    dm = bops.multiContraction(circle, ABNet, '01234567', '01234567')
+    ordered = np.round(np.reshape(dm.tensor, [16, 16]), 14)
+    ordered /= np.trace(ordered)
+    return ordered
+
+
 gs = [k * 0.1 for k in range(11)]
 gs = np.round(gs, 2)
 renyis = []
-if False:
+a = False
+if a:
     for g in gs:
         ABTensor = bops.multiContraction(base, base, '3', '0').tensor[0]
         ABTensor[0, 0, 0, 0, 0] *= (1 + g)
@@ -106,16 +149,7 @@ if False:
         with open('results/toricBoundaries_g_' + str(g), 'wb') as f:
             pickle.dump([upRow, downRow, leftRow, rightRow, openA, openB, A, B], f)
         print(g)
-        with open('results/toricBoundaries_g_' + str(g), 'rb') as f:
-            [upRow, downRow, leftRow, rightRow, openA, openB, A, B] = pickle.load(f)
-        circle = bops.multiContraction(bops.multiContraction(bops.multiContraction(upRow, rightRow, '3', '0'), upRow, '5', '0'), leftRow, '70', '03')
-        ABNet = bops.permute(
-                bops.multiContraction(bops.multiContraction(openB, openA, '2', '4'), bops.multiContraction(openA, openB, '2', '4'), '28', '16',
-                                      cleanOr1=True, cleanOr2=True),
-                [1, 5, 6, 13, 14, 9, 10, 2, 0, 4, 8, 12, 3, 7, 11, 15])
-        dm = bops.multiContraction(circle, ABNet, '01234567', '01234567')
-        ordered = np.round(np.reshape(dm.tensor, [16, 16]), 14)
-        ordered /= np.trace(ordered)
+        ordered = getExplicit2by2(g)
         p2 = np.trace(np.matmul(ordered, ordered))
         renyi2 = -np.log(p2)
         renyis.append(renyi2)
@@ -175,4 +209,50 @@ def getPurity(w, h):
     purity = N * res
     return purity
 
-# print(getPurity(2))
+
+getPurity(2, 4)
+rdm = getExplicit2by2()
+# rdm = get2ByNExplicit(2)
+rdm2 = np.kron(rdm, rdm)
+E1 = np.reshape([1, 0, 0, 0,
+                 0, 1, 1, 0,
+                 0, 1, 1, 0,
+                 0, 0, 0, 1], [4, 4])
+E = np.ones((256, 256))
+for i in range(256):
+    E[i, i] = 1
+    for j in range(256):
+        bi1 = bin(i)[2:].zfill(8)[:4]
+        bi2 = bin(i)[2:].zfill(8)[4:]
+        bj1 = bin(j)[2:].zfill(8)[:4]
+        bj2 = bin(j)[2:].zfill(8)[4:]
+        for n in range(4):
+            if not (bi1[n] + bi2[n] + bj1[n] + bj2[n] == '0000' or
+                    bi1[n] + bi2[n] + bj1[n] + bj2[n] == '1111' or
+                    (bi1[n] != bi2[n] and bj1[n] != bj2[n])):
+                E[i, j] = 0
+rdm2E = np.matmul(rdm2, E)
+X4 = np.zeros((256, 256))
+Y4 = np.zeros((256, 256))
+for i in range(256):
+    for j in range(256):
+        if i == j^255:
+            X4[i, j] = 1
+            Y4[i, j] = (-1)**bin(i).count('1')
+rdm2X4 = np.matmul(rdm2, X4 / 16)
+rdm2Y4 = np.matmul(rdm2, Y4 / 16)
+trs = np.array([np.trace(np.linalg.matrix_power(rdm2E, n)) for n in range(1, 5)])
+vs = [(trs[n - 1] - getPurity(2, 2)**(2*n - 2)) / getPurity(2, 2)**(2*n - 2) for n in range(1, 5)]
+print(vs)
+components = [rdm2, rdm2X4, rdm2Y4]
+compNames = ['1', 'X', 'Y']
+trace2 = 0
+for i in range(len(components)):
+    for j in range(len(components)):
+        contribution = np.trace(np.matmul(components[i], components[j]))
+        print([compNames[i], compNames[j], contribution])
+        trace2 += contribution
+print(trace2, trs[1])
+import getRandomVariance
+getRandomVariance.printExpected()
+b = 1

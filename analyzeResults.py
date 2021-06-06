@@ -62,9 +62,10 @@ if dops:
             #     precision = pickle.load(f)
             # axs[n-2].plot([(m * M + M - 1) / (varianceNormalizations[n - 2] ** N) for m in range(len(precision) - 1)],
             #          precision[1:] / expected, color=colors[i])
-            variance = np.sum(np.abs(organized - np.average(organized))**2) / (len(organized) - 1)
+            variance = np.sum(np.abs(organized - expected)**2) / (len(organized) - 1)
             Vs[i] = np.real(variance / expected**2)
         Vs = Vs * M
+        print(Vs[0])
         ban.linearRegression(Ns, Vs + 1, vcolors[n - 2], r'$p_' + str(n) + '$')
 
 
