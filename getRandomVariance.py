@@ -166,9 +166,40 @@ def commuteWithXXXX(rep):
 def commutesWithZZZZ(rep):
     return (str.count(rep, '1') + str.count(rep, '2')) % 2 == 0
 
-def toricTMatrix(n):
-    Tn = np.kron(fullT, fullT)
+def toOps(rep):
+    Xs = np.zeros(2 * 2)
+    Zs = np.zeros(2 * 2)
+    for i in range(len(rep)):
+        if rep[i] == '1':
+            Xs[i] = 1
+        elif rep[i] == '2':
+            Xs[i] = 1
+            Zs[i] = 1
+    return Xs, Zs
+
+def starsOK(repUp, repDown):
+    if repUp[0] != repUp[1] or repDown[0] != repDown[1] or repUp[2] != repUp[3] or repDown[2] != repDown[3]:
+        return False
+    afterCommute = [int(repUp[i] != repDown[i]) for i in range(len(repUp))]
+    if afterCommute != [0, 0, 0, 0] and afterCommute != [1, 1, 1, 1]:
+        return False
+    return True
+
+def plaqsOK(repUp, repDown, plaqUpXs, plaqDownXs):
+    if list(repUp).count(1) % 2 != 0:
+        return False
+    afterCommute = [int(repUp[i] != repDown[i]) for i in range(len(repUp))]
+    if plaqUpXs[0] != plaqUpXs[1] or plaqDownXs[0] != plaqDownXs[1] or plaqUpXs[2] != plaqUpXs[3] or plaqDownXs[2] != plaqDownXs[3]:
+        return False
+    if afterCommute != [0, 0, 0, 0] and afterCommute != [1, 1, 1, 1]:
+        return False
+    return True
+
+def toricTMatrix2():
+    n = 2
+    Tn = np.zeros((3**4, 3**4))
     mid = [int2base(x, 3, N=2) for x in range(3**2)]
+    startVec = np.zeros(len(Tn))
     for i in range(len(Tn)):
         irep = int2base(i, 3, N=2*n)
         iUp = irep[:2]
@@ -183,21 +214,61 @@ def toricTMatrix(n):
                 for mDown in mid:
                     starDown = iDown + mDown
                     plaqDown = mDown + jDown
-                    if ((starUp == '0000' or starUp == '1111') and (starDown == '0000' or starDown == '1111')) or \
-                            (commuteWithXXXX(starUp) and starUp == starDown):
-                        if plaqUp == plaqDown and commutesWithZZZZ(plaqUp):
-                            print([iUp + mUp + jUp, iDown + mDown + jDown, 2**((len(plaqUp+plaqDown) - str.count(plaqUp+plaqDown, '0')))])
-                            Tn[j, i] += 2**(-str.count(plaqUp+plaqDown, '1')) * (-2)**(-str.count(plaqUp+plaqDown, '2'))
-    return Tn
+                    starUpXs, starUpZs = toOps(starUp)
+                    starDownXs, starDownZs = toOps(starDown)
+                    plaqUpXs, plaqUpZs = toOps(plaqUp)
+                    plaqDownXs, plaqDownZs = toOps(plaqDown)
+                    fullUp = iUp + mUp + jUp
+                    fullDown = iDown + mDown + jDown
+                    # if fullUp[2:] in ['100000', '010000', '200000', '020000'] and fullDown[2:] in ['110000', '110000', '220000', '220000']: # 110010
+                    #     Tn[j, i] += 1
+                    if starsOK(starUpXs, starDownXs):
+                        if plaqsOK(plaqUpZs, plaqDownZs, plaqUpXs, plaqDownXs):
+                            curr = 2**(- str.count(plaqUp, '1') - str.count(plaqDown, '1')) * \
+                                   (-2)**(- str.count(plaqUp, '2') - str.count(plaqDown, '2'))
+                            Tn[j, i] += curr
+                            # if fullUp[2:] == '0000' and fullDown[2:] == '0000':  # 110010
+                            #     print(fullUp, fullDown, curr)
+                            b = 1
+        if irep in ['0000', '0011', '1100', '1111']:
+            startVec[i] = 1
+    startVec /= np.sqrt(np.matmul(startVec, startVec))
+    return Tn, startVec
+
+def toricMatrix3():
+    n = 3
+    Tn = np.kron(np.kron(fullT, fullT), fullT)
+    mid = [int2base(x, 3, N=2) for x in range(3 ** 2)]
+    for i in range(len(Tn)):
+        irep = int2base(i, 3, N=2*n)
+        iUp = irep[:2]
+        iLev = irep[2:4]
+        iDown = irep[4:]
+        for j in range(len(Tn)):
+            jrep = int2base(j, 3, N=2*n)
+            jUp = jrep[:2]
+            jLev = jrep[2:4]
+            jDown = jrep[4:]
+            for mUp in mid:
+                starUp = iUp + mUp
+                plaqUp = mUp + jUp
+                for mLev in mid:
+                    starLev = iLev + mLev
+                    plaqLev = mLev + jLev
+                    for mDown in mid:
+                        starDown = iDown + mDown
+                        plaqDown = mDown + jDown
 
 
 
-T2 = toricTMatrix(2)
+T2, startVec = toricTMatrix2()
+# T2 = np.round(T2, 2)
 [w, v] = np.linalg.eig(T2)
 print(max(w)**(1/4))
-
-
-
+[w, v] = np.linalg.eig(np.transpose(T2))
+print(max(w)**(1/4))
+print((np.matmul(np.transpose(startVec), np.matmul(np.linalg.matrix_power(T2, 5), startVec)) / \
+      np.matmul(np.transpose(startVec), np.matmul(np.linalg.matrix_power(T2, 4), startVec)))**(1/4))
 
 # mat = np.eye(4) + 0.5*np.kron(X, X) + 0.5*np.kron(Y, Y)
 # toricVar(np.array(range(1, 20)), tn.Node(mat))

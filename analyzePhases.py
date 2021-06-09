@@ -21,14 +21,12 @@ def compareXYZ():
         ban.linearRegression(Ns, vs+1, color=colors[i], show=False)
     plt.legend(options)
     plt.show()
-compareXYZ()
-
 
 
 def colorMap():
     thetas = [0.1 * k for k in range(11)]
     phis = [0.1 * k for k in range(11)]
-    w = 2
+    w = 4
     h = 6
     n = 1
 
@@ -52,6 +50,9 @@ def colorMap():
                 plt.show()
             var = np.sum(np.abs(organized - expected) ** 2 / (len(organized) - 1)) / expected ** 2
             results[i, j] = var
+            if i == 0 and j in [2, 3]:
+                print(var)
     plt.pcolormesh(results)
     plt.colorbar()
     plt.show()
+colorMap()

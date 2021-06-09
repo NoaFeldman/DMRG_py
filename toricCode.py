@@ -210,49 +210,49 @@ def getPurity(w, h):
     return purity
 
 
-getPurity(2, 4)
-rdm = getExplicit2by2()
-# rdm = get2ByNExplicit(2)
-rdm2 = np.kron(rdm, rdm)
-E1 = np.reshape([1, 0, 0, 0,
-                 0, 1, 1, 0,
-                 0, 1, 1, 0,
-                 0, 0, 0, 1], [4, 4])
-E = np.ones((256, 256))
-for i in range(256):
-    E[i, i] = 1
-    for j in range(256):
-        bi1 = bin(i)[2:].zfill(8)[:4]
-        bi2 = bin(i)[2:].zfill(8)[4:]
-        bj1 = bin(j)[2:].zfill(8)[:4]
-        bj2 = bin(j)[2:].zfill(8)[4:]
-        for n in range(4):
-            if not (bi1[n] + bi2[n] + bj1[n] + bj2[n] == '0000' or
-                    bi1[n] + bi2[n] + bj1[n] + bj2[n] == '1111' or
-                    (bi1[n] != bi2[n] and bj1[n] != bj2[n])):
-                E[i, j] = 0
-rdm2E = np.matmul(rdm2, E)
-X4 = np.zeros((256, 256))
-Y4 = np.zeros((256, 256))
-for i in range(256):
-    for j in range(256):
-        if i == j^255:
-            X4[i, j] = 1
-            Y4[i, j] = (-1)**bin(i).count('1')
-rdm2X4 = np.matmul(rdm2, X4 / 16)
-rdm2Y4 = np.matmul(rdm2, Y4 / 16)
-trs = np.array([np.trace(np.linalg.matrix_power(rdm2E, n)) for n in range(1, 5)])
-vs = [(trs[n - 1] - getPurity(2, 2)**(2*n - 2)) / getPurity(2, 2)**(2*n - 2) for n in range(1, 5)]
-print(vs)
-components = [rdm2, rdm2X4, rdm2Y4]
-compNames = ['1', 'X', 'Y']
-trace2 = 0
-for i in range(len(components)):
-    for j in range(len(components)):
-        contribution = np.trace(np.matmul(components[i], components[j]))
-        print([compNames[i], compNames[j], contribution])
-        trace2 += contribution
-print(trace2, trs[1])
-import getRandomVariance
-getRandomVariance.printExpected()
-b = 1
+# getPurity(2, 4)
+# rdm = getExplicit2by2()
+# # rdm = get2ByNExplicit(2)
+# rdm2 = np.kron(rdm, rdm)
+# E1 = np.reshape([1, 0, 0, 0,
+#                  0, 1, 1, 0,
+#                  0, 1, 1, 0,
+#                  0, 0, 0, 1], [4, 4])
+# E = np.ones((256, 256))
+# for i in range(256):
+#     E[i, i] = 1
+#     for j in range(256):
+#         bi1 = bin(i)[2:].zfill(8)[:4]
+#         bi2 = bin(i)[2:].zfill(8)[4:]
+#         bj1 = bin(j)[2:].zfill(8)[:4]
+#         bj2 = bin(j)[2:].zfill(8)[4:]
+#         for n in range(4):
+#             if not (bi1[n] + bi2[n] + bj1[n] + bj2[n] == '0000' or
+#                     bi1[n] + bi2[n] + bj1[n] + bj2[n] == '1111' or
+#                     (bi1[n] != bi2[n] and bj1[n] != bj2[n])):
+#                 E[i, j] = 0
+# rdm2E = np.matmul(rdm2, E)
+# X4 = np.zeros((256, 256))
+# Y4 = np.zeros((256, 256))
+# for i in range(256):
+#     for j in range(256):
+#         if i == j^255:
+#             X4[i, j] = 1
+#             Y4[i, j] = (-1)**bin(i).count('1')
+# rdm2X4 = np.matmul(rdm2, X4 / 16)
+# rdm2Y4 = np.matmul(rdm2, Y4 / 16)
+# trs = np.array([np.trace(np.linalg.matrix_power(rdm2E, n)) for n in range(1, 5)])
+# vs = [(trs[n - 1] - getPurity(2, 2)**(2*n - 2)) / getPurity(2, 2)**(2*n - 2) for n in range(1, 5)]
+# print(vs)
+# components = [rdm2, rdm2X4, rdm2Y4]
+# compNames = ['1', 'X', 'Y']
+# trace2 = 0
+# for i in range(len(components)):
+#     for j in range(len(components)):
+#         contribution = np.trace(np.matmul(components[i], components[j]))
+#         print([compNames[i], compNames[j], contribution])
+#         trace2 += contribution
+# print(trace2, trs[1])
+# import getRandomVariance
+# getRandomVariance.printExpected()
+# b = 1

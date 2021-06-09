@@ -5,6 +5,7 @@ from typing import List
 import pickle
 import sys
 import os
+import randomUs as ru
 
 
 def localVecsEstimate(psi: List[tn.Node], vs: List[List[np.array]], half='left'):
@@ -40,41 +41,51 @@ def localVecsEstimate(psi: List[tn.Node], vs: List[List[np.array]], half='left')
 n = int(sys.argv[1])
 NA = int(sys.argv[2])
 NB = NA
-# NB = int(sys.argv[3])
 half = 'left'
-# half = sys.argv[4]
 rep = sys.argv[3]
-homedir = sys.argv[4]
-mydir = homedir + '/XX_MPS_NA_' + str(NA) + '_NB_' + str(NB) + '_n_' + str(n)
-try:
-    os.mkdir(mydir)
-except FileExistsError:
-    pass
+theta = float(sys.argv[4]) * np.pi
+phi = float(sys.argv[5]) * np.pi
+homedir = sys.argv[6]
+for t in [0.1 * k for k in range(2, 11)]:
+    for p in [0.1 * k for k in range(11)]:
+        print('--------------------------')
+        mydir = homedir + '/XX_MPS_NA_' + str(NA) + '_NB_' + str(NB) + '_n_' + str(n) + '_t_' + str(np.round(t, 2)) + '_ph_' + str(np.round(p, 2))
+        try:
+            os.mkdir(mydir)
+        except FileExistsError:
+            pass
+        theta = t * np.pi
+        phi = p * np.pi
 
-with open(homedir + '/psiXX_NA_' + str(NA) + '_NB_' + str(NB), 'rb') as f:
-    psi = pickle.load(f)
-Sn = bops.getRenyiEntropy(psi, n, NA)
-with open(homedir + '/expected_MPS_NA_' + str(NA) + '_NB_' + str(NB) + '_n_' + str(n) + '_' + half, 'wb') as f:
-    pickle.dump(Sn, f)
-mySum = 0
-M = 1000
-if half == 'left':
-    steps = int(2 ** (NA * n))
-    for k in range(len(psi) - 1, NA - 1, -1):
-        psi = bops.shiftWorkingSite(psi, k, '<<')
-else:
-    steps = int(2 ** (NB * n))
-for m in range(M * steps):
-    if half == 'left':
-        vs = [[np.array([np.exp(1j * np.pi * np.random.randint(4) / 2), np.exp(1j * np.pi * np.random.randint(4) / 2)]) \
-               for alpha in range(NA)] for copy in range(n)]
-    else:
-        vs = [[np.array([np.exp(1j * np.pi * np.random.randint(4) / 2), np.exp(1j * np.pi * np.random.randint(4) / 2)]) \
-               for alpha in range(NB)] for copy in range(n)]
-    currEstimation = localVecsEstimate(psi, vs, half=half)
-    mySum += currEstimation
-    if m % M == M - 1:
-        print(m)
-        with open(mydir + '/NA_' + str(NA) + '_n_' + str(n) + '_' + rep + '_' + half + '_m_' + str(m), 'wb') as f:
-            pickle.dump(mySum / M, f)
+        with open(homedir + '/psiXX_NA_' + str(NA) + '_NB_' + str(NB), 'rb') as f:
+            psi = pickle.load(f)
+        Sn = bops.getRenyiEntropy(psi, n, NA)
+        with open(homedir + '/expected_MPS_NA_' + str(NA) + '_NB_' + str(NB) + '_n_' + str(n) + '_' + half, 'wb') as f:
+            pickle.dump(Sn, f)
         mySum = 0
+        M = 1000
+        if half == 'left':
+            steps = 20 # int(2 ** (NA * n))
+            for k in range(len(psi) - 1, NA - 1, -1):
+                psi = bops.shiftWorkingSite(psi, k, '<<')
+        else:
+            steps = int(2 ** (NB * n))
+        for m in range(M * steps):
+            if half == 'left':
+                vs = [[np.array([np.exp(1j * np.pi * np.random.randint(4) / 2), np.exp(1j * np.pi * np.random.randint(4) / 2)]) \
+                       for alpha in range(NA)] for copy in range(n)]
+            else:
+                vs = [[np.array([np.exp(1j * np.pi * np.random.randint(4) / 2), np.exp(1j * np.pi * np.random.randint(4) / 2)]) \
+                       for alpha in range(NB)] for copy in range(n)]
+            u = np.matmul(ru.getUTheta(theta, d=2), ru.getUPhi(phi, d=2))
+            for i in range(len(vs)):
+                for j in range(len(vs[0])):
+                    vs[i][j] = np.matmul(u, vs[i][j])
+            currEstimation = localVecsEstimate(psi, vs, half=half)
+            mySum += currEstimation
+            if m % M == M - 1:
+                with open(mydir + '/NA_' + str(NA) + '_n_' + str(n) + '_' + rep + '_' + half + '_m_' + str(m), 'wb') as f:
+                    pickle.dump(mySum / M, f)
+                print('+')
+                print(np.real(np.round(mySum / M, 3)))
+                mySum = 0
