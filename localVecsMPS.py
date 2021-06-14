@@ -46,7 +46,7 @@ rep = sys.argv[3]
 theta = float(sys.argv[4]) * np.pi
 phi = float(sys.argv[5]) * np.pi
 homedir = sys.argv[6]
-for t in [0.1 * k for k in range(2, 11)]:
+for t in [0.1 * k for k in range(11)]:
     for p in [0.1 * k for k in range(11)]:
         print('--------------------------')
         mydir = homedir + '/XX_MPS_NA_' + str(NA) + '_NB_' + str(NB) + '_n_' + str(n) + '_t_' + str(np.round(t, 2)) + '_ph_' + str(np.round(p, 2))
@@ -65,7 +65,7 @@ for t in [0.1 * k for k in range(2, 11)]:
         mySum = 0
         M = 1000
         if half == 'left':
-            steps = 20 # int(2 ** (NA * n))
+            steps = 200 # int(2 ** (NA * n))
             for k in range(len(psi) - 1, NA - 1, -1):
                 psi = bops.shiftWorkingSite(psi, k, '<<')
         else:
