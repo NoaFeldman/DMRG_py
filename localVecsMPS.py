@@ -43,9 +43,7 @@ NA = int(sys.argv[2])
 NB = NA
 half = 'left'
 rep = sys.argv[3]
-theta = float(sys.argv[4]) * np.pi
-phi = float(sys.argv[5]) * np.pi
-homedir = sys.argv[6]
+homedir = sys.argv[4]
 mydir = homedir + '/XX_MPS_NA_' + str(NA) + '_NB_' + str(NB) + '_n_' + str(n) + '_optimized'
 try:
     os.mkdir(mydir)
