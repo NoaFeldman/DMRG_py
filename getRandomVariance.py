@@ -6,6 +6,7 @@ import pepsExpect as pe
 import matplotlib.pyplot as plt
 import sys
 import basicAnalysis as ban
+import randomUs as ru
 
 eMat = np.eye(4)
 eMat[1, 2] = 1
@@ -131,27 +132,28 @@ def doubleMPSSite(site):
                             np.shape(site.tensor) + np.shape(site.tensor)), [0, 3, 1, 4, 2, 5]),
                [np.shape(site.tensor)[0]**2, np.shape(site.tensor)[1]**2, np.shape(site.tensor)[2]**2]))
 
-def XXVar(statesDir: str, outDir: str, NAs):
+def XXVar(statesDir: str, outDir: str, NA, theta, phi):
     maxBondDim = 100
-    vs = np.zeros(len(NAs) * 2, dtype=complex)
-    for i in range(len(NAs)):
-        NA = NAs[i]
-        with open(statesDir + 'psiXX_NA_' + str(NA) + '_NB_' + str(NA), 'rb') as f:
-            psi = pickle.load(f)
-            psiCopy = bops.relaxState(psi, 64)
-            vs[2 * i] = bops.getOverlap(psi, psiCopy)
-            bops.removeState(psi)
-        doublePsi = [None for j in range(len(psiCopy))]
-        for j in range(len(psiCopy)):
-            doublePsi[j] = doubleMPSSite(psiCopy[j])
-        doubleCopy = bops.copyState(doublePsi)
-        for j in range(NA):
-            doublePsi[j] = bops.permute(bops.multiContraction(doublePsi[j], E, '1', '0', cleanOr1=True), [0, 2, 1])
-        vs[2 * i + 1] = bops.getOverlap(doublePsi, doubleCopy)
+    res = np.zeros(2, dtype=complex)
+    U = tn.Node(np.matmul(ru.getUPhi(np.pi * phi / 2, 2), ru.getUTheta(np.pi * theta / 2, 2)))
+    with open(statesDir + 'psiXX_NA_' + str(NA) + '_NB_' + str(NA), 'rb') as f:
+        psi = pickle.load(f)
+    psiCopy = bops.relaxState(psi, 64)
+    res[0] = bops.getOverlap(psi, psiCopy)
+    bops.removeState(psi)
+    for i in range(NA):
+        psiCopy[i] = bops.permute(bops.multiContraction(psiCopy[i], U, '1', '0'), [0, 2, 1])
+    doublePsi = [None for j in range(len(psiCopy))]
+    for j in range(len(psiCopy)):
+        doublePsi[j] = doubleMPSSite(psiCopy[j])
+    doubleCopy = bops.copyState(doublePsi)
+    for j in range(NA):
+        doublePsi[j] = bops.permute(bops.multiContraction(doublePsi[j], E, '1', '0', cleanOr1=True), [0, 2, 1])
+    res[1] = bops.getOverlap(doublePsi, doubleCopy)
 
-    with open(outDir + 'XX_n1_Error', 'wb') as f:
-        pickle.dump(vs, f)
-    print(vs)
+    with open(outDir + 'XXVar_NA_' + str(NA) + '_t_' + str(theta) + '_p_' + str(phi), 'wb') as f:
+        pickle.dump(res, f)
+    print(res)
 
 def printExpected():
     print([expectedN(1, n) for n in range(1, 5)])
@@ -293,5 +295,7 @@ def toricTMatrix3():
 
 statesDir = sys.argv[1]
 outDir = sys.argv[2]
-NAs = [int(N) for N in sys.argv[3:]]
-XXVar(statesDir, outDir, NAs)
+NA = int(sys.argv[3])
+theta = np.round(float(sys.argv[4]), 1)
+phi = np.round(float(sys.argv[5]), 1)
+XXVar(statesDir, outDir, NA, theta, phi)
