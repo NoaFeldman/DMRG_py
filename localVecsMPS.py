@@ -46,7 +46,7 @@ rep = sys.argv[3]
 theta = float(sys.argv[4]) * np.pi
 phi = float(sys.argv[5]) * np.pi
 homedir = sys.argv[6]
-mydir = homedir + '/XX_MPS_NA_' + str(NA) + '_NB_' + str(NB) + '_n_' + str(n) + '_t_' + str(np.round(t, 2)) + '_ph_' + str(np.round(p, 2))
+mydir = homedir + '/XX_MPS_NA_' + str(NA) + '_NB_' + str(NB) + '_n_' + str(n) + '_optimized'
 try:
     os.mkdir(mydir)
 except FileExistsError:
