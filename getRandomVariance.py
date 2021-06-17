@@ -132,21 +132,18 @@ def doubleMPSSite(site):
                [np.shape(site.tensor)[0]**2, np.shape(site.tensor)[1]**2, np.shape(site.tensor)[2]**2]))
 
 def XXVar(statesDir: str, outDir: str, NAs):
+    maxBondDim = 100
     vs = np.zeros(len(NAs) * 2, dtype=complex)
     for i in range(len(NAs)):
         NA = NAs[i]
         with open(statesDir + 'psiXX_NA_' + str(NA) + '_NB_' + str(NA), 'rb') as f:
             psi = pickle.load(f)
-            psiCopy = bops.copyState(psi)
-            for k in range(NA * 2 - 1, 1, -1):
-                psi = bops.shiftWorkingSite(psi, k, '<<', maxBondDim=64)
+            psiCopy = bops.relaxState(psi, 64)
             vs[2 * i] = bops.getOverlap(psi, psiCopy)
-            bops.removeState(psiCopy)
-            bops.removeState(psi[NA:])
-            psi = psi[:NA]
-        doublePsi = [None for j in range(len(psi))]
-        for j in range(len(psi)):
-            doublePsi[j] = doubleMPSSite(psi[j])
+            bops.removeState(psi)
+        doublePsi = [None for j in range(len(psiCopy))]
+        for j in range(len(psiCopy)):
+            doublePsi[j] = doubleMPSSite(psiCopy[j])
         doubleCopy = bops.copyState(doublePsi)
         for j in range(NA):
             doublePsi[j] = bops.permute(bops.multiContraction(doublePsi[j], E, '1', '0', cleanOr1=True), [0, 2, 1])
@@ -271,30 +268,30 @@ def toricTMatrix3():
     return Tn
 
 
-T2, startVec = toricTMatrix2()
-# T2 = np.round(T2, 2)
-[w, v] = np.linalg.eig(T2)
-print(max(w)**(1/4))
-[w, v] = np.linalg.eig(np.transpose(T2))
-print(max(w)**(1/4))
-print((np.matmul(np.transpose(startVec), np.matmul(np.linalg.matrix_power(T2, 5), startVec)) / \
-      np.matmul(np.transpose(startVec), np.matmul(np.linalg.matrix_power(T2, 4), startVec)))**(1/4))
-T3 = toricTMatrix3()
-[w, v] = np.linalg.eig(T3)
-print(max(w)**(1/4))
-[w, v] = np.linalg.eig(np.transpose(T3))
-print(max(w)**(1/4))
+# T2, startVec = toricTMatrix2()
+# # T2 = np.round(T2, 2)
+# [w, v] = np.linalg.eig(T2)
+# print(max(w)**(1/4))
+# [w, v] = np.linalg.eig(np.transpose(T2))
+# print(max(w)**(1/4))
+# print((np.matmul(np.transpose(startVec), np.matmul(np.linalg.matrix_power(T2, 5), startVec)) / \
+#       np.matmul(np.transpose(startVec), np.matmul(np.linalg.matrix_power(T2, 4), startVec)))**(1/4))
+# T3 = toricTMatrix3()
+# [w, v] = np.linalg.eig(T3)
+# print(max(w)**(1/4))
+# [w, v] = np.linalg.eig(np.transpose(T3))
+# print(max(w)**(1/4))
 
 
-mat = np.eye(4) + 0.5*np.kron(X, X) + 0.5*np.kron(Y, Y)
-toricVar(np.array(range(1, 20)), tn.Node(mat))
+# mat = np.eye(4) + 0.5*np.kron(X, X) + 0.5*np.kron(Y, Y)
+# toricVar(np.array(range(1, 20)), tn.Node(mat))
 # mat = np.eye(4) + 0.5*np.kron(X, X) + 0.5*np.kron(Z, Z)
 # toricVar(np.array(range(1, 20)), tn.Node(mat), color='orange')
 # mat = np.eye(4) + 0.5*np.kron(Y, Y) + 0.5*np.kron(Z, Z)
 # toricVar(np.array(range(1, 20)), tn.Node(mat), color='green')
 # plt.show()
 
-# statesDir = sys.argv[1]
-# outDir = sys.argv[2]
-# NAs = [int(N) for N in sys.argv[3:]]
-# XXVar(statesDir, outDir, NAs)
+statesDir = sys.argv[1]
+outDir = sys.argv[2]
+NAs = [int(N) for N in sys.argv[3:]]
+XXVar(statesDir, outDir, NAs)

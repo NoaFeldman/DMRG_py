@@ -285,7 +285,7 @@ def permute(node: tn.Node, permutation) -> tn.Node:
 
 
 def svdTruncation(node: tn.Node, leftEdges: List[int], rightEdges: List[int],
-                  dir: str, maxBondDim=128, leftName='U', rightName='V',  edgeName='default', normalize=False, maxTrunc=8):
+                  dir: str, maxBondDim=128, leftName='U', rightName='V',  edgeName='default', normalize=False, maxTrunc=0):
     # np.seterr(all='raise')
     maxBondDim = getAppropriateMaxBondDim(maxBondDim,
                                           [node.edges[e] for e in leftEdges], [node.edges[e] for e in rightEdges])
@@ -412,7 +412,7 @@ def shiftWorkingSite(psi: List[tn.Node], k, dir, maxBondDim=None):
         tn.remove_node(pair)
     else:
         pair = tn.contract(psi[k][2] ^ psi[k+1][0])
-        [l, r, I] = svdTruncation(pair, [0, 1], [2, 3], '>>')
+        [l, r, I] = svdTruncation(pair, [0, 1], [2, 3], '>>', maxBondDim=maxBondDim)
         psi[k] = l
         psi[k + 1] = r
         tn.remove_node(pair)
@@ -548,3 +548,12 @@ def getTestState_unequalTwoStates(n, weight0):
     psi[n - 1].tensor[0, 0, 0] = weight0
     psi[n - 1].tensor[1, 1, 0] = np.sqrt(1 - weight0**2)
     return psi
+
+
+def relaxState(psi, maxBondDim):
+    psiCopy = copyState(psi)
+    for k in range(len(psi) - 1, 1, -1):
+        psiCopy = shiftWorkingSite(psiCopy, k, '<<', maxBondDim=maxBondDim)
+    for k in range(1, len(psi) - 1):
+        psiCopy = shiftWorkingSite(psiCopy, k, '>>', maxBondDim=maxBondDim)
+    return psiCopy

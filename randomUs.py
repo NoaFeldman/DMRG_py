@@ -109,7 +109,7 @@ def getNonUnitaryRandomOps(d, randOption, theta=None, phi=None, vecsNum=2, direc
             vecs[i] = np.random.randint(2, size=d) * 2 - 1
         elif randOption == 'gaussian':
             vecs[i] = np.random.randn(2)
-    if not theta == None and phi == None:
+    if not (theta == None and phi == None):
         u = np.matmul(getUTheta(theta, d), getUPhi(phi, d))
         for i in range(len(vecs)):
             vecs[i] = np.matmul(u, vecs[i])
