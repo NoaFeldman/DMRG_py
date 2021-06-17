@@ -51,8 +51,8 @@ try:
     os.mkdir(mydir)
 except FileExistsError:
     pass
-theta = np.pi / 4
-phi = np.pi / 4
+theta = np.pi / 5
+phi = np.pi / 5
 U = tn.Node(np.matmul(ru.getUPhi(np.pi * phi / 2, 2), ru.getUTheta(np.pi * theta / 2, 2)))
 
 with open(homedir + '/psiXX_NA_' + str(NA) + '_NB_' + str(NB), 'rb') as f:
