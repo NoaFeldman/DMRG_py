@@ -77,10 +77,6 @@ for m in range(M * steps):
     else:
         vs = [[np.array([np.exp(1j * np.pi * np.random.randint(4) / 2), np.exp(1j * np.pi * np.random.randint(4) / 2)]) \
                for alpha in range(NB)] for copy in range(n)]
-    u = np.matmul(ru.getUTheta(theta, d=2), ru.getUPhi(phi, d=2))
-    for i in range(len(vs)):
-        for j in range(len(vs[0])):
-            vs[i][j] = np.matmul(u, vs[i][j])
     currEstimation = localVecsEstimate(psi, vs, half=half)
     mySum += currEstimation
     if m % M == M - 1:
