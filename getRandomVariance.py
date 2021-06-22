@@ -298,4 +298,6 @@ outDir = sys.argv[2]
 NA = int(sys.argv[3])
 theta = np.round(float(sys.argv[4]), 1)
 phi = np.round(float(sys.argv[5]), 1)
-XXVar(statesDir, outDir, NA, theta, phi)
+NAs = [4, 8, 12, 16, 20]
+for NA in NAs:
+    XXVar(statesDir, outDir, NA, theta, phi)
