@@ -18,21 +18,32 @@ def findResults(n, N, opt='p'):
                 return file
 
 
-getPrecision = False
+getPrecision = True
 M = 1000
-Ns = [4 * k for k in range(1, 7)]
 colors = ['#0000FF', '#9D02D7', '#EA5F94', '#FA8775', '#FFB14E', '#FFD700']
 vcolors = ['#930043', '#ff6f3c', '#ff9200', '#2f0056']
 legends = []
-option = 'toric'
-varianceNormalizations = [1.23, 1.56, 2, 1.55]
+option = 'MPS'
+
+if option == 'toric':
+    Ns = [4 * k for k in range(1, 7)]
+    varianceNormalizations = [1.23, 1.56, 2, 1.55]
+    ns = [2, 3, 4, 3]
+elif option == 'MPS':
+    Ns = [4 * k for k in range(1, 6)]
+    varianceNormalizations = [1.59, 1.79, 2.04]
+    ns = [2, 3, 4]
 Vs = np.zeros(len(Ns))
-ns = [2, 3, 4, 3]
 if getPrecision:
-    f, axs = plt.subplots(4, 1, gridspec_kw = {'wspace':0, 'hspace':0}, sharex='all')
-p2s = []
-for i in range(len(Ns)):
-    p2s.append(toricCode.getPurity(2, (i + 1) * 2))
+    f, axs = plt.subplots(len(ns), 1, gridspec_kw = {'wspace':0, 'hspace':0}, sharex='all')
+
+def getExpected(option, NA, n):
+    if option == 'toric':
+        p2 = toricCode.getPurity(2, int(NA / 4) * 2)
+        return p2**(n-1)
+    elif option == 'MPS':
+        with open('results/expected_' + option + '_NA_' + str(NA) + '_n_' + str(n), 'rb') as f:
+            return pickle.load(f)
 dops = True
 if dops:
     for ni in range(len(ns)):
@@ -43,15 +54,19 @@ if dops:
             spaceSize = d**N
             if n == 2:
                 legends.append(r'$N_A = ' + str(N) + '$')
-            with open('./results/organized_' + option + '_' + str(n) + '_' + str(N), 'rb') as f:
-                organized = np.array(pickle.load(f))
+            if option == 'toric':
+                with open('./results/organized_' + option + '_' + str(n) + '_' + str(N), 'rb') as f:
+                    organized = np.array(pickle.load(f))
+            elif option == 'MPS':
+                with open('results/organized_' + option + '_optimized_' + str(n) + '_' + str(N), 'rb') as f:
+                    organized = np.array(pickle.load(f))
+                    organized = organized[organized < 40000]
             if n == 2 and N == 24:
                 organized /= 1.02
                 # with open('./results/organized_' + option + '_' + str(n) + '_' + str(N), 'wb') as f:
                 #     pickle.dump(organized, f)
                 b = 1
-            p2 = p2s[i]
-            expected = p2**(n-1)
+            expected = getExpected(option, N, n)
             if getPrecision:
                 numOfExperiments = 10
                 numOfMixes = 20
@@ -84,7 +99,7 @@ if dops:
             Vs[3] *= 0.7
             Vs = np.array([v * (1 + np.random.rand() * 0.3) for v in Vs])
             lineOpt = '--k'
-        ban.linearRegression(Ns, Vs + 1, vcolors[ni], r'$p_' + str(n) + '$', show=False, lineOpt=lineOpt, zorder=5*ni)
+        # ban.linearRegression(Ns, Vs + 1, vcolors[ni], r'$p_' + str(n) + '$', show=False, lineOpt=lineOpt, zorder=5*ni)
 
 
 doR3 = False
