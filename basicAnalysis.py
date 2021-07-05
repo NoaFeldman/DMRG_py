@@ -12,6 +12,7 @@ def linearRegression(Ns, Vs, color='blue', label='', show=True, lineOpt='-k', zo
     plt.xticks(Ns)
     if show:
         plt.show()
+    return coef[0]
 
 def variance(organized, expected=None):
     organized = np.array(organized)

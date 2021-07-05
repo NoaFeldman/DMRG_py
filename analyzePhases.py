@@ -55,4 +55,22 @@ def colorMap(thetas, phis, dir, NA):
     plt.xlabel(r'$\theta$')
     plt.ylabel(r'$\phi$')
     plt.show()
-colorMap([0.1 * k for k in range(11)], [0.1 * k for k in range(11)], 'results/XXPhases/organized_XX_', 20)
+# colorMap([0.1 * k for k in range(11)], [0.1 * k for k in range(11)], 'results/XXPhases/organized_XX_', 20)
+ts = [np.round(0.1 * k, 1) for k in range(6)]
+ps = [np.round(0.1 * k, 1) for k in range(6)]
+res = np.zeros((len(ts), len(ps)))
+for t in range(len(ts)):
+    for p in range(len(ps)):
+        Ns = [4 * k for k in range(1, 6)]
+        vs = np.zeros(len(Ns))
+        for n in range(len(Ns)):
+            with open('results/XXVars/XXVar_NA_' + str(Ns[n]) + '_t_' + str(np.round(ts[t], 1)) + '_p_' + str(np.round(ps[p], 1)), 'rb') as f:
+                vs[n] = pickle.load(f)[1]
+        V = ban.linearRegression(Ns, vs, show=False)
+        res[t, p] = V
+plt.show()
+plt.pcolormesh(ts, ps, res)
+plt.colorbar()
+plt.xlabel(r'$\theta/\pi$')
+plt.ylabel(r'$\phi/\pi$')
+plt.show()

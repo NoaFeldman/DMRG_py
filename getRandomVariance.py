@@ -105,7 +105,6 @@ def toricVar(ls: np.array, op=E, color='blue'):
     # [qCUp, qDUp, te] = bops.svdTruncation(qUpRow, [0, 1], [2, 3], '>>')
     # [qCDown, qDDown, te] = bops.svdTruncation(qDownRow, [0, 1], [2, 3], '>>')
 
-
     hs = ls * 2
     vs = np.zeros(len(hs))
     v2s = np.zeros(len(hs))
@@ -123,9 +122,10 @@ def toricVar(ls: np.array, op=E, color='blue'):
         # ops = [tn.Node(np.eye(d**4)) for i in range(w * h)]
         # v2s[i] = pe.applyLocalOperators(qCUp, qDUp, qCDown, qDDown, qLeftRow, qRightRow, qA, qB, w, h, ops)
     print(vs)
-    print([expected(l) for l in ls])
+    # print([expected(l) for l in ls])
 
-    ban.linearRegression(ls * 4, vs, show=False, color=color)
+    # ban.linearRegression(ls * 4, vs, show=False, color=color)
+    return vs
 
 def doubleMPSSite(site):
     return tn.Node(np.reshape(np.transpose(np.reshape(np.outer(site.tensor, site.tensor),
@@ -286,11 +286,11 @@ def toricTMatrix3():
 
 
 # mat = np.eye(4) + 0.5*np.kron(X, X) + 0.5*np.kron(Y, Y)
-# toricVar(np.array(range(1, 20)), tn.Node(mat))
+# toricVar(np.array(range(1, 5)), tn.Node(mat))
 # mat = np.eye(4) + 0.5*np.kron(X, X) + 0.5*np.kron(Z, Z)
-# toricVar(np.array(range(1, 20)), tn.Node(mat), color='orange')
+# toricVar(np.array(range(1, 5)), tn.Node(mat), color='orange')
 # mat = np.eye(4) + 0.5*np.kron(Y, Y) + 0.5*np.kron(Z, Z)
-# toricVar(np.array(range(1, 20)), tn.Node(mat), color='green')
+# toricVar(np.array(range(1, 5)), tn.Node(mat), color='green')
 # plt.show()
 
 # statesDir = sys.argv[1]
@@ -301,3 +301,28 @@ def toricTMatrix3():
 # NAs = [4, 8, 12, 16, 20]
 # for NA in NAs:
 #     XXVar(statesDir, outDir, NA, theta, phi)
+
+ls = np.array(range(6))
+ts = [np.round(0.1 * k, 1) for k in range(6)]
+ps = [np.round(0.1 * k, 1) for k in range(6)]
+res = np.zeros((len(ts), len(ps)))
+import randomUs as ru
+for it in range(len(ts)):
+    for ip in range(len(ps)):
+        theta = ts[it] * np.pi
+        phi = ps[ip] * np.pi
+        mat = np.eye(4) + 0.5 * np.kron(X, X) + 0.5 * np.kron(Y, Y)
+        up = np.kron(ru.getUPhi(phi, 2), ru.getUPhi(phi, 2))
+        ut = np.kron(ru.getUTheta(theta, 2), ru.getUTheta(theta, 2))
+        emat = np.matmul(up, np.matmul(ut, np.matmul(mat,
+                        np.matmul(np.conj(np.transpose(ut)), np.conj(np.transpose(up))))))
+        op = tn.Node(emat)
+        vs = toricVar(ls, op=op)
+        V = ban.linearRegression(ls * 4, vs, show=False)
+        res[it, ip] = V
+plt.show()
+plt.pcolormesh(ts, ps, res)
+plt.colorbar()
+plt.xlabel(r'$\theta/\pi$')
+plt.ylabel(r'$\phi/\pi$')
+plt.show()
