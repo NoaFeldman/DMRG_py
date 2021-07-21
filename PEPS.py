@@ -6,7 +6,7 @@ import randomMeasurements as rm
 import sys
 import tensornetwork as tn
 
-chi = 16
+chi = 256
 
 
 def bmpsRowStep(gammaL, lambdaMid, gammaR, lambdaSide, envOp):
@@ -17,6 +17,7 @@ def bmpsRowStep(gammaL, lambdaMid, gammaR, lambdaSide, envOp):
                               lambdaSide, '3', '0', cleanOr1=True, isDiag2=True)
     opRow = bops.permute(bops.multiContraction(row, envOp, '12', '01', cleanOr1=True), [0, 2, 4, 5, 1, 3])
     [U, S, V, truncErr] = bops.svdTruncation(opRow, [0, 1, 2], [3, 4, 5], dir='>*<', maxBondDim=chi)
+    print(np.max(truncErr))
     newLambdaMid = bops.multNode(S, 1 / np.sqrt(sum(S.tensor**2)))
     lambdaSideInv = tn.Node(np.array([1 / val if val > 1e-15 else 0 for val in lambdaSide.tensor], dtype=complex))
     newGammaL = bops.multiContraction(lambdaSideInv, U, '1', '0', cleanOr2=True, isDiag1=True)
@@ -80,7 +81,10 @@ def getBMPSRowOps(GammaC, LambdaC, GammaD, LambdaD, AEnv, BEnv, steps):
         #     convergence.append(
         #         checkConvergence(oldGammaC, oldLambdaC, oldGammaD, oldLambdaD, GammaC, LambdaC, GammaD, LambdaD, 2))
         bops.removeState([oldGammaC, oldLambdaC, oldGammaD, oldLambdaD])
-
+        print(GammaC.tensor.shape)
+        print(LambdaC.tensor.shape)
+        print(GammaD.tensor.shape)
+        print(LambdaD.tensor.shape)
     # cUp = bops.multiContraction(GammaC, LambdaC, '2', '0', isDiag2=True)
     # dUp = bops.multiContraction(GammaD, LambdaD, '2', '0', isDiag2=True)
     # GammaC, LambdaC, GammaD, LambdaD = bmpsRowStep(GammaC, LambdaC, GammaD, LambdaD, op)

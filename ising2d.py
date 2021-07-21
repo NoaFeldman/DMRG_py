@@ -20,6 +20,7 @@ def getBMPS(hs, steps):
         A = bops.permute(A, [1, 2, 3, 0, 4])
         B = tn.Node(BTensor)
         B = bops.permute(B, [1, 2, 3, 0, 4])
+        print('23')
 
         def toEnvOperator(op):
             result = bops.unifyLegs(bops.unifyLegs(bops.unifyLegs(bops.unifyLegs(
@@ -39,29 +40,24 @@ def getBMPS(hs, steps):
             [C, D, te] = bops.svdTruncation(curr, [0, 1, 2, 3], [4, 5, 6, 7], '>>', normalize=True)
             curr = bops.permute(bops.multiContraction(D, C, '23', '12'), [1, 3, 0, 5, 2, 4])
             curr = bops.permute(bops.multiContraction(curr, envOpAB, '45', '01'), [0, 2, 4, 6, 1, 3, 5, 7])
+        print('43')
 
         b = 1
         currAB = curr
 
-        rowTensor = np.zeros((11, 4, 4, 11), dtype=complex)
-        rowTensor[0, 3, 3, 0] = 1
-        rowTensor[1, 3, 3, 2] = 1
-        rowTensor[2, 3, 3, 3] = 1
-        rowTensor[3, 3, 0, 4] = 1
-        rowTensor[4, 0, 3, 1] = 1
-        rowTensor[5, 3, 3, 6] = 1
-        rowTensor[6, 3, 0, 7] = 1
-        rowTensor[7, 0, 3, 8] = 1
-        rowTensor[8, 3, 3, 5] = 1
-        row = tn.Node(rowTensor)
+        # rowTensor = np.zeros((13, 4, 4, 13), dtype=complex)
+        # for i in range(13 * 4 * 4):
+        #     rowTensor[np.random.randint(0, 13), np.random.randint(0, 4), np.random.randint(0, 4), np.random.randint(0, 13)] *= np.random.randint(0, 2) * 2 - 1
+        # row = tn.Node(rowTensor)
 
-        print('60')
-        upRow = bops.unifyLegs(bops.unifyLegs(bops.unifyLegs(bops.unifyLegs(
-            bops.permute(bops.multiContraction(row, tn.Node(currAB.tensor), '12', '04'), [0, 2, 3, 4, 7, 1, 5, 6]), 5, 6), 5, 6), 0, 1), 0, 1)
+        # upRow = bops.unifyLegs(bops.unifyLegs(bops.unifyLegs(bops.unifyLegs(
+        #     bops.permute(bops.multiContraction(row, tn.Node(currAB.tensor), '12', '04'), [0, 2, 3, 4, 7, 1, 5, 6]), 5, 6), 5, 6), 0, 1), 0, 1)
+
+        with open('ising/bmpsResults_' + str(2.9), 'rb') as f:
+            [upRow, downRow, leftRow, rightRow, openA, openB, A, B] = pickle.load(f)
         [C, D, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>', normalize=True)
         upRow = bops.multiContraction(D, C, '2', '0')
         [cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>', normalize=True)
-
         GammaC, LambdaC, GammaD, LambdaD = peps.getBMPSRowOps(cUp, tn.Node(np.ones(cUp[2].dimension)), dUp,
                                                     tn.Node(np.ones(dUp[2].dimension)), AEnv, BEnv, steps)
         cUp = bops.multiContraction(GammaC, LambdaC, '2', '0', isDiag2=True)
@@ -87,6 +83,7 @@ def getBMPS(hs, steps):
         print(h, getM(ordered))
         with open('ising/bmpsResults_' + str(h), 'wb') as f:
             pickle.dump([upRow, downRow, leftRow, rightRow, openA, openB, A, B], f)
+        print(h)
 
 
 def getM(orderedDM: np.array, NA=4):
@@ -95,9 +92,13 @@ def getM(orderedDM: np.array, NA=4):
         M += orderedDM[i, i] * bin(i).count("1") - orderedDM[i, i] * (NA - bin(i).count("1"))
     return M
 
+# getBMPS([2.7, 2.8], 20)
+
 hs = [0.1 * k for k in range(51)]
 Ms = [0] * len(hs)
 p2s = [0] * len(hs)
+p3s = [0] * len(hs)
+p4s = [0] * len(hs)
 for i in range(len(hs)):
     h = np.round(hs[i], 1)
     if h == int(h):
@@ -123,14 +124,18 @@ for i in range(len(hs)):
     ordered = np.round(np.reshape(dm.tensor, [16, 16]), 14)
     ordered /= np.trace(ordered)
     Ms[i] = getM(ordered)
-    p2s[i] = np.trace(np.matmul(ordered, ordered))
+    p2s[i] = np.trace(np.linalg.matrix_power(ordered, 2))
+    p3s[i] = np.trace(np.linalg.matrix_power(ordered, 3))
+    p4s[i] = np.trace(np.linalg.matrix_power(ordered, 4))
 plt.scatter(hs, np.abs(Ms))
 plt.xlabel('h')
 plt.ylabel('|M|')
 plt.show()
 plt.plot(hs, p2s)
+plt.plot(hs, p3s)
+plt.plot(hs, p4s)
 plt.xlabel('h')
-plt.ylabel(r'$p_2$')
+plt.legend([r'$p_2$', r'$p_3$', r'$p_4$'])
 plt.title(r'2nd Renyi moment for a $2\times2$ system (calculated with the explicit RDM)')
 plt.show()
 

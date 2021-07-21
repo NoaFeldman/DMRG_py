@@ -14,7 +14,7 @@ colors = ['blueviolet', 'blue', 'deepskyblue', 'green', 'yellowgreen', 'orange']
 vcolors = ['blueviolet', 'deepskyblue', 'green', 'orange']
 f, axs = plt.subplots(4, 1, gridspec_kw = {'wspace':0, 'hspace':0})
 
-for n in [1, 2, 3, 4]:
+for n in [2, 3, 4]:
     for i in range(len(Ns)):
         N = Ns[i]
         if n == 1:
