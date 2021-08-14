@@ -8,7 +8,7 @@ import os
 import randomUs as ru
 
 
-def localVecsEstimate(psi: List[tn.Node], vs: List[List[np.array]], half='left'):
+def localVecsEstimate(psi: List[tn.Node], vs: List[List[np.array]], option='', half='left'):
     vs = np.round(vs, 10)
     n = len(vs)
     result = 1
@@ -22,6 +22,9 @@ def localVecsEstimate(psi: List[tn.Node], vs: List[List[np.array]], half='left')
             curr = bops.multiContraction(psi[len(psi) - NA - 1], psi[len(psi) - NA - 1], '01', '01*')
             sites = range(NA, len(psi))
         psiCopy = bops.copyState(psi)
+        if option == 'flux':
+            for alpha in sites:
+                psiCopy[alpha] = bops.permute(bops.multiContraction(psiCopy[alpha], fourierTensor, '1', '0'), [0, 2, 1])
         for alpha in sites:
             toEstimate = np.outer(vs[copy][alpha - NA], np.conj(vs[np.mod(copy + 1, n)][alpha - NA]))
             psiCopy[alpha] = bops.permute(bops.multiContraction(psiCopy[alpha], tn.Node(toEstimate), \
@@ -44,7 +47,18 @@ NB = NA
 half = 'left'
 rep = sys.argv[3]
 homedir = sys.argv[4]
+with open(homedir + '/psiXX_NA_' + str(NA) + '_NB_' + str(NB), 'rb') as f:
+    psi = pickle.load(f)
+option = sys.argv[5]
 mydir = homedir + '/XX_MPS_NA_' + str(NA) + '_NB_' + str(NB) + '_n_' + str(n) + '_optimized'
+if option == 'flux':
+    alphaInd = int(sys.argv[6])
+    alpha = np.pi * alphaInd / (2 * NA)
+    mydir += '_flux_' + str(alphaInd)
+    fourierOp = np.eye(2, dtype=complex)
+    fourierOp[0, 0] *= np.exp(-1j * alpha)
+    fourierOp[1, 1] *= np.exp(1j * alpha)
+    fourierTensor = tn.Node(fourierOp)
 try:
     os.mkdir(mydir)
 except FileExistsError:
@@ -53,9 +67,8 @@ theta = np.pi / 5
 phi = np.pi / 5
 U = tn.Node(np.matmul(ru.getUPhi(np.pi * phi / 2, 2), ru.getUTheta(np.pi * theta / 2, 2)))
 
-with open(homedir + '/psiXX_NA_' + str(NA) + '_NB_' + str(NB), 'rb') as f:
-    psi = pickle.load(f)
 Sn = bops.getRenyiEntropy(psi, n, NA)
+print(Sn)
 with open(homedir + '/expected_MPS_NA_' + str(NA) + '_NB_' + str(NB) + '_n_' + str(n) + '_' + half, 'wb') as f:
     pickle.dump(Sn, f)
 mySum = 0
@@ -77,11 +90,11 @@ for m in range(M * steps):
     else:
         vs = [[np.array([np.exp(1j * np.pi * np.random.randint(4) / 2), np.exp(1j * np.pi * np.random.randint(4) / 2)]) \
                for alpha in range(NB)] for copy in range(n)]
-    currEstimation = localVecsEstimate(psi, vs, half=half)
+    currEstimation = localVecsEstimate(psi, vs, option=option, half=half)
     mySum += currEstimation
     if m % M == M - 1:
         with open(mydir + '/NA_' + str(NA) + '_n_' + str(n) + '_' + rep + '_' + half + '_m_' + str(m), 'wb') as f:
             pickle.dump(mySum / M, f)
         print('+')
-        print(np.real(np.round(mySum / M, 3)))
+        print(np.round(mySum / M, 3))
         mySum = 0
