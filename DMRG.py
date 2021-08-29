@@ -73,8 +73,6 @@ def getHLR(psi, l, H, dir, HLRold):
             psilConj[1] ^ singlel[1]
             opSum1 = tn.contract_between(psil, \
                      tn.contract_between(singlel, psilConj), name='operator-sum')
-            if np.max(opSum1.tensor) > 100:
-                g=1
             if l > 0:
                 psil = bops.copyState([psi[l]], conj=False)[0]
                 psilConj = bops.copyState([psi[l]], conj=True)[0]
@@ -87,8 +85,6 @@ def getHLR(psi, l, H, dir, HLRold):
                 r2l_l[2] ^ HLRoldCopy[2]
                 opSum2 = tn.contract_between(psil, tn.contract_between(psilConj, tn.contract_between(r2l_l, HLRoldCopy)))
                 opSum1 = bops.addNodes(opSum1, opSum2)
-                if np.max(opSum1.tensor) > 100:
-                    g = 1
 
             psil = bops.copyState([psi[l]], conj=False)[0]
             psilConj = bops.copyState([psi[l]], conj=True)[0]
@@ -98,8 +94,6 @@ def getHLR(psi, l, H, dir, HLRold):
             psil[1] ^ psilConj[1]
             opSum3 = tn.contract_between(psil, tn.contract_between(psilConj, HLRoldCopy))
             opSum1 = bops.addNodes(opSum1, opSum3)
-            if np.max(opSum1.tensor) > 100:
-                g=1
 
             if l < len(psi) - 1:
                 psil = bops.copyState([psi[l]], conj=False)[0]
@@ -189,7 +183,7 @@ def getIdentity(psi, k, dir):
 
 
 def getTridiagonal(HL, HR, H, k, psi, psiCompare=None):
-    accuracy = 1e-10 # 1e-12
+    accuracy = 1e-17 # 1e-12
 
     v = bops.multiContraction(psi[k], psi[k + 1], '2', '0')
     # Small innaccuracies ruin everything!
@@ -367,11 +361,11 @@ def getGroundState(H, HLs, HRs, psi, psiCompare=None, accuration=10**(-7)):
     [psi, E0, truncErr, HLs, HRs] = dmrgSweep(psi, H, HLs, HRs, psiCompare)
     truncErrs.append(truncErr)
     while True:
-        [psi, E0Curr, truncErr, HLs, HRs] = dmrgSweep(psi, H, HLs, HRs, psiCompare)
+        [psi, ECurr, truncErr, HLs, HRs] = dmrgSweep(psi, H, HLs, HRs, psiCompare)
         truncErrs.append(truncErr)
-        if np.abs((E0Curr-E0)/E0) < accuration:
-            return psi, E0Curr, truncErrs
-        E0 = E0Curr
+        if np.abs((ECurr - E0) / E0) < accuration:
+            return psi, ECurr, truncErrs
+        E0 = ECurr
 
 
 def stateEnergy(psi: List[tn.Node], H: HOp):
@@ -400,4 +394,19 @@ def stateEnergy(psi: List[tn.Node], H: HOp):
         tn.remove_node(r2l)
         tn.remove_node(l2r)
     return E
+
+example = True
+if example:
+    XX = np.zeros((4, 4), dtype=complex)
+    for i in range(4):
+        XX[i, 4-1-i] = 1
+    Z = np.zeros((2, 2), dtype=complex)
+    Z[0, 0] = 1
+    Z[1, 1] = -1
+    N = 16
+    H = getDMRGH(N, [np.copy(Z) * 0.5 for i in range(N)], [np.copy(XX) for i in range(N-1)])
+    psi0 = bops.getStartupState(N)
+    HLs, HRs = getHLRs(H, psi0)
+    gs, E0, truncErrs = getGroundState(H, HLs, HRs, psi0)
+    print(E0)
 

@@ -3,6 +3,35 @@ import numpy as np
 import math
 from typing import Any, Dict, List, Optional, Set, Text, Tuple, Union, \
     Sequence, Iterable, Type
+import jax.numpy as jnp
+import torch
+
+def torchTranspose(arr, dim):
+    return arr.permute(dim)
+
+# BACKEND = 'numpy' # tensorflow, pytorch, numpy, symmetric
+def init(backend, dev=None):
+    global BACKEND
+    global transpose
+    global reshape
+    global device
+    global dtype
+    BACKEND = backend
+    tn.set_default_backend(BACKEND)
+    if BACKEND == 'numpy':
+        transpose = np.transpose
+        reshape = np.reshape
+    elif BACKEND == 'jax':
+        transpose = jnp.transpose
+        reshape = jnp.reshape
+    elif BACKEND == 'pytorch':
+        transpose = torchTranspose
+        reshape = torch.reshape
+        device = torch.device(dev)
+        dtype = torch.float
+
+
+init('pytorch', 'cpu')
 
 
 def getLegsSplitterTensor(dim1, dim2):
@@ -16,7 +45,7 @@ def getLegsSplitterTensor(dim1, dim2):
 # Assumes unified legs are in consecutive order
 def unifyLegs(node: tn.Node, leg1: int, leg2: int, cleanOriginal=True) -> tn.Node:
     shape = node.get_tensor().shape
-    newTensor = np.reshape(node.get_tensor(), list(shape[:leg1]) + [shape[leg1] * shape[leg2]] + list(shape[leg2 + 1:]))
+    newTensor = reshape(node.get_tensor(), list(shape[:leg1]) + [shape[leg1] * shape[leg2]] + list(shape[leg2 + 1:]))
     if cleanOriginal:
         tn.remove_node(node)
     return tn.Node(newTensor)
@@ -31,7 +60,7 @@ def getStartupState(n, d=2, mode='general'):
             baseLeftTensor[0, 0, 1] = 1
         elif d == 3:
             print("TODO")
-        psi[0] = tn.Node(baseLeftTensor, name='site0', axis_names=['v0', 's0', 'v1'], backend=None)
+        psi[0] = tn.Node(baseLeftTensor, name='site0', axis_names=['v0', 's0', 'v1'], backend=BACKEND)
         if d == 2:
             baseMiddleTensor = np.zeros((2, 2, 2), dtype=complex)
             baseMiddleTensor[0, 1, 0] = -1 / math.sqrt(2)
@@ -43,7 +72,7 @@ def getStartupState(n, d=2, mode='general'):
         for i in range(1, n-1):
             psi[i] = tn.Node(baseMiddleTensor, name=('site' + str(i)),
                                    axis_names=['v' + str(i), 's' + str(i), 'v' + str(i+1)],
-                                   backend=None)
+                                   backend=BACKEND)
         if d == 2:
             baseRightTensor = np.zeros((2, 2, 1), dtype=complex)
             baseRightTensor[0, 1, 0] = -1 / math.sqrt(2)
@@ -52,7 +81,7 @@ def getStartupState(n, d=2, mode='general'):
             print("TODO")
         psi[n - 1] = tn.Node(baseRightTensor, name=('site' + str(n - 1)),
                                    axis_names=['v' + str(n - 1), 's' + str(n - 1), 'v' + str(n)],
-                                   backend=None)
+                                   backend=BACKEND)
         norm = getOverlap(psi, psi)
         psi[n-1] = multNode(psi[n-1], 1/np.sqrt(norm))
         return psi
@@ -65,7 +94,7 @@ def getStartupState(n, d=2, mode='general'):
             baseLeftTensor = np.zeros((1, 3, 1), dtype=complex)
             baseLeftTensor[0, 0, 0] = 1
         psi[0] = tn.Node(baseLeftTensor, name='site0', axis_names=['v0', 's0', 'v1'],
-                         backend=None)
+                         backend=BACKEND)
         if d == 2:
             baseMiddleTensorEven = np.zeros((2, 2, 2), dtype=complex)
             baseMiddleTensorEven[0, 0, 0] = 1
@@ -82,11 +111,11 @@ def getStartupState(n, d=2, mode='general'):
             if i % 2 == 0:
                 psi[i] = tn.Node(baseMiddleTensorEven, name=('site' + str(i)),
                              axis_names=['v' + str(i), 's' + str(i), 'v' + str(i + 1)],
-                             backend=None)
+                             backend=BACKEND)
             else:
                 psi[i] = tn.Node(baseMiddleTensorOdd, name=('site' + str(i)),
                                  axis_names=['v' + str(i), 's' + str(i), 'v' + str(i + 1)],
-                                 backend=None)
+                                 backend=BACKEND)
         if d == 2:
             baseRightTensor = np.zeros((2, 2, 1), dtype=complex)
             baseRightTensor[0, 1, 0] = 1
@@ -96,7 +125,7 @@ def getStartupState(n, d=2, mode='general'):
             baseRightTensor[0, 2, 0] = 1
         psi[n - 1] = tn.Node(baseRightTensor, name=('site' + str(n - 1)),
                              axis_names=['v' + str(n - 1), 's' + str(n - 1), 'v' + str(n)],
-                             backend=None)
+                             backend=BACKEND)
         norm = getOverlap(psi, psi)
         psi[n - 1] = multNode(psi[n - 1], 1 / np.sqrt(norm))
         return psi
@@ -109,42 +138,11 @@ def getStartupState(n, d=2, mode='general'):
         for i in range(n):
             psi[i] = tn.Node(baseTensor, name=('site' + str(i)),
                                  axis_names=['v' + str(i), 's' + str(i), 'v' + str(i + 1)],
-                                 backend=None)
+                                 backend=BACKEND)
         norm = getOverlap(psi, psi)
         psi[n - 1] = multNode(psi[n - 1], 1 / np.sqrt(norm))
         return psi
-    elif mode == 'pbc':
-        connectorsUnifierTensor = getLegsUnifierTensor(2, 2)
-        physicalUnifierTensor = getLegsUnifierTensor(d, d)
-        baseTensor = np.zeros((2, 3, 2), dtype=complex)
-        baseTensor[0, 0, 1] = np.sqrt(2 / 3)
-        baseTensor[0, 1, 0] = -np.sqrt(1 / 3)
-        baseTensor[1, 1, 1] = np.sqrt(1 / 3)
-        baseTensor[1, 2, 0] = -np.sqrt(2 / 3)
-        baseLeftTensor = np.tensordot(baseTensor, baseTensor, axes=([0], [2]))
-        baseLeftTensor = np.tensordot(baseLeftTensor, physicalUnifierTensor, axes=([0, 3], [0, 1]))
-        baseLeftTensor = np.tensordot(baseLeftTensor, connectorsUnifierTensor, axes=([0, 1], [0, 1]))
-        baseLeftTensor = np.reshape(baseLeftTensor, [1, baseLeftTensor.shape[0], baseLeftTensor.shape[1]])
-        psi[0] = tn.Node(baseLeftTensor, name='site0', axis_names=['v0', 's0', 'v1'],
-                         backend=None)
-        baseMiddleTensor = np.tensordot(connectorsUnifierTensor, baseTensor, axes=([0], [0]))
-        baseMiddleTensor = np.tensordot(baseMiddleTensor, baseTensor, axes=([0], [2]))
-        baseMiddleTensor = np.tensordot(baseMiddleTensor, physicalUnifierTensor, axes=([1, 4], [0, 1]))
-        baseMiddleTensor = np.tensordot(baseMiddleTensor, connectorsUnifierTensor, axes=([1, 2], [0, 1]))
-        for i in range(1, n-1):
-            psi[i] = tn.Node(baseMiddleTensor, name=('site' + str(i)),
-                                   axis_names=['v' + str(i), 's' + str(i), 'v' + str(i+1)],
-                                   backend=None)
-        baseRightTensor = np.tensordot(baseTensor, baseTensor, axes=([2], [0]))
-        baseRightTensor = np.tensordot(connectorsUnifierTensor, baseRightTensor, axes=([0, 1], [0, 3]))
-        baseRightTensor = np.tensordot(baseRightTensor, physicalUnifierTensor, axes=([1, 2], [0, 1]))
-        baseRightTensor = np.reshape(baseRightTensor, [baseRightTensor.shape[0], baseRightTensor.shape[1], 1])
-        psi[n - 1] = tn.Node(baseRightTensor, name=('site' + str(n - 1)),
-                                   axis_names=['v' + str(n - 1), 's' + str(n - 1), 'v' + str(n)],
-                                   backend=None)
-        norm = getOverlap(psi, psi)
-        psi[n-1] = multNode(psi[n-1], 1/np.sqrt(norm))
-        return psi
+
 
 
 # Assuming psi1, psi2 have the same length, Hilbert space etc.
@@ -225,7 +223,10 @@ def getNodeNorm(node):
     copyConj = copyState([node], conj=True)[0]
     for i in range(node.get_rank()):
         copy[i] ^ copyConj[i]
-    return np.sqrt(tn.contract_between(copy, copyConj).get_tensor())
+    norm2 = tn.contract_between(copy, copyConj).get_tensor()
+    if BACKEND == 'pytorch':
+        norm2 = norm2.numpy()
+    return np.sqrt(norm2)
 
 
 def multiContraction(node1: tn.Node, node2: tn.Node, edges1, edges2, nodeName=None,
@@ -259,11 +260,11 @@ def multiContraction(node1: tn.Node, node2: tn.Node, edges1, edges2, nodeName=No
 
 
 def contractDiag(node: tn.Node, diag: np.array, edgeNum: int):
-    node.tensor = np.transpose(node.tensor,
+    node.tensor = transpose(node.tensor,
                                [edgeNum] + [i for i in range(len(node.edges)) if i != edgeNum])
     for i in range(node[0].dimension):
         node.tensor[i] *= diag[i]
-    node.tensor = np.transpose(node.tensor,
+    node.tensor = transpose(node.tensor,
                                list(range(1, edgeNum + 1)) + [0] + list(range(edgeNum + 1, len(node.edges))))
     return node
 
@@ -274,7 +275,7 @@ def permute(node: tn.Node, permutation) -> tn.Node:
     axisNames = []
     for i in range(len(permutation)):
         axisNames.append(node.edges[permutation[i]].name)
-    result = tn.Node(np.transpose(node.tensor, permutation))
+    result = tn.Node(transpose(node.tensor, permutation))
     if len(set(axisNames)) == len(axisNames):
         result.add_axis_names(axisNames)
     for i in range(len(axisNames)):
@@ -310,16 +311,17 @@ def svdTruncation(node: tn.Node, leftEdges: List[int], rightEdges: List[int],
                                                      max_singular_values=maxBondDim,
                                                      left_name=leftName, right_name=rightName,
                                                      left_edge_name=leftEdgeName, right_edge_name=rightEdgeName)
-    s = S
-    S = tn.Node(np.diag(S.tensor))
-    tn.remove_node(s)
-    norm = np.sqrt(sum(S.tensor**2))
+    # s = S
+    # S = tn.Node(np.diag(S.tensor))
+    # tn.remove_node(s)
+    # norm = np.sqrt(sum(S.tensor**2))
+    norm = np.sqrt(sum(np.diag(S.tensor**2)))
     if norm == 0:
         b = 1
     if maxTrunc > 0:
         meaningful = sum(np.round(S.tensor / norm, maxTrunc) > 0)
         S.tensor = S.tensor[:meaningful]
-        U.tensor = np.transpose(np.transpose(U.tensor)[:meaningful])
+        U.tensor = transpose(transpose(U.tensor)[:meaningful])
         V.tensor = V.tensor[:meaningful]
     if normalize:
         S = multNode(S, 1 / norm)
@@ -327,9 +329,11 @@ def svdTruncation(node: tn.Node, leftEdges: List[int], rightEdges: List[int],
         e.name = edgeName
     if dir == '>>':
         l = copyState([U])[0]
-        r = multiContraction(S, V, '1', '0', cleanOr1=True, cleanOr2=True, isDiag1=True)
+        # r = multiContraction(S, V, '1', '0', cleanOr1=True, cleanOr2=True, isDiag1=True)
+        r = multiContraction(S, V, '1', '0', cleanOr1=True, cleanOr2=True)
     elif dir == '<<':
-        l = multiContraction(U, S, [len(U.edges) - 1], '0', cleanOr1=True, cleanOr2=True, isDiag2=True)
+        # l = multiContraction(U, S, [len(U.edges) - 1], '0', cleanOr1=True, cleanOr2=True, isDiag2=True)
+        l = multiContraction(U, S, [len(U.edges) - 1], '0', cleanOr1=True, cleanOr2=True)
         r = copyState([V])[0]
     elif dir == '>*<':
         v = V
@@ -389,6 +393,8 @@ def assignNewSiteTensors(psi, k, M, dir, getOrthogonal=False):
     psi[k+1] = sitekPlus1
     # if k+2 < len(psi):
     #     psi[k+1][2] ^ psi[k+2][0]
+    if BACKEND == 'pytorch':
+        truncErr = truncErr.numpy()
     return [psi, truncErr]
 
 
