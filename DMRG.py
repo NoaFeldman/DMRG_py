@@ -4,6 +4,8 @@ import basicOperations as bops
 import math
 from typing import Any, Dict, List, Optional, Set, Text, Tuple, Union, \
     Sequence, Iterable, Type
+import pickle
+
 
 class HOp:
     def __init__(self, singles, r2l, l2r):
@@ -395,18 +397,20 @@ def stateEnergy(psi: List[tn.Node], H: HOp):
         tn.remove_node(l2r)
     return E
 
+
 example = True
 if example:
     XX = np.zeros((4, 4), dtype=complex)
-    for i in range(4):
-        XX[i, 4-1-i] = 1
+    XX[1, 2] = 1
+    XX[2, 1] = 1
     Z = np.zeros((2, 2), dtype=complex)
     Z[0, 0] = 1
     Z[1, 1] = -1
     N = 16
-    H = getDMRGH(N, [np.copy(Z) * 0.5 for i in range(N)], [np.copy(XX) for i in range(N-1)])
-    psi0 = bops.getStartupState(N)
+    H = getDMRGH(N, [np.copy(Z) * 0 for i in range(N)], [np.copy(XX) for i in range(N-1)])
+    psi0 = bops.getStartupState(N, mode='antiferromagnetic')
     HLs, HRs = getHLRs(H, psi0)
     gs, E0, truncErrs = getGroundState(H, HLs, HRs, psi0)
-    print(E0)
+    with open('results/psiXX_' + str(N), 'wb') as f:
+        pickle.dump(gs, f)
 

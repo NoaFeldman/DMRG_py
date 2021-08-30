@@ -31,7 +31,7 @@ def init(backend, dev=None):
         dtype = torch.float
 
 
-init('pytorch', 'cpu')
+init('numpy')
 
 
 def getLegsSplitterTensor(dim1, dim2):
