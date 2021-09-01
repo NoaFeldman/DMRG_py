@@ -7,7 +7,7 @@ import pickle
 
 N = int(sys.argv[1])
 outdir = sys.argv[2]
-numOfRepetitions = sys.argv[3]
+numOfRepetitions = int(sys.argv[3])
 backend = sys.argv[4]
 if len(sys.argv) == 6:
     dev = sys.argv[5]
