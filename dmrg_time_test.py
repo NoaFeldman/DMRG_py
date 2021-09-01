@@ -9,9 +9,12 @@ N = int(sys.argv[1])
 outdir = sys.argv[2]
 numOfRepetitions = sys.argv[3]
 backend = sys.argv[4]
-dev = sys.argv[5]
+if len(sys.argv) == 6:
+    dev = sys.argv[5]
+else:
+    dev = None
 
-bops.init('pytorch', 'cpu')
+bops.init(backend, dev)
 
 XX = np.zeros((4, 4), dtype=complex)
 XX[1, 2] = 1
