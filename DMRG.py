@@ -358,7 +358,7 @@ def getHLRs(H, psi, workingSite=None):
     return HLs, HRs
 
 
-def getGroundState(H, HLs, HRs, psi, psiCompare=None, accuration=10**(-7)):
+def getGroundState(H, HLs, HRs, psi, psiCompare=None, accuration=10**(-12)):
     truncErrs = []
     [psi, E0, truncErr, HLs, HRs] = dmrgSweep(psi, H, HLs, HRs, psiCompare)
     truncErrs.append(truncErr)
@@ -398,7 +398,7 @@ def stateEnergy(psi: List[tn.Node], H: HOp):
     return E
 
 
-example = True
+example = False
 if example:
     XX = np.zeros((4, 4), dtype=complex)
     XX[1, 2] = 1

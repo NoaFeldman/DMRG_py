@@ -32,7 +32,8 @@ def init(backend, dev=None):
 
 
 init('numpy')
-
+def setBackend(backend, dev=None):
+    init(backend, dev)
 
 def getLegsSplitterTensor(dim1, dim2):
     splitter = np.zeros((dim1, dim2, dim1 * dim2), dtype=complex)
