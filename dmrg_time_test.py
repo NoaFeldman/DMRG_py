@@ -5,11 +5,11 @@ import numpy as np
 import basicOperations as bops
 import pickle
 
-numOfRepetitions = 10
 N = int(sys.argv[1])
 outdir = sys.argv[2]
 backend = sys.argv[3]
 dev = sys.argv[4]
+numOfRepetitions = sys.argv[5]
 
 bops.init('pytorch', 'cpu')
 
@@ -31,5 +31,5 @@ for i in range(numOfRepetitions):
     end = time.time()
     times[i] = end - start
     bondDims[i] = gs[int(N/2)].edges[0].dimension
-with open(outdir + '/DMRG_constChi_N_' + str(N), 'wb') as f:
+with open(outdir + '/DMRG_constChi_N_' + str(N) + '_' + backend + '_' + dev, 'wb') as f:
     pickle.dump([times, bondDims], f)
