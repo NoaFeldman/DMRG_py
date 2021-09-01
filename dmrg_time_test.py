@@ -7,9 +7,9 @@ import pickle
 
 N = int(sys.argv[1])
 outdir = sys.argv[2]
-backend = sys.argv[3]
-dev = sys.argv[4]
-numOfRepetitions = sys.argv[5]
+numOfRepetitions = sys.argv[3]
+backend = sys.argv[4]
+dev = sys.argv[5]
 
 bops.init('pytorch', 'cpu')
 
