@@ -6,6 +6,8 @@ import toricCode
 import re
 import basicAnalysis as ban
 import basicOperations as bops
+import symResolvedExact as symresolved
+
 
 d = 2
 
@@ -18,12 +20,34 @@ def findResults(n, N, opt='p'):
             if regex.match(file) or regex2.match(file):
                 return file
 
-getPrecision = True
+
+def SymResolvedExact(n, N):
+    fluxes = np.array(range(N))
+    organized = []
+    for i in range(len(fluxes)):
+        flux = fluxes[i]
+        if i == 0:
+            filename = 'results/organized_MPS_optimized_' + str(n) + '_' + str(NA)
+        else:
+            filename = 'results/organized_MPS_flux_' + str(flux) + '_' + str(n) + '_' + str(NA)
+        with open(filename, 'rb') as f:
+            curr = np.array(pickle.load(f))
+            organized[i] = curr
+    length = min([len(organized[i]) for i in range(len(fluxes))])
+    sCharges = np.zeros(length, N)
+    alphas = [np.pi / N * f for f in fluxes]
+    for j in range(1, length):
+        sFlux = [np.average(organized[i][:j]) for i in range(len(fluxes))]
+        Qs, sCharge = symresolved.sChargeFromSFlux(alphas, sFlux, N)
+        sCharges[j, :] = sCharge
+    return sCharges
+
+getPrecision = False
 M = 1000
 colors = ['#0000FF', '#9D02D7', '#EA5F94', '#FA8775', '#FFB14E', '#FFD700']
 vcolors = ['#930043', '#ff6f3c', '#ff9200', '#2f0056']
 legends = []
-option = 'toric_optimized'
+option = 'MPS'
 
 if option == 'toric' or option == 'toric_optimized' or option == 'toric_worst':
     Ns = [4 * k for k in range(1, 7)]
@@ -69,7 +93,7 @@ if dops:
                 with open('results/organized_' + option + '_optimized_' + str(n) + '_' + str(N), 'rb') as f:
                     organized = np.array(pickle.load(f))
             expected = getExpected(option, N, n)
-            print(N, n, np.round(np.average(organized) / expected, 8))
+            print(N, n, expected)
             if getPrecision:
                 numOfExperiments = 10
                 numOfMixes = 20
