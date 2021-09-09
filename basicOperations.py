@@ -3,8 +3,8 @@ import numpy as np
 import math
 from typing import Any, Dict, List, Optional, Set, Text, Tuple, Union, \
     Sequence, Iterable, Type
-import jax.numpy as jnp
-import torch
+# import jax.numpy as jnp
+# import torch
 
 def torchTranspose(arr, dim):
     return arr.permute(dim)
@@ -564,3 +564,19 @@ def relaxState(psi, maxBondDim):
     for k in range(1, len(psi) - 1):
         psiCopy = shiftWorkingSite(psiCopy, k, '>>', maxBondDim=maxBondDim)
     return psiCopy
+
+
+def getExplicitDM(psi, N, d=2):
+    curr = psi[0]
+    for i in range(1, N):
+        curr = multiContraction(curr, psi[i], [i+1], '0')
+    dm = reshape(multiContraction(curr, curr,
+            [0, len(curr.edges) - 1], [0, len(curr.edges) - 1, '*']).tensor, [d**N, d**N])
+    return dm
+
+
+def getExplicitVec(psi, d=2):
+    curr = psi[0]
+    for i in range(1, len(psi)):
+        curr = multiContraction(curr, psi[i], [i + 1], '0')
+    return reshape(curr.tensor, [d**len(psi)])

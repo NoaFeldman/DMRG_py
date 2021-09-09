@@ -398,7 +398,15 @@ def stateEnergy(psi: List[tn.Node], H: HOp):
     return E
 
 
-example = False
+def getidx(N, q):
+    res = []
+    for i in range(2**N):
+        if q == N - 2 * bin(i).count("1"):
+            res.append(i)
+    return np.array(res).reshape(len(res), 1)
+
+
+example = True
 if example:
     XX = np.zeros((4, 4), dtype=complex)
     XX[1, 2] = 1
@@ -406,7 +414,18 @@ if example:
     Z = np.zeros((2, 2), dtype=complex)
     Z[0, 0] = 1
     Z[1, 1] = -1
-    N = 16
+    N = 8
+    exactH = np.zeros((2**N, 2**N), dtype=complex)
+    for i in range(N-1):
+        curr = np.eye(1, dtype=complex)
+        for j in range(i):
+            curr = np.kron(curr, np.eye(2))
+        curr = np.kron(curr, XX)
+        for j in range(i+1, N-1):
+            curr = np.kron(curr, np.eye(2))
+        exactH += curr
+    idx1 = getidx(N, - N + 2)
+    exactH1 = exactH[idx1, idx1.T]
     H = getDMRGH(N, [np.copy(Z) * 0 for i in range(N)], [np.copy(XX) for i in range(N-1)])
     psi0 = bops.getStartupState(N, mode='antiferromagnetic')
     HLs, HRs = getHLRs(H, psi0)
