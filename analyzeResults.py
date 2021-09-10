@@ -21,28 +21,22 @@ def findResults(n, N, opt='p'):
                 return file
 
 
-def SymResolvedExact(n, N):
-    fluxes = np.array(range(N))
-    organized = []
-    for i in range(len(fluxes)):
-        flux = fluxes[i]
-        if i == 0:
-            filename = 'results/organized_MPS_optimized_' + str(n) + '_' + str(NA)
-        else:
-            filename = 'results/organized_MPS_flux_' + str(flux) + '_' + str(n) + '_' + str(NA)
-        with open(filename, 'rb') as f:
-            curr = np.array(pickle.load(f))
-            organized[i] = curr
-    length = min([len(organized[i]) for i in range(len(fluxes))])
-    sCharges = np.zeros(length, N)
-    alphas = [np.pi / N * f for f in fluxes]
-    for j in range(1, length):
-        sFlux = [np.average(organized[i][:j]) for i in range(len(fluxes))]
-        Qs, sCharge = symresolved.sChargeFromSFlux(alphas, sFlux, N)
-        sCharges[j, :] = sCharge
-    return sCharges
+def smooth(organized, numOfExperiments, numOfMixes, expected):
+    precision = np.zeros(int(len(organized) / numOfExperiments))
+    for mix in range(numOfMixes):
+        np.random.shuffle(organized)
+        for j in range(1, int(len(organized) / numOfExperiments)):
+            currPrecision = np.average([np.abs(np.average( \
+                organized[
+                c * int(len(organized) / numOfExperiments):c * int(len(organized) / numOfExperiments) + j]) - expected) \
+                                        for c in range(numOfExperiments)])
+            if mix == 0:
+                precision[j] = currPrecision
+            else:
+                precision[j] = (precision[j] * mix + currPrecision) / (mix + 1)
+    return precision
 
-getPrecision = False
+getPrecision = True
 M = 1000
 colors = ['#0000FF', '#9D02D7', '#EA5F94', '#FA8775', '#FFB14E', '#FFD700']
 vcolors = ['#930043', '#ff6f3c', '#ff9200', '#2f0056']
@@ -56,7 +50,7 @@ if option == 'toric' or option == 'toric_optimized' or option == 'toric_worst':
 elif option == 'MPS':
     Ns = [4 * k for k in range(1, 6)]
     varianceNormalizations = [1.6, 1.75, 2.04]
-    ns = [2, 3, 4]
+    ns = [2, 3, 4, -1]
 Vs = np.zeros(len(Ns))
 
 single = 0
@@ -80,7 +74,7 @@ if dops:
     for ni in range(len(ns)):
         n = ns[ni]
         precisions = []
-        for i in range(len(Ns)):
+        for i in range(1): #range(len(Ns)):
             N = Ns[i]
             spaceSize = d**N
             if n == 2 or single != 0:
@@ -88,26 +82,16 @@ if dops:
             if option == 'toric' or option == 'toric_optimized' or option == 'toric_worst':
                 with open('./results/organized_' + option + '_' + str(n) + '_' + str(N), 'rb') as f:
                     organized = np.array(pickle.load(f)) / 1000
-
             elif option == 'MPS':
-                with open('results/organized_' + option + '_optimized_' + str(n) + '_' + str(N), 'rb') as f:
-                    organized = np.array(pickle.load(f))
-            expected = getExpected(option, N, n)
-            print(N, n, expected)
+                if n != -1:
+                    with open('results/organized_' + option + '_optimized_' + str(n) + '_' + str(N), 'rb') as f:
+                        organized = np.array(pickle.load(f))
+                    expected = getExpected(option, N, n)
+                else:
+                    expected = symresolved.getExact(N, n, [N / 2])[0]
+                    organized = symresolved.getNumerics(N, n, [0])[0]
             if getPrecision:
-                numOfExperiments = 10
-                numOfMixes = 20
-                precision = np.zeros(int(len(organized) / numOfExperiments))
-                for mix in range(numOfMixes):
-                    np.random.shuffle(organized)
-                    for j in range(1, int(len(organized)/numOfExperiments)):
-                        currPrecision = np.average([np.abs(np.average( \
-                            organized[c * int(len(organized)/numOfExperiments):c * int(len(organized)/numOfExperiments)+j]) - expected) \
-                                                   for c in range(numOfExperiments)])
-                        if mix == 0:
-                            precision[j] = currPrecision
-                        else:
-                            precision[j] = (precision[j] * mix + currPrecision) / (mix + 1)
+                precision = smooth(organized, 10, 20, expected)
                 if single == 0:
                     curr = axs[ni]
                     axs[ni].plot([(m * M + M - 1) / (varianceNormalizations[n - 2] ** N) for m in range(len(precision) - 1)],
@@ -156,7 +140,7 @@ if getPrecision:
     # plt.subplots_adjust(wspace=0, hspace=0)
 else:
     plt.xlabel(r'$N_A$', fontsize=16)
-    plt.ylabel(r'Var$(p)/p$', fontsize=16)
-    legends = [r'$p_2$', r'$p_3$', r'$p_4$', r'$R_3$']
+    plt.ylabel(r'Var$(p)/p^2$', fontsize=16)
+    legends = [r'$p_2$', r'$p_3$', r'$p_4$', r'$p_3(q=0)$']
     legend = plt.legend(legends, fontsize=11)
 plt.show()
