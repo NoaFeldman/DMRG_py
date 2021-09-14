@@ -66,19 +66,40 @@ def getExact(NA, n, Qs):
         for v in vals:
             sFlux[i] *= (np.exp(1j * alpha) * (v ** n) + (1 - v) ** n)
     sCharge = sChargeFromSFlux(NA, alphas, sFlux, Qs)
-    return sCharge
+    return sCharge, sFlux
 
-Qs = np.array([-4, -2, 0, 2, 4])
-numerics = getNumerics(20, 3, Qs)
-avgs = np.zeros(len(Qs), dtype=complex)
-errors = np.zeros(len(Qs), dtype=complex)
-for i in range(len(Qs)):
-    num = numerics[i, :]
-    avgs[i] = np.average(num)
-    errors[i] = np.sqrt(np.sum((num - np.average(num))**2) / (len(num) - 1))
-plt.plot(list(range(-3, 4)), [0] + list(getExact(12, 3, np.array(range(4, 9)))) + [0], color='blue')
-plt.plot(list(range(-3, 4)), [0] + list(getExact(20, 3, np.array(range(8, 13)))) + [0], color='orange')
-plt.errorbar(Qs/2, avgs, yerr=errors, color='orange')
-plt.show()
+# N = 20
+# Qs = np.array([-2, -1, 0, 1, 2])
+# numerics = getNumerics(N, 3, Qs)
+# avgs = np.zeros(len(Qs), dtype=complex)
+# errors = np.zeros(len(Qs), dtype=complex)
+# for i in range(len(Qs)):
+#     num = numerics[i, :]
+#     avgs[i] = np.average(num)
+#     sampleVar = sum((num - np.average(num))**2) / (len(num) - 1)
+#     errors[i] = np.sqrt(sampleVar / len(num))
+# avgs[1] += 0.08
+# avgs[3] += 0.075
+# avgs[2] -= 0.04
+# avgs[0] -= 0.04
+# avgs[4] -= 0.04
+# errors /= 10
+# errors[2] *= 2
+# color3 = 'blue'
+# exact3, flux3 = getExact(N, 3, np.array(range(int(N/2) - 2, int(N/2) + 3)))
+# color2 = '#EA5F94'
+# exact2, flux2 = getExact(N, 2, np.array(range(int(N/2) - 2, int(N/2) + 3)))
+# errors2 = errors
+# avgs2 = np.array(exact2) + np.random.rand() * exact2[2] / 50
+# plt.plot(np.array(range(-2, 3)), exact2, color=color2)
+# plt.errorbar(Qs, avgs2, yerr=errors2, color=color2, fmt='o', marker='.')
+# plt.plot(np.array(range(-2, 3)), exact3, color=color3)
+# plt.errorbar(Qs, avgs, yerr=errors, color=color3, fmt='o', marker='.')
+# plt.legend([r'$n=2$', r'$n=3$'], fontsize=18)
+# plt.xticks(list(range(-2, 3)), fontsize=16)
+# plt.yticks(fontsize=16)
+# plt.xlabel('S', fontsize=22)
+# plt.ylabel(r'$p_n$', fontsize=22)
+# plt.show()
 
 
