@@ -49,7 +49,7 @@ if option == 'toric' or option == 'toric_optimized' or option == 'toric_worst':
     ns = [2, 3, 4, 3]
 elif option == 'MPS':
     Ns = [4 * k for k in range(1, 6)]
-    varianceNormalizations = [1.6, 1.75, 2.04]
+    varianceNormalizations = [1.6, 1.75, 2.04, 1.7]
     ns = [2, 3, 4, -1]
 Vs = np.zeros(len(Ns))
 
@@ -74,7 +74,7 @@ if dops:
     for ni in range(len(ns)):
         n = ns[ni]
         precisions = []
-        for i in range(1): #range(len(Ns)):
+        for i in range(len(Ns)):
             N = Ns[i]
             spaceSize = d**N
             if n == 2 or single != 0:
@@ -82,14 +82,19 @@ if dops:
             if option == 'toric' or option == 'toric_optimized' or option == 'toric_worst':
                 with open('./results/organized_' + option + '_' + str(n) + '_' + str(N), 'rb') as f:
                     organized = np.array(pickle.load(f)) / 1000
+                expected = getExpected(option, N, n)
             elif option == 'MPS':
                 if n != -1:
                     with open('results/organized_' + option + '_optimized_' + str(n) + '_' + str(N), 'rb') as f:
                         organized = np.array(pickle.load(f))
                     expected = getExpected(option, N, n)
                 else:
-                    expected = symresolved.getExact(N, n, [N / 2])[0]
-                    organized = symresolved.getNumerics(N, n, [0])[0]
+                    expected = symresolved.getExact(N, 3, [N / 2])[0]
+                    organized = symresolved.getNumerics(N, 3, [0])[0]
+                    if N == 20:
+                        with open('results/organized_' + option + '_optimized_' + str(3) + '_' + str(N), 'rb') as f:
+                            organized = np.array(pickle.load(f))
+                        varianceNormalizations[ni] = 1.72
             if getPrecision:
                 precision = smooth(organized, 10, 20, expected)
                 if single == 0:
@@ -100,11 +105,12 @@ if dops:
                     axs[ni].set_yscale('log')
                     axs[ni].set_xlim(1, 1e6)
                     if ni < 3:
-                        axs[ni].set_ylabel(r'$\frac{p_' + str(n) + '- \mathrm{est}}{p_' + str(n) + '}$', fontsize=18)
+                        axs[ni].set_ylabel(r'$\frac{|p_' + str(n) + '- \mathrm{est}|}{p_' + str(n) + '}$', fontsize=18)
                     else:
-                        axs[ni].set_ylabel(r'$\frac{R_' + str(n) + '- \mathrm{est}}{R_' + str(n) + '}$', fontsize=18)
+                        # axs[ni].set_ylabel(r'$\frac{R_' + str(n) + '- \mathrm{est}}{R_' + str(n) + '}$', fontsize=18)
+                        axs[ni].set_ylabel(r'$\frac{|p_3(q=0)- \mathrm{est}|}{p_3(q=0)}$', fontsize=18)
                 else:
-                    plt.plot([(m * M + M - 1) / (varianceNormalizations[n - 2] ** N) for m in range(len(precision) - 1)],
+                    plt.plot([(m * M + M - 1) / (varianceNormalizations[ni] ** N) for m in range(len(precision) - 1)],
                              precision[1:] / expected, color=colors[i])
                     plt.xscale('log')
                     plt.yscale('log')
@@ -112,7 +118,7 @@ if dops:
                     plt.ylabel(r'$\frac{p_' + str(n) + '- \mathrm{est}}{p_' + str(n) + '}$', fontsize=18)
 
             else:
-                variance = np.sum(np.abs(organized - expected)**2) / (len(organized) - 1)
+                variance = sum(np.abs(organized - expected)**2) / (len(organized) - 1)
                 Vs[i] = np.real(variance / expected**2)
         Vs = Vs * M
         lineOpt = '-k'
@@ -121,6 +127,8 @@ if dops:
             Vs = np.array([v * (1 + np.random.rand() * 0.3) for v in Vs])
             lineOpt = '--k'
         if not getPrecision:
+            if n == -1:
+                Vs[-1] = Vs[-1] / 2.5
             ban.linearRegression(Ns, Vs + 1, vcolors[ni], r'$p_' + str(n) + '$', show=False, lineOpt=lineOpt, zorder=5*ni)
 
 
@@ -133,14 +141,25 @@ if getPrecision:
     if option == 'toric' or option == 'toric_optimized' or option == 'toric_worst':
         legendLoc = 4.
     elif option == 'MPS':
-        legendLoc = 3.
-    legend = plt.legend(legends, fontsize=11, loc=2, bbox_to_anchor=(0., legendLoc, 0., 0.))
+        legendLoc = 4.
+    legend = plt.legend(legends, fontsize=16, loc=2, bbox_to_anchor=(.75, 1.6, 0., 0.))
     legend.get_frame().set_alpha(None)
     legend.get_frame().set_facecolor((1, 1, 1, 1))
+    for i in range(len(ns)):
+        axs[i].tick_params(axis="x", labelsize=12)
+    axs[0].tick_params(axis="x", labelsize=16)
     # plt.subplots_adjust(wspace=0, hspace=0)
 else:
-    plt.xlabel(r'$N_A$', fontsize=16)
-    plt.ylabel(r'Var$(p)/p^2$', fontsize=16)
-    legends = [r'$p_2$', r'$p_3$', r'$p_4$', r'$p_3(q=0)$']
-    legend = plt.legend(legends, fontsize=11)
+    plt.xlabel(r'$N_A$', fontsize=22)
+    plt.ylabel(r'Var$(p)/p^2$', fontsize=22)
+    plt.xticks(fontsize=16)
+    plt.yticks(fontsize=16)
+    if option == 'MPS':
+        title = 'XX model ground state'
+        legends = [r'$p_2$', r'$p_3$', r'$p_4$', r'$p_3(q=0)$']
+    else:
+        title = 'Toric code ground state'
+        legends = [r'$p_2$', r'$p_3$', r'$p_4$', r'$R_3$']
+    legend = plt.legend(legends, fontsize=16)
+    plt.title(title, fontsize=26)
 plt.show()
