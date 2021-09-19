@@ -276,7 +276,7 @@ def applyHToM(HL, HR, H, M, k):
     return Hv
 
 
-def dmrgStep(HL, HR, H, psi, k, dir, psiCompare=None, opts=None):
+def dmrgStep(HL, HR, H, psi, k, dir, psiCompare=None, opts=None, maxBondDim=128):
     # Perform a single DMRG step:
     # 1. Contracts psi(k) and psi(k + dir) to get M.
     # 2. Performs lancsoz and get a new contracted M.
@@ -285,7 +285,7 @@ def dmrgStep(HL, HR, H, psi, k, dir, psiCompare=None, opts=None):
     k1 = k
     k2 = k + 1
     [M, E0] = lanczos(HL, HR, H, k1, psi, psiCompare)
-    [psi, truncErr] = bops.assignNewSiteTensors(psi, k, M, dir)
+    [psi, truncErr] = bops.assignNewSiteTensors(psi, k, M, dir, maxBondDim=maxBondDim)
     if dir == '>>':
         if psiCompare is not None:
             for state in psiCompare:
@@ -309,28 +309,28 @@ def dmrgStep(HL, HR, H, psi, k, dir, psiCompare=None, opts=None):
 
 
 # Assume the OC is at the last (rightmost) site. sweeps all the way left and back right again.
-def dmrgSweep(psi, H, HLs, HRs, psiCompare=None):
+def dmrgSweep(psi, H, HLs, HRs, psiCompare=None, maxBondDim=128):
     k = len(psi) - 2
     maxTruncErr = 0
     while k > 0:
         if psiCompare is None:
-            [psi, newHR, E0, truncErr] = dmrgStep(HLs[k], HRs[k+2], H, psi, k, '<<', psiCompare)
+            [psi, newHR, E0, truncErr] = dmrgStep(HLs[k], HRs[k+2], H, psi, k, '<<', psiCompare, maxBondDim=maxBondDim)
             # if HRs[k+1] is not None:
             # TODO remove all nodes in HLR
                 # tn.remove_node(HRs[k+1])
             HRs[k+1] = newHR
         else:
-            [psi, HLs, HRs, E0, truncErr] = dmrgStep(HLs[k], HRs[k+2], H, psi, k, '<<', psiCompare)
+            [psi, HLs, HRs, E0, truncErr] = dmrgStep(HLs[k], HRs[k+2], H, psi, k, '<<', psiCompare, maxBondDim=maxBondDim)
         if len(truncErr) > 0 and maxTruncErr < max(truncErr):
             maxTruncErr = max(truncErr)
         k -= 1
     for k in range(len(psi) - 2):
         E0Old = E0
         if psiCompare is None:
-            [psi, newHL, E0, truncErr] = dmrgStep(HLs[k], HRs[k + 2], H, psi, k, '>>', psiCompare)
+            [psi, newHL, E0, truncErr] = dmrgStep(HLs[k], HRs[k + 2], H, psi, k, '>>', psiCompare, maxBondDim=maxBondDim)
             HLs[k + 1] = newHL
         else:
-            [psi, HLs, HRs, E0, truncErr] = dmrgStep(HLs[k], HRs[k + 2], H, psi, k, '>>', psiCompare)
+            [psi, HLs, HRs, E0, truncErr] = dmrgStep(HLs[k], HRs[k + 2], H, psi, k, '>>', psiCompare, maxBondDim=maxBondDim)
         # if E0 > E0Old:
         #     print('E0 > E0Old, k = ' + str(k) + ', E0Old = ' + str(E0Old) + ', E0 = ' + str(E0))
         # if HLs[k+1] is not None:
@@ -358,12 +358,12 @@ def getHLRs(H, psi, workingSite=None):
     return HLs, HRs
 
 
-def getGroundState(H, HLs, HRs, psi, psiCompare=None, accuration=10**(-12)):
+def getGroundState(H, HLs, HRs, psi, psiCompare=None, accuration=10**(-12), maxBondDim=128):
     truncErrs = []
-    [psi, E0, truncErr, HLs, HRs] = dmrgSweep(psi, H, HLs, HRs, psiCompare)
+    [psi, E0, truncErr, HLs, HRs] = dmrgSweep(psi, H, HLs, HRs, psiCompare, maxBondDim=maxBondDim)
     truncErrs.append(truncErr)
     while True:
-        [psi, ECurr, truncErr, HLs, HRs] = dmrgSweep(psi, H, HLs, HRs, psiCompare)
+        [psi, ECurr, truncErr, HLs, HRs] = dmrgSweep(psi, H, HLs, HRs, psiCompare, maxBondDim=maxBondDim)
         truncErrs.append(truncErr)
         if np.abs((ECurr - E0) / E0) < accuration:
             return psi, ECurr, truncErrs
@@ -406,7 +406,7 @@ def getidx(N, q):
     return np.array(res).reshape(len(res), 1)
 
 
-example = True
+example = False
 if example:
     XX = np.zeros((4, 4), dtype=complex)
     XX[1, 2] = 1

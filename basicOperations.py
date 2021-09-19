@@ -136,10 +136,21 @@ def getStartupState(n, d=2, mode='general'):
         baseTensor[0, 1, 0] = -np.sqrt(1 / 3)
         baseTensor[1, 1, 1] = np.sqrt(1 / 3)
         baseTensor[1, 2, 0] = -np.sqrt(2 / 3)
-        for i in range(n):
+        leftTensor = np.zeros((1, 3, 2), dtype=complex)
+        leftTensor[0, 0, 0] = 1
+        leftTensor[0, 1, 1] = 1 / np.sqrt(2)
+        leftTensor[0, 2, 1] = 1 / np.sqrt(2)
+        rightTensor = np.zeros((2, 3, 1), dtype=complex)
+        rightTensor[0, 0, 0] = 1
+        rightTensor[1, 1, 0] = 1
+        rightTensor[1, 2, 0] = 1
+        psi[0] = tn.Node(leftTensor, backend=BACKEND)
+        psi[n-1] = tn.Node(rightTensor, backend=BACKEND)
+        for i in range(1, n-1):
             psi[i] = tn.Node(baseTensor, name=('site' + str(i)),
                                  axis_names=['v' + str(i), 's' + str(i), 'v' + str(i + 1)],
                                  backend=BACKEND)
+
         norm = getOverlap(psi, psi)
         psi[n - 1] = multNode(psi[n - 1], 1 / np.sqrt(norm))
         return psi
@@ -287,7 +298,7 @@ def permute(node: tn.Node, permutation) -> tn.Node:
 
 
 def svdTruncation(node: tn.Node, leftEdges: List[int], rightEdges: List[int],
-                  dir: str, maxBondDim=128, leftName='U', rightName='V',  edgeName='default', normalize=False, maxTrunc=0):
+                  dir: str, maxBondDim=128, leftName='U', rightName='V',  edgeName='default', normalize=False, maxTrunc=15):
     # np.seterr(all='raise')
     maxBondDim = getAppropriateMaxBondDim(maxBondDim,
                                           [node.edges[e] for e in leftEdges], [node.edges[e] for e in rightEdges])
@@ -320,10 +331,10 @@ def svdTruncation(node: tn.Node, leftEdges: List[int], rightEdges: List[int],
     if norm == 0:
         b = 1
     if maxTrunc > 0:
-        meaningful = sum(np.round(S.tensor / norm, maxTrunc) > 0)
-        S.tensor = S.tensor[:meaningful]
-        U.tensor = transpose(transpose(U.tensor)[:meaningful])
-        V.tensor = V.tensor[:meaningful]
+        meaningful = sum(np.round(np.diag(S.tensor) / norm, maxTrunc) > 0)
+        S.tensor = S.tensor[:meaningful, :meaningful]
+        U.tensor = U.tensor[:, :, :meaningful]
+        V.tensor = V.tensor[:meaningful, :, :]
     if normalize:
         S = multNode(S, 1 / norm)
     for e in S.edges:
@@ -383,9 +394,9 @@ def getAppropriateMaxBondDim(maxBondDim, leftEdges, rightEdges):
 
 
 # Split M into 2 3-rank tensors for sites k, k+1
-def assignNewSiteTensors(psi, k, M, dir, getOrthogonal=False):
+def assignNewSiteTensors(psi, k, M, dir, getOrthogonal=False, maxBondDim=128):
     [sitek, sitekPlus1, truncErr] = svdTruncation(M, [0, 1], [2, 3], dir, \
-            leftName=('site' + str(k)), rightName=('site' + str(k+1)), edgeName = ('v' + str(k+1)))
+            leftName=('site' + str(k)), rightName=('site' + str(k+1)), edgeName = ('v' + str(k+1)), maxBondDim=maxBondDim)
     tn.remove_node(psi[k])
     psi[k] = sitek
     # if k > 0:
@@ -580,3 +591,12 @@ def getExplicitVec(psi, d=2):
     for i in range(1, len(psi)):
         curr = multiContraction(curr, psi[i], [i + 1], '0')
     return reshape(curr.tensor, [d**len(psi)])
+
+
+def getExpectationValue(psi: List[tn.Node], ops: List[tn.Node]):
+    psiCopy = copyState(psi)
+    for i in range(len(psiCopy)):
+        psiCopy[i] = permute(multiContraction(psiCopy[i], ops[i], '1', '1'), [0, 2, 1])
+    result = getOverlap(psi, psiCopy)
+    removeState(psiCopy)
+    return result

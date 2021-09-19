@@ -3,6 +3,8 @@ import numpy as np
 import magic.basicDefs as basicdefs
 from typing import List
 import basicOperations as bops
+import localVecsMPS as randomVecs
+
 
 # Vectorize all matrices. trPs, trPDaggers are built such that applying them to the vectorized DM we get the vector
 # (tr(\rho), tr(X\rho), tr(Y\rho), tr(Z\rho)), or its eqiovalent in general d.
@@ -28,10 +30,59 @@ def get4PsiVectorized(psi: List[tn.Node], d: int):
     return psi4, tn.Node(tracePs / d)
 
 
+def get2PsiVectorized(psi: List[tn.Node], d: int):
+    paulis = basicdefs.getPauliMatrices(d)
+    tracePs = np.zeros((d**2, d**2), dtype=complex)
+    for i in range(len(paulis)):
+        p = paulis[i]
+        traceP = p.transpose().reshape([d**2])
+        tracePs[i, :] = traceP
+    psi2 = []
+    for i in range(len(psi)):
+        temp = psi[i].tensor.reshape([1] + list(psi[i].shape))
+        chiL = psi[i].edges[0].dimension
+        chiR = psi[i].edges[2].dimension
+        tensorProd = np.tensordot(temp, temp.conjugate(), axes=(0, 0)). \
+            transpose([0, 3, 1, 4, 2, 5]).reshape([chiL**2, d**2, chiR**2])
+        psi2.append(tn.Node(tensorProd))
+    return psi2, tn.Node(tracePs / d)
+
+
+def getPsiPPsiMatrix(psi: List[tn.Node], d: int):
+    psi2, tracePs = get2PsiVectorized(psi, d)
+    splitter = np.zeros((d**2, d**2, d**2))
+    for j in range(d**2):
+        splitter[j, j, j] = 1
+    splitter = tn.Node(splitter)
+    for i in range(len(psi)):
+        bops.applySingleSiteOp(psi2, tracePs, i)
+        psi2[i] = bops.multiContraction(psi2[i], splitter, '1', '0', cleanOr1=True)
+    return psi2
+
+
 def getSecondRenyi(psi, d):
     n = len(psi)
     psi4, trPs = get4PsiVectorized(psi, d)
     for i in range(n):
         bops.applySingleSiteOp(psi4, trPs, i)
     renyiSum = bops.getOverlap(psi4, psi4)
+    print(renyiSum)
     return -np.log(renyiSum) / np.log(d) - n
+
+
+def getSecondRenyiFromRandomVecs(psi: List[tn.Node], d: int, outdir='results', rep=1):
+    psi2, tracePs = get2PsiVectorized(psi, d)
+    M = 1000
+    steps = 2**(4 * len(psi))
+    for step in range(steps):
+        mySum = 0
+        for m in range(M):
+            vs = randomVecs.getVs(1, len(psi), d=d ** 2)[0]
+            curr = tn.Node(np.eye(1))
+            for site in range(len(psi)):
+                curr = bops.multiContraction(curr, psi2[site], '1', '0', cleanOr1=True)
+                curr = bops.multiContraction(curr, tn.Node(np.array(vs[site])), '1', '0', cleanOr1=True)
+            mySum += curr.tensor[0, 0]**4
+        print(mySum / M)
+        mySum = 0
+

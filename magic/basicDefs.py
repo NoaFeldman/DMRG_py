@@ -19,7 +19,8 @@ pauli2Y = np.matmul(pauli2Z, pauli2X) / 1j
 
 def getPauliMatrices(d):
     if d == 2:
-        return([np.eye(2, dtype=complex), pauli2X, pauli2Y, pauli2Z])
+        return [np.eye(2, dtype=complex), pauli2X, pauli2Y, pauli2Z]
     elif d == 3:
-        # TODO
-        return 0
+        return [omega**(a1 * a2 / 2) * np.matmul(np.linalg.matrix_power(pauliX, a1),
+                                                 np.linalg.matrix_power(pauliZ, a2))
+                for a1 in range(d) for a2 in range(d)]
