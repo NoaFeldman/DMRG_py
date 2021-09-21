@@ -358,16 +358,20 @@ def getHLRs(H, psi, workingSite=None):
     return HLs, HRs
 
 
-def getGroundState(H, HLs, HRs, psi, psiCompare=None, accuration=10**(-12), maxBondDim=128):
+def getGroundState(H, HLs, HRs, psi, psiCompare=None, accuration=10**(-12), maxBondDim=256):
     truncErrs = []
+    bondDim = 2
     [psi, E0, truncErr, HLs, HRs] = dmrgSweep(psi, H, HLs, HRs, psiCompare, maxBondDim=maxBondDim)
     truncErrs.append(truncErr)
-    while True:
-        [psi, ECurr, truncErr, HLs, HRs] = dmrgSweep(psi, H, HLs, HRs, psiCompare, maxBondDim=maxBondDim)
+    for i in range(500):
+        [psi, ECurr, truncErr, HLs, HRs] = dmrgSweep(psi, H, HLs, HRs, psiCompare, maxBondDim=bondDim)
         truncErrs.append(truncErr)
         if np.abs((ECurr - E0) / E0) < accuration:
             return psi, ECurr, truncErrs
+        if (i-1) % 10 == 0:
+            bondDim = min(bondDim * 2, maxBondDim)
         E0 = ECurr
+    print('DMRG: Sweeped for 500 times and still didn\'t converge.')
 
 
 def stateEnergy(psi: List[tn.Node], H: HOp):
@@ -404,6 +408,13 @@ def getidx(N, q):
         if q == N - 2 * bin(i).count("1"):
             res.append(i)
     return np.array(res).reshape(len(res), 1)
+
+
+def DMRG(psi0, onsiteTerms, neighborTerms, d=2, maxBondDim=256):
+    H = getDMRGH(len(psi0), onsiteTerms, neighborTerms, d=d)
+    psi0Copy = bops.copyState(psi0)
+    HLs, HRs = getHLRs(H, psi0Copy)
+    return getGroundState(H, HLs, HRs, psi0Copy, maxBondDim=maxBondDim)
 
 
 example = False

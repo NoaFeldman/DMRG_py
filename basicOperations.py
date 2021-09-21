@@ -3,8 +3,8 @@ import numpy as np
 import math
 from typing import Any, Dict, List, Optional, Set, Text, Tuple, Union, \
     Sequence, Iterable, Type
-# import jax.numpy as jnp
-# import torch
+import jax.numpy as jnp
+import torch
 
 def torchTranspose(arr, dim):
     return arr.permute(dim)
@@ -14,6 +14,7 @@ def init(backend, dev=None):
     global BACKEND
     global transpose
     global reshape
+    global conj
     global device
     global dtype
     BACKEND = backend
@@ -21,12 +22,15 @@ def init(backend, dev=None):
     if BACKEND == 'numpy':
         transpose = np.transpose
         reshape = np.reshape
+        conj = np.conj
     elif BACKEND == 'jax':
         transpose = jnp.transpose
         reshape = jnp.reshape
+        conj = jnp.conj
     elif BACKEND == 'pytorch':
         transpose = torchTranspose
         reshape = torch.reshape
+        conj = torch.conj
         device = torch.device(dev)
         dtype = torch.float
 
