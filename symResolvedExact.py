@@ -53,18 +53,20 @@ def sChargeFromSFlux(NA, alphas, sFlux, Qs):
     return sCharge / NA
 
 
-def getExact(NA, n, Qs):
+def getExactSFlux(NA, n, alpha):
     cicj = getCiCj0Matrix(NA * 2)
     cicj = cicj[:NA, :NA]
     vals = np.linalg.eigvalsh(cicj)
+    result = 1
+    for v in vals:
+        result *= (np.exp(1j * alpha) * (v ** n) + (1 - v) ** n)
+    return result
+
+
+def getExact(NA, n, Qs):
     alphaRes = NA
     alphas = np.array([np.pi / alphaRes * i for i in range(alphaRes)])
-    sFlux = np.zeros(len(alphas), dtype=complex)
-    for i in range(len(alphas)):
-        alpha = alphas[i]
-        sFlux[i] = 1
-        for v in vals:
-            sFlux[i] *= (np.exp(1j * alpha) * (v ** n) + (1 - v) ** n)
+    sFlux = [getExactSFlux(NA, n, alpha) for alpha in alphas]
     sCharge = sChargeFromSFlux(NA, alphas, sFlux, Qs)
     return sCharge, sFlux
 

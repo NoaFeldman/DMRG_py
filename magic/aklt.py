@@ -157,4 +157,6 @@ localTerm = SDotS + J * np.linalg.matrix_power(SDotS, 2)
 gs, E0, truncErrs = dmrg.DMRG(psi0, [np.zeros((d, d), dtype=complex) for i in range(n)],
                               [np.copy(localTerm) for i in range(n - 1)], d=d)
 print('starting renyi')
-renyi.getSecondRenyiFromRandomVecs(gs, d=d, outdir='renyi2_' + str(n), rep=4)
+bops.printNode(gs[1])
+renyi.getSecondRenyi(gs, d)
+renyi.getSecondRenyiFromRandomVecs(gs, d=d, outdir='renyi2_' + str(n), rep=5)

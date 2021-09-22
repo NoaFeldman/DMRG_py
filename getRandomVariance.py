@@ -124,7 +124,7 @@ def toricVar(ls: np.array, op=E, color='blue'):
     print(vs)
     # print([expected(l) for l in ls])
 
-    # ban.linearRegression(ls * 4, vs, show=False, color=color)
+    # ban.linearRegression(ls * 4, vs, show=False, color3=color3)
     return vs
 
 def doubleMPSSite(site):
@@ -288,9 +288,9 @@ def toricTMatrix3():
 # mat = np.eye(4) + 0.5*np.kron(X, X) + 0.5*np.kron(Y, Y)
 # toricVar(np.array(range(1, 5)), tn.Node(mat))
 # mat = np.eye(4) + 0.5*np.kron(X, X) + 0.5*np.kron(Z, Z)
-# toricVar(np.array(range(1, 5)), tn.Node(mat), color='orange')
+# toricVar(np.array(range(1, 5)), tn.Node(mat), color3='orange')
 # mat = np.eye(4) + 0.5*np.kron(Y, Y) + 0.5*np.kron(Z, Z)
-# toricVar(np.array(range(1, 5)), tn.Node(mat), color='green')
+# toricVar(np.array(range(1, 5)), tn.Node(mat), color3='green')
 # plt.show()
 
 # statesDir = sys.argv[1]

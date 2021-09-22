@@ -3,7 +3,7 @@ import numpy as np
 import math
 from typing import Any, Dict, List, Optional, Set, Text, Tuple, Union, \
     Sequence, Iterable, Type
-import jax.numpy as jnp
+# import jax.numpy as jnp
 import torch
 
 def torchTranspose(arr, dim):
@@ -164,6 +164,8 @@ def getStartupState(n, d=2, mode='general'):
 # Assuming psi1, psi2 have the same length, Hilbert space etc.
 # assuming psi2 is conjugated
 def getOverlap(psi1Orig: List[tn.Node], psi2Orig: List[tn.Node]):
+    if len(psi1Orig) == 1:
+        return multiContraction(psi1Orig[0], psi2Orig[0], '012', '012*').tensor
     psi1 = copyState(psi1Orig)
     psi2 = copyState(psi2Orig, conj=True)
     psi1[0][0] ^ psi2[0][0]

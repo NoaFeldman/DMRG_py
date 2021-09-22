@@ -36,12 +36,36 @@ def smooth(organized, numOfExperiments, numOfMixes, expected):
                 precision[j] = (precision[j] * mix + currPrecision) / (mix + 1)
     return precision
 
+
 getPrecision = True
 M = 1000
 colors = ['#0000FF', '#9D02D7', '#EA5F94', '#FA8775', '#FFB14E', '#FFD700']
 vcolors = ['#930043', '#ff6f3c', '#ff9200', '#2f0056']
 legends = []
-option = 'MPS'
+option = 'toric_optimized'
+
+def getFluxPlot(flux):
+    n = 3
+    NAs = [4 * k for k in range(1, 6)]
+    for NA in [4 * k for k in range(1, 6)]:
+        fluxIndex = int(flux * NA / np.pi)
+        print([NA, fluxIndex])
+        filename = 'results/organized_MPS_flux_' + str(fluxIndex) + '_' + str(n) + '_' + str(NA)
+        with open(filename, 'rb') as f:
+            organized = np.array(pickle.load(f))
+        expected = np.abs(symresolved.getExactSFlux(NA, n, flux))
+        print([NA, expected, np.average(organized), symresolved.getExactSFlux(NA, n, flux)])
+        precision = smooth(organized, 1, 50*NA, expected)
+        if NA == 12:
+            b = 1
+        plt.plot([(m * M + M - 1) / (1.8 ** NA) for m in range(len(precision) - 1)], precision[1:])
+    plt.xscale('log')
+    plt.yscale('log')
+    plt.legend([str(NA) for NA in NAs])
+    plt.show()
+getFluxPlot(np.pi / 2)
+
+
 
 if option == 'toric' or option == 'toric_optimized' or option == 'toric_worst':
     Ns = [4 * k for k in range(1, 7)]
@@ -139,10 +163,10 @@ if getPrecision:
     plt.xlabel(r'$M/\xi^{N_A}$', fontsize=18)
     axs[0].set_xscale('log')
     if option == 'toric' or option == 'toric_optimized' or option == 'toric_worst':
-        legendLoc = 4.
+        legendLoc = 2.
     elif option == 'MPS':
-        legendLoc = 4.
-    legend = plt.legend(legends, fontsize=16, loc=2, bbox_to_anchor=(.75, 1.6, 0., 0.))
+        legendLoc = 1.6
+    legend = plt.legend(legends, fontsize=16, loc=2, bbox_to_anchor=(.75, legendLoc, 0., 0.))
     legend.get_frame().set_alpha(None)
     legend.get_frame().set_facecolor((1, 1, 1, 1))
     for i in range(len(ns)):

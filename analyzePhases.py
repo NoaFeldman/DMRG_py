@@ -52,8 +52,8 @@ def colorMap(thetas, phis, dir, NA):
                 print(var)
     plt.pcolormesh(thetas, phis, results)
     plt.colorbar()
-    plt.xlabel(r'$\theta$')
-    plt.ylabel(r'$\phi$')
+    plt.xlabel(r'$\theta$', fontsize=16)
+    plt.ylabel(r'$\phi$', fontsize=16)
     plt.show()
 # colorMap([0.1 * k for k in range(11)], [0.1 * k for k in range(11)], 'results/XXPhases/organized_XX_', 20)
 ts = [np.round(0.1 * k, 1) for k in range(6)]
@@ -67,10 +67,17 @@ for t in range(len(ts)):
             with open('results/XXVars/XXVar_NA_' + str(Ns[n]) + '_t_' + str(np.round(ts[t], 1)) + '_p_' + str(np.round(ps[p], 1)), 'rb') as f:
                 vs[n] = pickle.load(f)[1]
         V = ban.linearRegression(Ns, vs, show=False)
-        res[t, p] = V
+        res[t, p] = 2**V
 plt.show()
+print(res)
 plt.pcolormesh(ts, ps, res)
-plt.colorbar()
-plt.xlabel(r'$\theta/\pi$')
-plt.ylabel(r'$\phi/\pi$')
+cbar = plt.colorbar()
+for t in cbar.ax.get_yticklabels():
+     t.set_fontsize(22)
+plt.title(r'XX ground state', fontsize=26)
+plt.xlabel(r'$\theta/\pi$', fontsize=24)
+plt.ylabel(r'$\phi/\pi$', fontsize=24)
+plt.xticks(fontsize=22)
+plt.yticks(fontsize=22)
+
 plt.show()
