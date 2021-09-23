@@ -3,7 +3,7 @@ import numpy as np
 import math
 from typing import Any, Dict, List, Optional, Set, Text, Tuple, Union, \
     Sequence, Iterable, Type
-# import jax.numpy as jnp
+import jax.numpy as jnp
 import torch
 
 def torchTranspose(arr, dim):
@@ -158,7 +158,6 @@ def getStartupState(n, d=2, mode='general'):
         norm = getOverlap(psi, psi)
         psi[n - 1] = multNode(psi[n - 1], 1 / np.sqrt(norm))
         return psi
-
 
 
 # Assuming psi1, psi2 have the same length, Hilbert space etc.
