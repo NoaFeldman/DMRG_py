@@ -100,7 +100,7 @@ def getRandomizedRenyi(psi, n, NA, M, outdir, rep, option='optimized', half='lef
             mySum = 0
 
 
-def XXProcess():
+def XXProcess(t, p, flux):
     theta = 0
     phi = 0
     n = int(sys.argv[1])
@@ -115,19 +115,31 @@ def XXProcess():
     option = sys.argv[5]
     mydir = indir + '/XX_MPS_NA_' + str(NA) + '_NB_' + str(NB) + '_n_' + str(n)
     if option == 'flux':
-        alphaInd = int(sys.argv[6])
+        alphaInd = flux # int(sys.argv[6])
         alpha = np.pi * alphaInd / NA
         mydir += '_flux_' + str(alphaInd)
         fourierOp = np.eye(2, dtype=complex)
         fourierOp[0, 0] *= np.exp(-1j * alpha)
         fourierOp[1, 1] *= np.exp(1j * alpha)
         fourierTensor = tn.Node(fourierOp)
+        theta = np.pi * t
+        phi = np.pi * p
+        mydir += '_t_' + str(t) + '_p_' + str(p)
     if option == 'optimized':
         theta = np.pi / 5
         phi = np.pi / 5
         mydir += '_optimized'
+    if option == 'phaseTest':
+        theta = float(sys.argv[6])
+        phi = float(sys.argv[7])
+        mydir += '_t_' + sys.argv[6] + '_p_' + sys.argv[7]
     try:
         os.mkdir(mydir)
     except FileExistsError:
         pass
     getRandomizedRenyi(psi, n, NA, M, mydir, rep, theta=theta, phi=phi)
+
+for flux in range(3, 8):
+    for t in [0.1 * i for i in range(3, 4)]:
+        for p in [0.1 * j for j in range(2, 3)]:
+            XXProcess(t, p, flux)
