@@ -2,6 +2,7 @@ import numpy as np
 import tensornetwork as tn
 import pickle
 import jax
+import jax.numpy as jnp
 import torch
 import sys
 # sys.path.insert(1, '/home/noa/PycharmProjects/DMRG_py')
@@ -12,53 +13,45 @@ import time
 chi = int(sys.argv[1])
 d = int(sys.argv[2])
 outdir = sys.argv[3]
-backend = sys.argv[4]
-if sys.argv[5] == 'None':
-    dev = None
-else:
-    dev = sys.argv[5]
-opt = sys.argv[6]
-repetitions = int(sys.argv[7])
-
-
-def numpyRandomTensor(chi, d):
-    return np.random.rand(chi, d, chi) + 1j * np.random.rand(chi, d, chi)
+opt = sys.argv[4]
+repetitions = int(sys.argv[5])
 
 
 def torchRandomTensor(chi, d):
-    return torch.rand((chi, d, chi), dtype=torch.complex64)
+    return torch.rand((chi, d, chi), dtype=torch.complex128)
 
 
-def defaultRandomTensor(chi, d):
-    print('Backend unsupported!')
-    return 0
+def prepare(torchTensor1, torchTensor2, backend):
+    if backend == 'numpy':
+        bops.init(backend)
+        return tn.Node(torchTensor1.numpy()), tn.Node(torchTensor2.numpy())
+    elif backend == 'jax':
+        bops.init(backend)
+        return tn.Node(jnp.array(torchTensor1.numpy())), tn.Node(jnp.array(torchTensor2.numpy()))
+    elif backend == 'torch_cpu':
+        bops.init('pytorch', 'cpu')
+    elif backend == 'torch_cuda':
+        bops.init('pytorch', 'cuda')
+    return tn.Node(torchTensor1), tn.Node(torchTensor2)
 
 
-bops.init(backend, dev)
-if backend == 'numpy':
-    getRandomTensor = numpyRandomTensor
-elif backend == 'jax':
-    getRandomTensor = numpyRandomTensor
-elif backend == 'pytorch':
-    getRandomTensor = torchRandomTensor
-else:
-    getRandomTensor = defaultRandomTensor
-
-
-if opt == 'contraction':
-    start = time.time()
-    for i in range(repetitions):
-        bops.multiContraction(tn.Node(getRandomTensor(chi, d)), tn.Node(getRandomTensor(chi, d)), '01', '01*')
-    end = time.time()
-elif opt == 'svd':
-    start = time.time()
-    for i in range(repetitions):
-        node = tn.Node(getRandomTensor(chi, d))
-        tn.split_node_full_svd(node, node.edges[:2], [node.edges[2]])
-    end = time.time()
-else:
-    print('opt unsupported!')
-    start = 0
-    end = 0
-with open(outdir + '/' + opt + '_chi_' + str(chi) + '_d_' + str(d) + '_reps_' + str(repetitions), 'wb') as f:
-        pickle.dump(end - start, f)
+tSums = {'numpy' : 0, 'jax': 0, 'torch_cpu': 0, 'torch_cuda': 0}
+backends = list(tSums.keys())
+n = len(backends)
+for rep in range(repetitions):
+    currTorch1 = torchRandomTensor(chi, d)
+    currTorch2 = torchRandomTensor(chi, d)
+    for backend in [backends[(rep + i) % n] for i in range(n)]:
+        curr1, curr2 = prepare(currTorch1, currTorch2, backend)
+        start = time.time()
+        if opt == 'contraction':
+            bops.multiContraction(curr1, curr2, '01', '01')
+            print(bops.multiContraction(curr1, curr2, '01', '01').tensor)
+        elif opt == 'svd':
+            tn.split_node_full_svd(curr1, curr1.edges[:2], curr1.edges[2:])
+            print(tn.split_node_full_svd(curr1, curr1.edges[:2], curr1.edges[2:])[1].tensor)
+        end = time.time()
+        tSums[backend] += end - start
+for backend in backends:
+    with open(outdir + '/' + backend + '_' + opt + '_' + str(chi) + '_' + str(d) + '_' + str(repetitions), 'wb') as f:
+        pickle.dump(tSums[backend], f)
