@@ -17,7 +17,7 @@ d = int(sys.argv[2])
 outdir = sys.argv[3]
 opt = sys.argv[4]
 repetitions = int(sys.argv[5])
-cpuNums = int(sys.argv[6])
+cpuNum = int(sys.argv[6])
 
 
 def set_mkl_threads(threadNum):
@@ -48,7 +48,6 @@ def torchRandomTensor(chi, d):
 
 
 def prepare(torchTensor1, torchTensor2, backend, cpuNum):
-    set_mkl_threads(cpuNum)
     if backend == 'numpy':
         bops.init(backend)
         return tn.Node(torchTensor1.numpy()), tn.Node(torchTensor2.numpy())
@@ -61,7 +60,7 @@ def prepare(torchTensor1, torchTensor2, backend, cpuNum):
         bops.init('pytorch', 'cuda')
     return tn.Node(torchTensor1), tn.Node(torchTensor2)
 
-
+set_mkl_threads(cpuNum)
 tSums = {'numpy': 0, 'torch_cpu': 0}  # , 'jax': 0, 'torch_cuda': 0}
 backends = list(tSums.keys())
 backends = ['torch_cpu', 'numpy']
@@ -70,17 +69,16 @@ for rep in range(repetitions):
     currTorch1 = torchRandomTensor(chi, d)
     currTorch2 = torchRandomTensor(chi, d)
     for backend in [backends[(rep + i) % n] for i in range(n)]:
-        for cpuNum in range(1, cpuNums + 1):
-            curr1, curr2 = prepare(currTorch1, currTorch2, backend, cpuNum)
-            start = time.time()
-            if opt == 'contraction':
-                bops.multiContraction(curr1, curr2, '01', '01')
-            elif opt == 'svd':
-                tn.split_node_full_svd(curr1, curr1.edges[:2], curr1.edges[2:])
-            end = time.time()
-            tSums[backend] += end - start
-            with open(outdir + '/' + backend + '/' + opt + '/' +
-                      'chi_' + str(chi) + '_d_' + str(d) + '_rep_' + str(rep) +
-                      '_cpuNum_' + str(cpuNum),
-                      'wb') as f:
-                pickle.dump(end - start, f)
+        curr1, curr2 = prepare(currTorch1, currTorch2, backend, cpuNum)
+        start = time.time()
+        if opt == 'contraction':
+            bops.multiContraction(curr1, curr2, '01', '01')
+        elif opt == 'svd':
+            tn.split_node_full_svd(curr1, curr1.edges[:2], curr1.edges[2:])
+        end = time.time()
+        tSums[backend] += end - start
+        with open(outdir + '/' + backend + '/' + opt + '/' +
+                  'chi_' + str(chi) + '_d_' + str(d) + '_rep_' + str(rep) +
+                  '_cpuNum_' + str(cpuNum),
+                  'wb') as f:
+            pickle.dump(end - start, f)
