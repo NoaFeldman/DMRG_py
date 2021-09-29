@@ -1,8 +1,8 @@
 import numpy as np
 import tensornetwork as tn
 import pickle
-import jax
-import jax.numpy as jnp
+# import jax
+# import jax.numpy as jnp
 import torch
 import sys
 # sys.path.insert(1, '/home/noa/PycharmProjects/DMRG_py')
@@ -77,8 +77,14 @@ for rep in range(repetitions):
             tn.split_node_full_svd(curr1, curr1.edges[:2], curr1.edges[2:])
         end = time.time()
         tSums[backend] += end - start
-        with open(outdir + '/' + backend + '/' + opt + '/' +
-                  'chi_' + str(chi) + '_d_' + str(d) + '_rep_' + str(rep) +
-                  '_cpuNum_' + str(cpuNum),
-                  'wb') as f:
-            pickle.dump(end - start, f)
+        print([backend, rep])
+with open(outdir + '/numpy/' + opt + '/' +
+          'chi_' + str(chi) + '_d_' + str(d) + '_rep_' + str(repetitions) +
+          '_cpuNum_' + str(cpuNum),
+          'wb') as f:
+    pickle.dump(tSums['numpy'], f)
+with open(outdir + '/torch_cpu/' + opt + '/' +
+          'chi_' + str(chi) + '_d_' + str(d) + '_rep_' + str(repetitions) +
+          '_cpuNum_' + str(cpuNum),
+          'wb') as f:
+    pickle.dump(tSums['torch_cpu'], f)
