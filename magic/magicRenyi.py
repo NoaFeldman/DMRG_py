@@ -3,7 +3,6 @@ import numpy as np
 import magic.basicDefs as basicdefs
 from typing import List
 import basicOperations as bops
-import localVecsMPS as randomVecs
 import pickle
 import os
 
@@ -76,8 +75,8 @@ def getSecondRenyiFromRandomVecs(psi: List[tn.Node], d: int, outdir='results', r
     psi2, tracePs = get2PsiVectorized(psi, d)
     for i in range(len(psi)):
         bops.applySingleSiteOp(psi2, tracePs, i)
-    M = 1000
-    steps = 2**(4 * len(psi))
+    M = 100000
+    steps = d**(4 * len(psi))
     try:
         os.mkdir(outdir)
     except FileExistsError:
@@ -85,12 +84,16 @@ def getSecondRenyiFromRandomVecs(psi: List[tn.Node], d: int, outdir='results', r
     for step in range(steps):
         mySum = 0
         for m in range(M):
-            vs = randomVecs.getVs(1, len(psi), d=d ** 2)[0]
+            vs = [np.exp(1j * np.pi * np.random.randint(4, size=d**2) / 2) for site in range(len(psi))] #randomVecs.getVs(1, len(psi), d=d**2)[0]
             curr = tn.Node(np.eye(1, dtype=complex))
+            currDagger = tn.Node(np.eye(1, dtype=complex))
             for site in range(len(psi)):
                 curr = bops.multiContraction(curr, psi2[site], '1', '0', cleanOr1=True)
                 curr = bops.multiContraction(curr, tn.Node(np.array(vs[site])), '1', '0', cleanOr1=True)
-            mySum += curr.tensor[0, 0]**4
+                currDagger = bops.multiContraction(currDagger, psi2[site], '1', '0*', cleanOr1=True)
+                currDagger = bops.multiContraction(currDagger, tn.Node(np.array(vs[site])), '1', '0', cleanOr1=True)
+            mySum += curr.tensor[0, 0]**2 * currDagger.tensor[0, 0]**2
         with open(outdir + '/est_' + str(rep) + '_' + str(step), 'wb') as f:
             pickle.dump(mySum / M, f)
+            print(mySum / M)
         mySum = 0
