@@ -67,10 +67,15 @@ def singleAttempt():
         curr1, curr2 = prepare(currTorch1, currTorch2, backend, cpuNum)
         start = time.time()
         if opt == 'contraction':
-            bops.multiContraction(curr1, curr2, '01', '01')
+            c = bops.multiContraction(curr1, curr2, '01', '01')
+            end = time.time()
+            tn.remove_node(c)
         elif opt == 'svd':
-            tn.split_node_full_svd(curr1, curr1[:2], curr1[2:])
-        end = time.time()
+            u, s, v, vals = tn.split_node_full_svd(curr1, curr1[:2], curr1[2:])
+            end = time.time()
+            tn.remove_node(u)
+            tn.remove_node(s)
+            tn.remove_node(v)
         tn.remove_node(curr1)
         tn.remove_node(curr2)
         tSums[backend] += end - start
