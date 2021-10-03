@@ -60,12 +60,7 @@ def prepare(torchTensor1, torchTensor2, backend, cpuNum):
         bops.init('pytorch', 'cuda')
     return tn.Node(torchTensor1), tn.Node(torchTensor2)
 
-set_mkl_threads(cpuNum)
-tSums = {'numpy': 0, 'torch_cpu': 0}  # , 'jax': 0, 'torch_cuda': 0}
-backends = list(tSums.keys())
-backends = ['torch_cpu', 'numpy']
-n = len(backends)
-for rep in range(repetitions):
+def singleAttempt():
     currTorch1 = torchRandomTensor(chi, d)
     currTorch2 = torchRandomTensor(chi, d)
     for backend in [backends[(rep + i) % n] for i in range(n)]:
@@ -74,17 +69,21 @@ for rep in range(repetitions):
         if opt == 'contraction':
             bops.multiContraction(curr1, curr2, '01', '01')
         elif opt == 'svd':
-            tn.split_node_full_svd(curr1, curr1.edges[:2], curr1.edges[2:])
+            tn.split_node_full_svd(curr1, curr1[:2], curr1[2:])
         end = time.time()
+        tn.remove_node(curr1)
+        tn.remove_node(curr2)
         tSums[backend] += end - start
-        print([backend, rep])
-with open(outdir + '/numpy/' + opt + '/' +
-          'chi_' + str(chi) + '_d_' + str(d) + '_rep_' + str(repetitions) +
-          '_cpuNum_' + str(cpuNum),
-          'wb') as f:
-    pickle.dump(tSums['numpy'], f)
-with open(outdir + '/torch_cpu/' + opt + '/' +
-          'chi_' + str(chi) + '_d_' + str(d) + '_rep_' + str(repetitions) +
-          '_cpuNum_' + str(cpuNum),
-          'wb') as f:
-    pickle.dump(tSums['torch_cpu'], f)
+
+set_mkl_threads(cpuNum)
+tSums = {'numpy': 0, 'torch_cpu': 0}  # , 'jax': 0, 'torch_cuda': 0}
+backends = list(tSums.keys())
+n = len(backends)
+for rep in range(repetitions):
+    singleAttempt()
+for backend in backends:
+    with open(outdir + '/' + backend + '/' + opt + '/' +
+              'chi_' + str(chi) + '_d_' + str(d) + '_rep_' + str(repetitions) +
+              '_cpuNum_' + str(cpuNum),
+              'wb') as f:
+        pickle.dump(tSums[backend], f)
