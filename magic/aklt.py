@@ -10,6 +10,8 @@ import basicOperations as bops
 import DMRG as dmrg
 import magic.magicRenyi as renyi
 import magic.basicDefs as basicdefs
+import torch
+
 
 digs = '012'
 def int2base(x, base=3, length=None):
@@ -122,12 +124,14 @@ def toVirtualHalfSpins(psi: List[tn.Node]):
     return result
 
 
-bops.setBackend('pytorch', dev='cpu')
 d = 3
 n = 8
-Js = np.sort([-1 / i for i in range(1, 3)] + [0] + [1 / i for i in range(1, 3)]) * 1/15 + 1/3
+stepSize = 0.05
+jRange = 2 / 3
+Js = [np.round(stepSize * i, 3) for i in range(int(jRange / stepSize))]
 Es = np.zeros(len(Js), dtype=complex)
 p2s = np.zeros(len(Js), dtype=complex)
+m2s = np.zeros(len(Js), dtype=complex)
 SPlus = np.zeros((d, d), dtype=complex)
 SPlus[1, 0] = 1
 SPlus[2, 1] = 1
@@ -137,18 +141,35 @@ SY = 1j * (SPlus - SMinus) / np.sqrt(2)
 SZ = np.diag([-1, 0, 1])
 SDotS = np.kron(SX, SX) + np.kron(SY, SY) + np.kron(SZ, SZ)
 psi0 = bops.getStartupState(n, mode='aklt')
-#for i in range(len(Js)):
-#    J = Js[i]
-#    localTerm = SDotS + J * np.linalg.matrix_power(SDotS, 2)
-#    gs, E0, truncErrs = dmrg.DMRG(psi0, [np.zeros((d, d), dtype=complex) for i in range(n)],
-#                                         [np.copy(localTerm) for i in range(n - 1)], d=d)
-#    psi0 = gs
-#    Es[i] = E0
-#    p2s[i] = bops.getRenyiEntropy(gs, 2, int(n/2))
-#    print(J, bops.printNode(gs[int(n/2)]))
-#plt.plot(Js, Es)
-#plt.plot(Js, p2s)
-#plt.show()
+for i in range(len(Js)):
+   J = Js[i]
+   localTerm = SDotS + J * np.linalg.matrix_power(SDotS, 2)
+   gs, E0, truncErrs = dmrg.DMRG(psi0, [np.zeros((d, d), dtype=complex) for i in range(n)],
+                                        [np.copy(localTerm) for i in range(n - 1)], d=d)
+   psi0 = gs
+   Es[i] = E0
+   if J == 0.3:
+       b = 1
+   gs16 = bops.relaxState(gs, 16)
+   gs8 = bops.relaxState(gs, 8)
+   print([bops.getOverlap(gs, gs16), bops.getOverlap(gs, gs8)])
+   p2s[i] = bops.getRenyiEntropy(gs, 2, int(n/2))
+   print(J, gs[int(n/2)][2].dimension)
+   if gs[int(n/2)][2].dimension > 16:
+       speedup = False
+   else:
+       speedup = True
+   # renyi.getSecondRenyiFromRandomVecs(gs, d, outdir='results/haldane_J_' + str(np.round(J, 5)), rep=1, speedup=speedup)
+plt.plot(Js, p2s)
+plt.scatter(Js, p2s)
+plt.show()
+
+
+def torchFromNumpy(psi):
+    res = []
+    for i in range(len(psi)):
+        res.append(tn.Node(torch.from_numpy(psi[i].tensor)))
+    return res
 
 J = 1/3
 n = 4
@@ -156,7 +177,7 @@ psi0 = bops.getStartupState(n, mode='aklt')
 localTerm = SDotS + J * np.linalg.matrix_power(SDotS, 2)
 gs, E0, truncErrs = dmrg.DMRG(psi0, [np.zeros((d, d), dtype=complex) for i in range(n)],
                               [np.copy(localTerm) for i in range(n - 1)], d=d)
-print('starting renyi')
-bops.printNode(gs[1])
 renyi.getSecondRenyi(gs, d)
-renyi.getSecondRenyiFromRandomVecs(gs, d=d, outdir='renyi2_' + str(n), rep=5)
+# bops.init('pytorch', 'cpu')
+# gs = torchFromNumpy(gs)
+renyi.getSecondRenyiFromRandomVecs(gs, d=d, outdir='renyi2_speedup_' + str(n), rep=int(sys.argv[1]), speedup=True)

@@ -53,6 +53,20 @@ def getSecondRenyi(psi, d):
     return -np.log(renyiSum) / np.log(d) - n
 
 
+def tensorKetBra(tensor, chiL, chiR, d):
+    return np.outer(tensor, np.conj(tensor)).reshape([chiL, d, chiR, chiL, d, chiR]) \
+        .transpose([0, 3, 1, 4, 2, 5]).reshape([chiL ** 2, d ** 2, chiR ** 2])
+
+
+def ketBra(site: tn.Node, d):
+    chiL = int(site[0].dimension)
+    chiR = int(site[2].dimension)
+    tensorProd = tensorKetBra(site.tensor, chiL, chiR, d)
+    # tensorProd = np.tensordot(temp, np.conj(temp), axes=(0, 0)). \
+    #     transpose([0, 3, 1, 4, 2, 5]).reshape([chiL ** 2, d ** 2, chiR ** 2])
+    return tensorProd
+
+
 def get2PsiVectorized(psi: List[tn.Node], d: int):
     paulis = basicdefs.getPauliMatrices(d)
     tracePs = np.zeros((d**2, d**2), dtype=complex)
@@ -62,21 +76,18 @@ def get2PsiVectorized(psi: List[tn.Node], d: int):
         tracePs[i, :] = traceP
     psi2 = []
     for i in range(len(psi)):
-        temp = psi[i].tensor.reshape([1] + list(psi[i].shape))
-        chiL = psi[i].edges[0].dimension
-        chiR = psi[i].edges[2].dimension
-        tensorProd = np.tensordot(temp, bops.conj(temp), axes=(0, 0)). \
-            transpose([0, 3, 1, 4, 2, 5]).reshape([chiL**2, d**2, chiR**2])
-        psi2.append(tn.Node(tensorProd))
+        psi2.append(tn.Node(ketBra(psi[i], d)))
     return psi2, tn.Node(tracePs / np.sqrt(d))
 
 
-def getSecondRenyiFromRandomVecs(psi: List[tn.Node], d: int, outdir='results', rep=1):
+def getSecondRenyiFromRandomVecs(psi: List[tn.Node], d: int, outdir='results', rep=1, speedup=False):
     psi2, tracePs = get2PsiVectorized(psi, d)
     for i in range(len(psi)):
         bops.applySingleSiteOp(psi2, tracePs, i)
-    M = 100000
-    steps = d**(4 * len(psi))
+    M = 1000
+    steps = 1000 # d**(2 * len(psi))
+    if speedup:
+        deltaIndices = [i * (d**2+1) for i in range(d**2)]
     try:
         os.mkdir(outdir)
     except FileExistsError:
@@ -87,13 +98,30 @@ def getSecondRenyiFromRandomVecs(psi: List[tn.Node], d: int, outdir='results', r
             vs = [np.exp(1j * np.pi * np.random.randint(4, size=d**2) / 2) for site in range(len(psi))] #randomVecs.getVs(1, len(psi), d=d**2)[0]
             curr = tn.Node(np.eye(1, dtype=complex))
             currDagger = tn.Node(np.eye(1, dtype=complex))
-            for site in range(len(psi)):
-                curr = bops.multiContraction(curr, psi2[site], '1', '0', cleanOr1=True)
-                curr = bops.multiContraction(curr, tn.Node(np.array(vs[site])), '1', '0', cleanOr1=True)
-                currDagger = bops.multiContraction(currDagger, psi2[site], '1', '0*', cleanOr1=True)
-                currDagger = bops.multiContraction(currDagger, tn.Node(np.array(vs[site])), '1', '0', cleanOr1=True)
-            mySum += curr.tensor[0, 0]**2 * currDagger.tensor[0, 0]**2
+            for siteInd in range(len(psi)):
+                vTensor = np.array(vs[siteInd])
+                v = tn.Node(vTensor)
+                if speedup:
+                    chiL = int(psi2[siteInd][0].dimension)
+                    chiR = int(psi2[siteInd][2].dimension)
+                    siteTensor = np.zeros((chiL**2, d**2, chiR**2), dtype=complex)
+                    for i in range(d**2):
+                        siteTensor[:, i, :] = tensorKetBra(psi2[siteInd].tensor[:, i, :].reshape([chiL, 1, chiR]),
+                                                           chiL, chiR, 1).reshape([chiL**2, chiR**2])
+                    # siteTensor = ketBra(psi2[siteInd], d ** 2)
+                    # siteTensor = siteTensor[:, deltaIndices, :]
+                    site = tn.Node(siteTensor)
+                else:
+                    site = psi2[siteInd]
+                    currDagger = bops.multiContraction(currDagger, site, '1', '0*', cleanOr1=True)
+                    currDagger = bops.multiContraction(currDagger, v, '1', '0', cleanOr1=True)
+                curr = bops.multiContraction(curr, site, '1', '0', cleanOr1=True, cleanOr2=True)
+                curr = bops.multiContraction(curr, v, '1', '0', cleanOr1=True, cleanOr2=True)
+            if speedup:
+                mySum += np.abs(curr.tensor[0, 0] ** 2)
+            else:
+                mySum += curr.tensor[0, 0]**2 * currDagger.tensor[0, 0]**2
         with open(outdir + '/est_' + str(rep) + '_' + str(step), 'wb') as f:
             pickle.dump(mySum / M, f)
-            print(mySum / M)
+            # print(mySum / M)
         mySum = 0
