@@ -11,7 +11,7 @@ import DMRG as dmrg
 import magic.magicRenyi as renyi
 import magic.basicDefs as basicdefs
 import torch
-
+import gc
 
 digs = '012'
 def int2base(x, base=3, length=None):
@@ -146,7 +146,23 @@ for i in range(len(Js)):
    # localTerm = SDotS + J * np.linalg.matrix_power(SDotS, 2)
    # gs, E0, truncErrs = dmrg.DMRG(psi0, [np.zeros((d, d), dtype=complex) for i in range(n)],
    #                                      [np.copy(localTerm) for i in range(n - 1)], d=d)
-   with open('results/haldane/psi_haldane_J_' + str(np.round(J, 5)) + '_16', 'rb') as f:
+   with open('results/haldane/psi_haldane_J_' + str(np.round(J, 5)) + '_15', 'rb') as f:
        gs = pickle.load(f)
-   renyi.getSecondRenyiFromRandomVecs(gs, d, outdir='results/haldane_J_' + str(np.round(J, 5)),
-                                      rep=1, speedup=True)
+   m2 = renyi.getSecondRenyiExact(gs, d)
+   gc.collect()
+   with open('results/m2_' + str(J), 'wb') as f:
+       pickle.dump(m2, f)
+   # renyi.getSecondRenyiFromRandomVecs(gs, d, outdir='results/haldane_J_' + str(np.round(J, 5)),
+   #                                    rep=2, speedup=True)
+
+test = False 
+if test:
+    n = 4
+    psi0 = bops.getStartupState(n, d=3, mode='aklt')
+    op = np.eye(3, dtype=complex)
+    op[1, 1] *= basicdefs.omega**(1/4)
+    op[1, 1] *= basicdefs.omega**(2/4)
+    bops.applySingleSiteOp(psi0, tn.Node(op), 1)
+    renyi.getSecondRenyi(psi0, d)
+    renyi.getSecondRenyiExact(psi0, d)
+    renyi.getSecondRenyiFromRandomVecs(psi0, d, outdir='results/renyi2_speedup_4', speedup=True)

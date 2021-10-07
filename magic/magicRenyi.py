@@ -53,8 +53,10 @@ def getSecondRenyi(psi, d):
     return -np.log(renyiSum) / np.log(d) - n
 
 
-def tensorKetBra(tensor, chiL, chiR, d):
-    return np.outer(tensor, np.conj(tensor)).reshape([chiL, d, chiR, chiL, d, chiR]) \
+def tensorKetBra(tensorKet, chiL, chiR, d, tensorBra=None):
+    if tensorBra is None:
+        tensorBra = tensorKet
+    return np.outer(tensorKet, np.conj(tensorBra)).reshape([chiL, d, chiR, chiL, d, chiR]) \
         .transpose([0, 3, 1, 4, 2, 5]).reshape([chiL ** 2, d ** 2, chiR ** 2])
 
 
@@ -95,33 +97,63 @@ def getSecondRenyiFromRandomVecs(psi: List[tn.Node], d: int, outdir='results', r
     for step in range(steps):
         mySum = 0
         for m in range(M):
-            vs = [np.exp(1j * np.pi * np.random.randint(4, size=d**2) / 2) for site in range(len(psi))] #randomVecs.getVs(1, len(psi), d=d**2)[0]
+            if not speedup:
+                vs = [np.exp(1j * np.pi * np.random.randint(4, size=d**2) / 2) for site in range(len(psi))] #randomVecs.getVs(1, len(psi), d=d**2)[0]
+            else:
+                vs = [np.exp(1j * np.pi * np.random.randint(4, size=d ** 4) / 2) for site in range(int(len(psi)/2))]
             curr = tn.Node(np.eye(1, dtype=complex))
             currDagger = tn.Node(np.eye(1, dtype=complex))
-            for siteInd in range(len(psi)):
-                vTensor = np.array(vs[siteInd])
-                v = tn.Node(vTensor)
-                if speedup:
-                    chiL = int(psi2[siteInd][0].dimension)
-                    chiR = int(psi2[siteInd][2].dimension)
-                    siteTensor = np.zeros((chiL**2, d**2, chiR**2), dtype=complex)
-                    for i in range(d**2):
-                        siteTensor[:, i, :] = tensorKetBra(psi2[siteInd].tensor[:, i, :].reshape([chiL, 1, chiR]),
-                                                           chiL, chiR, 1).reshape([chiL**2, chiR**2])
-                    # siteTensor = ketBra(psi2[siteInd], d ** 2)
-                    # siteTensor = siteTensor[:, deltaIndices, :]
-                    site = tn.Node(siteTensor)
-                else:
+            if not speedup:
+                for siteInd in range(len(psi)):
+                    # if speedup:
+                        # chiL = int(psi2[siteInd][0].dimension)
+                        # chiR = int(psi2[siteInd][2].dimension)
+                        # siteTensor = np.zeros((chiL**2, d**2, chiR**2), dtype=complex)
+                        # for i in range(d**2):
+                        #     siteTensor[:, i, :] = tensorKetBra(psi2[siteInd].tensor[:, i, :].reshape([chiL, 1, chiR]),
+                        #                                        chiL, chiR, 1).reshape([chiL**2, chiR**2])
+                        # site = tn.Node(siteTensor)
+                    # else:
+                    vTensor = np.array(vs[siteInd])
+                    v = tn.Node(vTensor)
                     site = psi2[siteInd]
                     currDagger = bops.multiContraction(currDagger, site, '1', '0*', cleanOr1=True)
                     currDagger = bops.multiContraction(currDagger, v, '1', '0', cleanOr1=True)
-                curr = bops.multiContraction(curr, site, '1', '0', cleanOr1=True, cleanOr2=True)
-                curr = bops.multiContraction(curr, v, '1', '0', cleanOr1=True, cleanOr2=True)
-            if speedup:
-                mySum += np.abs(curr.tensor[0, 0] ** 2)
+                    curr = bops.multiContraction(curr, site, '1', '0', cleanOr1=True, cleanOr2=True)
+                    curr = bops.multiContraction(curr, v, '1', '0', cleanOr1=True, cleanOr2=True)
+                # if speedup:
+                #     mySum += np.abs(curr.tensor[0, 0] ** 2)
+                # else:
             else:
-                mySum += curr.tensor[0, 0]**2 * currDagger.tensor[0, 0]**2
+                for siteInd in range(int(len(psi2)/2)):
+                    vTensor = np.array(vs[siteInd])
+                    v = tn.Node(vTensor)
+                    site = bops.unifyLegs(bops.multiContraction(psi2[2 * siteInd], psi2[2 * siteInd + 1], '2', '0'),
+                                          1, 2, cleanOriginal=True)
+                    currDagger = bops.multiContraction(currDagger, site, '1', '0*', cleanOr1=True)
+                    currDagger = bops.multiContraction(currDagger, v, '1', '0', cleanOr1=True)
+                    curr = bops.multiContraction(curr, site, '1', '0', cleanOr1=True, cleanOr2=True)
+                    curr = bops.multiContraction(curr, v, '1', '0', cleanOr1=True, cleanOr2=True)
+            mySum += curr.tensor[0, 0] ** 2 * currDagger.tensor[0, 0] ** 2
         with open(outdir + '/est_' + str(rep) + '_' + str(step), 'wb') as f:
             pickle.dump(mySum / M, f)
-            # print(mySum / M)
+            print(mySum / M)
         mySum = 0
+
+
+def getSecondRenyiExact(psi: List[tn.Node], d: int):
+    n = len(psi)
+    dm = tn.Node(np.eye(1))
+    for i in range(n - 1):
+        dm = bops.multiContraction(bops.multiContraction(psi[i], dm, '0', '1'), psi[i], [2 * i + 2], '0*')
+    dm = bops.multiContraction(bops.multiContraction(psi[n - 1], dm, '0', '1'), psi[n - 1], [2 * n, 1], '02*')
+    dm = dm.tensor.transpose(list(range(n)) + list(range(2*n - 1, n-1, -1))).reshape([d**n, d**n])
+    pOps = [np.eye(1)]
+    paulis = basicdefs.getPauliMatrices(d)
+    for i in range(n):
+        pOps = [np.kron(op, pauli) for op in pOps for pauli in paulis]
+    renyiSum = 0
+    for pOp in pOps:
+        renyiSum += np.abs(np.trace(np.matmul(dm, pOp)))**4 / d**(2*n)
+    print('renyi sum = ' + str(renyiSum))
+    return -np.log(renyiSum) / np.log(d) - n
