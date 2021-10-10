@@ -141,6 +141,29 @@ def getSecondRenyiFromRandomVecs(psi: List[tn.Node], d: int, outdir='results', r
         mySum = 0
 
 
+digs = '0123456789'
+def int2base(x, base, N=None):
+    if x == 0:
+        res = '0'
+    digits = []
+    while x:
+        digits.append(digs[int(x % base)])
+        x = int(x / base)
+    digits.reverse()
+    res = ''.join(digits)
+    if N is None:
+        return res
+    return '0' * (N - len(res)) + res
+
+
+def getPOp(index, paulis, d, n):
+    pauliString = int2base(index, d**2, N=n)
+    op = np.eye(1)
+    for char in pauliString:
+        op = np.kron(op, paulis[int(char)])
+    return op
+
+
 def getSecondRenyiExact(psi: List[tn.Node], d: int):
     n = len(psi)
     dm = tn.Node(np.eye(1))
@@ -148,12 +171,10 @@ def getSecondRenyiExact(psi: List[tn.Node], d: int):
         dm = bops.multiContraction(bops.multiContraction(psi[i], dm, '0', '1'), psi[i], [2 * i + 2], '0*')
     dm = bops.multiContraction(bops.multiContraction(psi[n - 1], dm, '0', '1'), psi[n - 1], [2 * n, 1], '02*')
     dm = dm.tensor.transpose(list(range(n)) + list(range(2*n - 1, n-1, -1))).reshape([d**n, d**n])
-    pOps = [np.eye(1)]
     paulis = basicdefs.getPauliMatrices(d)
-    for i in range(n):
-        pOps = [np.kron(op, pauli) for op in pOps for pauli in paulis]
     renyiSum = 0
-    for pOp in pOps:
-        renyiSum += np.abs(np.trace(np.matmul(dm, pOp)))**4 / d**(2*n)
+    for i in range(d**(2 * n)):
+        pOp = getPOp(i, paulis, d, n)
+        renyiSum += np.abs(np.matmul(dm, pOp).trace())**4 / d**(2*n)
     print('renyi sum = ' + str(renyiSum))
     return -np.log(renyiSum) / np.log(d) - n

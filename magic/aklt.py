@@ -146,7 +146,7 @@ for i in range(len(Js)):
    # localTerm = SDotS + J * np.linalg.matrix_power(SDotS, 2)
    # gs, E0, truncErrs = dmrg.DMRG(psi0, [np.zeros((d, d), dtype=complex) for i in range(n)],
    #                                      [np.copy(localTerm) for i in range(n - 1)], d=d)
-   with open('results/haldane/psi_haldane_J_' + str(np.round(J, 5)) + '_15', 'rb') as f:
+   with open('results/haldane/psi_haldane_J_' + str(np.round(J, 5)) + '_16', 'rb') as f:
        gs = pickle.load(f)
    m2 = renyi.getSecondRenyiExact(gs, d)
    gc.collect()
