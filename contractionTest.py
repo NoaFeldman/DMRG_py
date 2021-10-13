@@ -1,8 +1,7 @@
 import numpy as np
 import tensornetwork as tn
 import pickle
-# import jax
-# import jax.numpy as jnp
+import jax.numpy as jnp
 import torch
 import sys
 # sys.path.insert(1, '/home/noa/PycharmProjects/DMRG_py')
@@ -64,9 +63,13 @@ def prepare(torchTensor1, torchTensor2, backend, cpuNum):
     return tn.Node(torchTensor1), tn.Node(torchTensor2)
 
 def singleAttempt():
-    with open('randomTensors' 'rb') as f:
-        [currTorch1, currTorch2] = pickle.load(f)
-    for backend in [backends[(rep + i) % n] for i in range(n)]:
+    if repetitionNum == 0:
+        currTorch1 = torchRandomTensor(chi, d)
+        currTorch2 = torchRandomTensor(chi, d)
+    else:
+        with open('randomTensors_' + str(chi), 'rb') as f:
+            [currTorch1, currTorch2] = pickle.load(f)
+    for backend in [backends[(repetitionNum + i) % n] for i in range(n)]:
         curr1, curr2 = prepare(currTorch1, currTorch2, backend, cpuNum)
         start = time.time()
         if opt == 'contraction':
@@ -84,12 +87,12 @@ def singleAttempt():
         ts[backend] += end - start
     currTorch1 = torchRandomTensor(chi, d)
     currTorch2 = torchRandomTensor(chi, d)
-    with open('randomTensors' 'wb') as f:
+    with open('randomTensors_' + str(chi), 'wb') as f:
         pickle.dump([currTorch1, currTorch2], f)
-    io.savemat('randomTensors.mat', dict(curr1=currTorch1.numpy(), curr2=currTorch2.numpy()))
+    io.savemat('randomTensors_' + str(chi) + '.mat', dict(curr1=currTorch1.numpy(), curr2=currTorch2.numpy()))
 
 set_mkl_threads(cpuNum)
-ts = {'numpy': 0, 'torch_cpu': 0, 'jax': 0, 'torch_cuda': 0, 'numpy_bare': 0}
+ts = {'numpy': 0, 'torch_cpu': 0, 'jax': 0, 'numpy_bare': 0, 'torch_cuda': 0}
 backends = list(ts.keys())
 n = len(backends)
 # for rep in range(repetitions):
@@ -102,8 +105,9 @@ for backend in backends:
         with open(filename + '_rep_' + str(repetitionNum), 'wb') as f:
             pickle.dump(ts[backend], f)
     else:
-        with open(filename + '_rep_' + str(repetitionNum - 1), 'wb') as f:
-            t = pickle.load(f) + ts[backend]
+        with open(filename + '_rep_' + str(repetitionNum - 1), 'rb') as f:
+            tpre = pickle.load(f)
+            t = tpre + ts[backend]
         with open(filename + '_rep_' + str(repetitionNum), 'wb') as f:
             pickle.dump(t, f)
         os.remove(filename + '_rep_' + str(repetitionNum - 1))
