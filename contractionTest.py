@@ -18,7 +18,7 @@ outdir = sys.argv[3]
 opt = sys.argv[4]
 repetitionNum = int(sys.argv[5])
 cpuNum = int(sys.argv[6])
-
+isNoMKL = int(sys.argv[7])
 
 def set_mkl_threads(threadNum):
     try:
@@ -48,8 +48,8 @@ def torchRandomTensor(chi, d):
 
 
 def prepare(torchTensor1, torchTensor2, backend, cpuNum):
-    if backend == 'numpy':
-        bops.init(backend)
+    if backend == 'numpy' or backend == 'numpy_nomkl':
+        bops.init('numpy')
         return tn.Node(torchTensor1.numpy()), tn.Node(torchTensor2.numpy())
     elif backend == 'jax':
         bops.init(backend)
@@ -58,7 +58,7 @@ def prepare(torchTensor1, torchTensor2, backend, cpuNum):
         bops.init('pytorch', 'cpu')
     elif backend == 'torch_cuda':
         bops.init('pytorch', 'cuda')
-    elif backend == 'numpy_bare':
+    elif backend == 'numpy_bare' or backend == 'numpy_bare_nomkl':
         return torchTensor1.numpy(), torchTensor2.numpy()
     return tn.Node(torchTensor1), tn.Node(torchTensor2)
 
@@ -93,6 +93,8 @@ def singleAttempt():
 
 set_mkl_threads(cpuNum)
 ts = {'numpy': 0, 'torch_cpu': 0, 'jax': 0, 'numpy_bare': 0, 'torch_cuda': 0}
+if isNoMKL:
+    ts = {'numpy_nomkl': 0, 'numpy_bare_nomkl': 0}
 backends = list(ts.keys())
 n = len(backends)
 # for rep in range(repetitions):
