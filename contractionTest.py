@@ -18,7 +18,7 @@ outdir = sys.argv[3]
 opt = sys.argv[4]
 repetitionNum = int(sys.argv[5])
 cpuNum = int(sys.argv[6])
-isNoMKL = int(sys.argv[7])
+backend = sys.argv[7]
 
 def set_mkl_threads(threadNum):
     try:
@@ -47,69 +47,60 @@ def torchRandomTensor(chi, d):
     return torch.rand((chi, d, chi), dtype=torch.complex128)
 
 
-def prepare(torchTensor1, torchTensor2, backend, cpuNum):
+def init(backend):
     if backend == 'numpy' or backend == 'numpy_nomkl':
         bops.init('numpy')
-        return tn.Node(torchTensor1.numpy()), tn.Node(torchTensor2.numpy())
+        # return tn.Node(torchTensor1.numpy()), tn.Node(torchTensor2.numpy())
     elif backend == 'jax':
         bops.init(backend)
-        return tn.Node(jnp.array(torchTensor1.numpy())), tn.Node(jnp.array(torchTensor2.numpy()))
+        # return tn.Node(jnp.array(torchTensor1.numpy())), tn.Node(jnp.array(torchTensor2.numpy()))
     elif backend == 'torch_cpu':
         bops.init('pytorch', 'cpu')
     elif backend == 'torch_cuda':
         bops.init('pytorch', 'cuda')
-    elif backend == 'numpy_bare' or backend == 'numpy_bare_nomkl':
-        return torchTensor1.numpy(), torchTensor2.numpy()
-    return tn.Node(torchTensor1), tn.Node(torchTensor2)
+    # elif backend == 'numpy_bare' or backend == 'numpy_bare_nomkl':
+    #     return torchTensor1.numpy(), torchTensor2.numpy()
+    # return tn.Node(torchTensor1), tn.Node(torchTensor2)
 
 def singleAttempt():
-    if repetitionNum == 0:
-        currTorch1 = torchRandomTensor(chi, d)
-        currTorch2 = torchRandomTensor(chi, d)
+    curr1Tensor = prng.random_sample((chi, d, chi)) + 1j * prng.random_sample((chi, d, chi))
+    curr2Tensor = prng.random_sample((chi, d, chi)) + 1j * prng.random_sample((chi, d, chi))
+    print(curr1Tensor)
+    if backend == 'jax':
+        curr1Tensor = jnp.array(curr1Tensor)
+        curr2Tensor = jnp.array(curr2Tensor)
+    if backend != 'numpy_bare':
+        curr1 = tn.Node(curr1Tensor)
+        curr2 = tn.Node(curr2Tensor)
     else:
-        with open('randomTensors_' + str(chi), 'rb') as f:
-            [currTorch1, currTorch2] = pickle.load(f)
-    for backend in [backends[(repetitionNum + i) % n] for i in range(n)]:
-        curr1, curr2 = prepare(currTorch1, currTorch2, backend, cpuNum)
-        start = time.time()
-        if opt == 'contraction':
-            if backend == 'numpy_bare':
-                c = np.tensordot(curr1, np.conj(curr2), axes=([0, 1], [0, 1]))
-            else:
-                c = bops.multiContraction(curr1, curr2, '01', '01')
-        elif opt == 'svd':
-            if backend == 'numpy_bare':
-                u, s, vh = np.linalg.svd(curr1.reshape([curr1.shape[0] * curr1.shape[1], curr1.shape[2]]))
-                u.reshape(curr1.shape[0], curr1.shape[1], u.shape[1])
-            else:
-                u, s, v, vals = tn.split_node_full_svd(curr1, curr1[:2], curr1[2:])
-        end = time.time()
-        ts[backend] += end - start
-    currTorch1 = torchRandomTensor(chi, d)
-    currTorch2 = torchRandomTensor(chi, d)
-    with open('randomTensors_' + str(chi), 'wb') as f:
-        pickle.dump([currTorch1, currTorch2], f)
-    io.savemat('randomTensors_' + str(chi) + '.mat', dict(curr1=currTorch1.numpy(), curr2=currTorch2.numpy()))
+        curr1 = curr1Tensor
+        curr2 = curr2Tensor
+    start = time.time()
+    if opt == 'contraction':
+        if backend == 'numpy_bare':
+            c = np.tensordot(curr1, np.conj(curr2), axes=([0, 1], [0, 1]))
+        else:
+            c = bops.multiContraction(curr1, curr2, '01', '01')
+    elif opt == 'svd':
+        if backend == 'numpy_bare':
+            u, s, vh = np.linalg.svd(curr1.reshape([curr1.shape[0] * curr1.shape[1], curr1.shape[2]]), full_matrices=False)
+            u.reshape(curr1.shape[0], curr1.shape[1], u.shape[1])
+        else:
+            u, s, v, vals = tn.split_node_full_svd(curr1, curr1[:2], curr1[2:])
+    end = time.time()
+    return end - start
 
 set_mkl_threads(cpuNum)
-ts = {'numpy': 0, 'torch_cpu': 0, 'jax': 0, 'numpy_bare': 0, 'torch_cuda': 0}
-if isNoMKL:
-    ts = {'numpy_nomkl': 0, 'numpy_bare_nomkl': 0}
-backends = list(ts.keys())
-n = len(backends)
-# for rep in range(repetitions):
-singleAttempt()
-gc.collect()
-for backend in backends:
-    filename = outdir + '/' + backend + '/' + opt + '/' + \
-              'chi_' + str(chi) + '_d_' + str(d) + '_cpuNum_' + str(cpuNum)
-    if repetitionNum == 0:
-        with open(filename + '_rep_' + str(repetitionNum), 'wb') as f:
-            pickle.dump(ts[backend], f)
-    else:
-        with open(filename + '_rep_' + str(repetitionNum - 1), 'rb') as f:
-            tpre = pickle.load(f)
-            t = tpre + ts[backend]
-        with open(filename + '_rep_' + str(repetitionNum), 'wb') as f:
-            pickle.dump(t, f)
-        os.remove(filename + '_rep_' + str(repetitionNum - 1))
+init(backend)
+t = 0
+prng = np.random.RandomState()
+with open('random_state', 'rb') as f:
+    state = pickle.load(f)
+prng.set_state(state)
+for rep in range(repetitionNum):
+    t += singleAttempt()
+    gc.collect()
+filename = outdir + '/' + backend + '/' + opt + '/' + \
+          'chi_' + str(chi) + '_d_' + str(d) + '_cpuNum_' + str(cpuNum) + '_repsNum_' + str(repetitionNum)
+with open(filename, 'wb') as f:
+    pickle.dump(t, f)
