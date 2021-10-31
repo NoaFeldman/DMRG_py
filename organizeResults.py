@@ -12,6 +12,9 @@ outdir = sys.argv[5]
 organized = []
 for file in os.listdir(indir):
     with open(indir + '/' + file, 'rb') as f:
-        organized.append(pickle.load(f))
+        try:
+            organized.append(pickle.load(f))
+        except EOFError:
+            pass
 with open(outdir + '/' + 'organized_' + option + '_' + n + '_' + NA, 'wb') as f:
     pickle.dump(organized, f)

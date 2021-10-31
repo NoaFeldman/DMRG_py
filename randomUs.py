@@ -4,8 +4,7 @@ import tensornetwork as tn
 import scipy
 import pickle
 from datetime import datetime
-import statistics
-
+import gc
 
 """A Random matrix distributed with Haar measure"""
 def haar_measure(n):
@@ -98,70 +97,38 @@ def getUPhi(phi, d):
 # This function returns mat_ij = M_iG_j
 hadamard = np.ones((2, 2)) * np.sqrt(0.5)
 hadamard[1, 1] *= -1
-def getNonUnitaryRandomOps(d, randOption, theta=None, phi=None, vecsNum=2, direction=0):
-    if randOption == 'identity':
-        return [tn.Node(np.eye(d, dtype=complex)) for i in range(vecsNum)]
-    vecs = [np.zeros((d), dtype=complex) for i in range(vecsNum)]
-    for i in range(vecsNum):
-        if randOption == 'complex':
-            vecs[i] = (np.random.randint(2, size=d) * 2 - 1 + 1j * (np.random.randint(2, size=d) * 2 - 1)) / np.sqrt(2)
-        elif randOption == 'real':
-            vecs[i] = np.random.randint(2, size=d) * 2 - 1
-        elif randOption == 'gaussian':
-            vecs[i] = np.random.randn(2)
-    if not (theta == None and phi == None):
-        u = np.matmul(getUTheta(theta, d), getUPhi(phi, d))
-        for i in range(len(vecs)):
-            vecs[i] = np.matmul(u, vecs[i])
-    res = [tn.Node(np.zeros((d, d), dtype=complex)) for i in range(vecsNum)]
-    if direction == 0:
-        for i in range(vecsNum):
-            if i == vecsNum - 1:
-                next = 0
-            else:
-                next = i + 1
-            res[i].tensor = np.kron(vecs[i], np.conj(np.reshape(vecs[next], [2, 1])))
-    else:
-        for i in range(vecsNum):
-            if i == 0:
-                prev = vecsNum -1
-            else:
-                prev = i - 1
-            res[i].tensor = np.kron(vecs[prev], np.conj(np.reshape(vecs[i], [2, 1])))
+vecsPool = [np.array(arr) for arr in [[np.sqrt(2), 0], [0, np.sqrt(2)], [1, 1], [1, -1], [1, 1j], [1, -1j]]]
+vecsPool = vecsPool + [-arr for arr in vecsPool] + [1j * arr for arr in vecsPool] + [-1j * arr for arr in vecsPool]
+
+def getNonUnitaryRandomOps(d, n, N, direction=0):
+    vecs = [[vecsPool[np.random.randint(len(vecsPool))] for i in range(N)] for j in range(n)]
+    res = [[tn.Node(np.outer(vecs[j][i], np.conj(vecs[(j+1) % n][i]))) for i in range(N)] for j in range(n)]
     return res
 
 
-def renyiEntropy(n, w, h, M, randOption, theta, phi, estimateFunc, arguments, filename, d=2, excludeIndices=[]):
-    start = datetime.now()
+def renyiEntropy(n, w, h, M, estimateFunc, arguments, filename, d=2, excludeIndices=[]):
     avg = 0
     N = w * h
     for m in range(M * 2**N * 10):
-        ops = [getNonUnitaryRandomOps(d, randOption, theta, phi, vecsNum=n) for i in range(N)]
+        ops = getNonUnitaryRandomOps(d, n, N)
         for ind in excludeIndices:
             ops[ind] = [tn.Node(np.eye(d, dtype=complex)) for i in range(n)]
         estimation = 1
         for i in range(n):
-            expectation = wrapper(estimateFunc, arguments + [[op[i] for op in ops]])
+            expectation = wrapper(estimateFunc, arguments + [ops[i]])
             estimation *= expectation
-            if estimation > 40:
-                b = 1
         avg += estimation
         if m % M == M - 1:
-            with open(filename + '_n_' + str(n) + '_w_' + str(w) + '_h_' + str(h) + '_' + randOption + '_M_' + str(M) + '_m_' + str(m), 'wb') as f:
-                pickle.dump(avg, f)
+            with open(filename + '_n_' + str(n) + '_w_' + str(w) + '_h_' + str(h) + '_M_' + str(M) + '_m_' + str(m), 'wb') as f:
+                pickle.dump(avg / M, f)
                 avg = 0
-        for op in ops:
-            bops.removeState(op)
-    end = datetime.now()
-    with open(filename + '_time_N_' + str(N) + '_M_' + str(M), 'wb') as f:
-        pickle.dump((end - start).total_seconds(), f)
+            gc.collect()
 
 
-def renyiNegativity(n, N, M, randOption, estimateFunc, arguments, filename, d=2):
-    start = datetime.now()
+def renyiNegativity(n, N, M,estimateFunc, arguments, filename, d=2):
     avg = 0
     for m in range(int(M * d ** N)):
-        ops = [getNonUnitaryRandomOps(d, randOption, vecsNum=n, direction=int(N / 2 > i)) for i in range(N)]
+        ops = [getNonUnitaryRandomOps(d, n, direction=int(N / 2 > i)) for i in range(N)]
         estimation = 1
         for i in range(n):
             expectation = wrapper(estimateFunc, arguments + [[op[i] for op in ops]])
@@ -169,35 +136,12 @@ def renyiNegativity(n, N, M, randOption, estimateFunc, arguments, filename, d=2)
         mc = m % M
         avg = (avg * mc + estimation) / (mc + 1)
         if m % M == M - 1:
-            with open(filename + 'neg_n_' + str(n) + '_N_' + str(N) + '_' + randOption + '_M_' + str(M) + '_m_' + str(m), 'wb') as f:
+            with open(filename + 'neg_n_' + str(n) + '_N_' + str(N) + '_M_' + str(M) + '_m_' + str(m), 'wb') as f:
                 pickle.dump(avg, f)
                 print(np.real(np.round(avg, 16)))
                 avg = 0
         for op in ops:
             bops.removeState(op)
-    end = datetime.now()
-    with open(filename + 'neg_time_N_' + str(N) + '_M_' + str(M), 'wb') as f:
-        pickle.dump((end - start).total_seconds(), f)
-
-
-def localNonUnitaries(N, M, randOption, estimateFunc, arguments, filename, d=2):
-    start = datetime.now()
-    avg = 0
-    for m in range(int(M * d**N)):
-        ops = [getNonUnitaryRandomOps(d, randOption)[0] for i in range(N)]
-        expectation = wrapper(estimateFunc, arguments + [ops])
-        estimation = np.abs(expectation)**2
-        mc = m % M
-        avg = (avg * mc + estimation) / (mc + 1)
-        if m % M == M - 1:
-            with open(filename + '_N_' + str(N) + '_' + randOption + '_M_' + str(M) + '_m_' + str(m), 'wb') as f:
-                pickle.dump(avg, f)
-                print(avg)
-                avg = 0
-        bops.removeState(ops)
-    end = datetime.now()
-    with open(filename + '_time_N_' + str(N) + '_M_' + str(M), 'wb') as f:
-        pickle.dump((end - start).total_seconds(), f)
 
 
 def exactPurity(l, xRight, xLeft, upRow, downRow, A, filename, d=2):

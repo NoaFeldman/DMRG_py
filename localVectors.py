@@ -30,10 +30,8 @@ if option == 'ising':
     argvl = 11
 elif option == 'toric':
     boundaryFile = 'toricBoundaries'
-    theta = float(sys.argv[8]) * np.pi
-    phi = float(sys.argv[9]) * np.pi
-    newdir = dirname + 'toric_n_' + str(n) + '_w_' + str(w) + '_h_' + str(h) + '_theta_' + sys.argv[8] +'_phi_' + sys.argv[9]
-    argvl = 10
+    newdir = dirname + 'toric_n_' + str(n) + '_w_' + str(w) + '_h_' + str(h)
+    argvl = 8
 elif option == 'toricG':
     g = np.round(float(sys.argv[8]), 2)
     boundaryFile = 'toricBoundaries_g_' + str(g)
@@ -61,8 +59,7 @@ try:
     os.mkdir(newdir)
 except FileExistsError:
     pass
-option = 'complex'
-ru.renyiEntropy(n, w, h, M, option, theta, phi, pe.applyLocalOperators, [cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h],
+ru.renyiEntropy(n, w, h, M, pe.applyLocalOperators, [cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h],
                       newdir + '/rep_' + str(rep), excludeIndices=excludeIndices)
 # ru.renyiNegativity(n, l * 4, M, option, toricCode.applyLocalOperators, [cUp, dUp, cDown, dDown, leftRow, rightRow, toricCode.A, toricCode.B, l],
 #                    newdir + '/')

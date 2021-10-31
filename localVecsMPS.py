@@ -64,16 +64,20 @@ def localVecsEstimate(psi: List[tn.Node], vs: List[List[np.array]], option='', h
     return result
 
 
+vsPool = [np.array(arr) for arr in [[np.sqrt(2), 0], [0, np.sqrt(2)], [1, 1], [1, -1], [1, 1j], [1, -1j]]]
+vsPool = vsPool + [-arr for arr in vsPool] + [1j * arr for arr in vsPool] + [-1j * arr for arr in vsPool]
+
 def getVs(n, NA, half='left', option='', d=2, phi=0, theta=0, NB=0):
-    # TODO U
-    U = tn.Node(np.matmul(ru.getUPhi(np.pi * phi / 2, 2), ru.getUTheta(np.pi * theta / 2, 2)))
     if half == 'left':
-        vs = [[np.array([np.exp(1j * np.pi * np.random.randint(4) / 2) for i in range(d)])
+        vs = [[vsPool[np.random.randint(len(vsPool))]
                    for alpha in range(NA)] for copy in range(n)]
+        # vs = [[np.array([np.exp(1j * np.pi * np.random.randint(4) / 2) for i in range(d)])
+        #            for alpha in range(NA)] for copy in range(n)]
     else:
         vs = [[np.array([np.exp(1j * np.pi * np.random.randint(4) / 2) for i in range(d)])
                for alpha in range(NB)] for copy in range(n)]
     if option == 'optimized':
+        U = tn.Node(np.matmul(ru.getUPhi(np.pi * phi / 2, 2), ru.getUTheta(np.pi * theta / 2, 2)))
         for copy in range(n):
             for alpha in range(NA):
                 vs[copy][alpha] = np.matmul(U.tensor, vs[copy][alpha])
@@ -83,14 +87,17 @@ def getVs(n, NA, half='left', option='', d=2, phi=0, theta=0, NB=0):
 def getRandomizedRenyi(psi, n, NA, M, outdir, rep, option='optimized', half='left', theta=0, phi=0):
     mySum = 0
     if half == 'left':
-        steps = 250 # int(2 ** (NA * n))
+        steps = int(2 ** (NA * n))
         for k in range(len(psi) - 1, NA - 1, -1):
             psi = bops.shiftWorkingSite(psi, k, '<<')
     else:
         NB = NA
         steps = int(2 ** (NB * n))
     for m in range(M * steps):
-        vs = getVs(n, NA)
+        # vs = getVs(n, NA, theta=theta, phi=phi)
+        U = np.matmul(ru.getUPhi(np.pi * phi / 2, 2), ru.getUTheta(np.pi * theta / 2, 2))
+        vsBasics = [np.matmul(U, np.array([0, 1])) * np.sqrt(2), np.matmul(U, np.array([1, 0])) * np.sqrt(2)]
+        vs = [[vsBasics[np.random.randint(2)] for alpha in range(NA)] for copy in range(n)]
         currEstimation = localVecsEstimate(psi, vs, option=option, half=half)
         mySum += currEstimation
         if m % M == M - 1:
@@ -99,14 +106,16 @@ def getRandomizedRenyi(psi, n, NA, M, outdir, rep, option='optimized', half='lef
             mySum = 0
 
 
-def XXProcess(NA, n, t, p, flux, rep='1', indir='results/xi1Flux', option='flux'):
-    theta = 0
-    phi = 0
+def XXProcess(NA, n, flux, t=0.0, p=0.0, rep='1', indir='results', option='flux'):
+    theta = t * np.pi
+    phi = p * np.pi
     NB = NA
     M = 1000
     with open(indir + '/psiXX_NA_' + str(NA) + '_NB_' + str(NB), 'rb') as f:
         psi = pickle.load(f)
     mydir = indir + '/XX_MPS_NA_' + str(NA) + '_NB_' + str(NB) + '_n_' + str(n)
+    if t != 0 or p != 0:
+        mydir += '_' + str(np.round(t, 1)) + '_' + str(np.round(p, 1))
     if option == 'flux':
         alphaInd = flux
         alpha = np.pi * alphaInd / NA
@@ -122,19 +131,15 @@ def XXProcess(NA, n, t, p, flux, rep='1', indir='results/xi1Flux', option='flux'
         theta = np.pi / 5
         phi = np.pi / 5
         mydir += '_optimized'
-    # if option == 'phaseTest':
-    #     theta = float(sys.argv[6])
-    #     phi = float(sys.argv[7])
-    #     mydir += '_t_' + sys.argv[6] + '_p_' + sys.argv[7]
     try:
         os.mkdir(mydir)
     except FileExistsError:
         pass
     getRandomizedRenyi(psi, n, NA, M, mydir, rep, theta=theta, phi=phi)
 
-t = int(sys.argv[1])
-p = int(sys.argv[2])
-NA = int(sys.argv[3])
-rep = sys.argv[4]
-indir = sys.argv[5]
-XXProcess(NA, 1, t, p, int(NA / 2), rep=rep)
+
+NA = int(sys.argv[1])
+n = int(sys.argv[2])
+rep = sys.argv[3]
+indir = sys.argv[4]
+XXProcess(NA, n, flux=0, rep=rep, indir=indir, option='')

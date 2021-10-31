@@ -9,8 +9,9 @@ d = 2
 
 
 def toEnvOperator(op):
+    op.reorder_axes([0, 4, 1, 5, 2, 6, 3, 7])
     result = bops.unifyLegs(bops.unifyLegs(bops.unifyLegs(bops.unifyLegs(
-        bops.permute(op, [0, 4, 1, 5, 2, 6, 3, 7]), 6, 7), 4, 5), 2, 3), 0, 1)
+        op, 6, 7), 4, 5), 2, 3), 0, 1)
     tn.remove_node(op)
     return result
 
@@ -28,14 +29,14 @@ def applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h, o
             leftDown = applyOpTosite(A, ops[i * 4 + 1])
             left = bops.multiContraction(left, leftUp, '23', '30', cleanOr1=True)
             left = bops.multiContraction(left, leftDown, '14', '30', cleanOr1=True)
-            left = bops.permute(bops.multiContraction(left, dDown, '04', '21', cleanOr1=True), [3, 2, 1, 0])
+            left = bops.multiContraction(left, dDown, '04', '21', cleanOr1=True).reorder_axes([3, 2, 1, 0])
 
             left = bops.multiContraction(left, dUp, '3', '0', cleanOr1=True)
             rightUp = applyOpTosite(A, ops[i * 4 + 2])
             rightDown = applyOpTosite(B, ops[i * 4 + 3])
             left = bops.multiContraction(left, rightUp, '23', '30', cleanOr1=True)
             left = bops.multiContraction(left, rightDown, '14', '30', cleanOr1=True)
-            left = bops.permute(bops.multiContraction(left, cDown, '04', '21', cleanOr1=True), [3, 2, 1, 0])
+            left = bops.multiContraction(left, cDown, '04', '21', cleanOr1=True).reorder_axes([3, 2, 1, 0])
 
             bops.removeState([leftUp, leftDown, rightDown, rightUp])
 
@@ -52,7 +53,7 @@ def applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h, o
             left = bops.multiContraction(left, left1, '36', '30', cleanOr1=True, cleanOr2=True)
             left = bops.multiContraction(left, left2, '26', '30', cleanOr1=True, cleanOr2=True)
             left = bops.multiContraction(left, left3, '16', '30', cleanOr1=True, cleanOr2=True)
-            left = bops.permute(bops.multiContraction(left, dDown, '06', '21', cleanOr1=True), [5, 4, 3, 2, 1, 0])
+            left = bops.multiContraction(left, dDown, '06', '21', cleanOr1=True).reorder_axes([5, 4, 3, 2, 1, 0])
 
             left = bops.multiContraction(left, dUp, '5', '0', cleanOr1=True)
             right0 = applyOpTosite(A, ops[i * 8 + 4])
@@ -63,7 +64,7 @@ def applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h, o
             left = bops.multiContraction(left, right1, '36', '30', cleanOr1=True, cleanOr2=True)
             left = bops.multiContraction(left, right2, '26', '30', cleanOr1=True, cleanOr2=True)
             left = bops.multiContraction(left, right3, '16', '30', cleanOr1=True, cleanOr2=True)
-            left = bops.permute(bops.multiContraction(left, cDown, '06', '21', cleanOr1=True), [5, 4, 3, 2, 1, 0])
+            left = bops.multiContraction(left, cDown, '06', '21', cleanOr1=True).reorder_axes([5, 4, 3, 2, 1, 0])
         right = bops.multiContraction(rightRow, rightRow, '3', '0')
         res = bops.multiContraction(left, right, '012345', '543210').tensor * 1
         return res
@@ -80,7 +81,9 @@ def horizontalPair(leftSite, rightSite, cleanLeft=True, cleanRight=True):
     pair = bops.multiContraction(leftSite, rightSite, '1', '3', cleanOr1=cleanLeft, cleanOr2=cleanRight)
     pair = bops.multiContraction(pair, ru.getPairUnitary(d), '37', '01')
     [left, right, te] = bops.svdTruncation(pair, [0, 1, 2, 6], [3, 4, 5, 7], '>>', maxBondDim=16)
-    return bops.permute(left, [0, 4, 1, 2, 3]), bops.permute(right, [1, 2, 3, 0, 4])
+    left.reorder_axes([0, 4, 1, 2, 3])
+    right.reorder.axis([1, 2, 3, 0, 4])
+    return left, right
 
 
 def verticalPair(topSite, bottomSite, cleanTop=True, cleanBottom=True):
@@ -88,4 +91,5 @@ def verticalPair(topSite, bottomSite, cleanTop=True, cleanBottom=True):
     pair = bops.multiContraction(pair, ru.getPairUnitary(d), '37', '01',
                                  cleanOr1=True, cleanOr2=True)
     [top, bottom, te] = bops.svdTruncation(pair, [0, 1, 2, 6], [3, 4, 5, 7], '>>', maxBondDim=16)
-    return bops.permute(top, [0, 1, 4, 2, 3]), bottom
+    top.reorder.axes([0, 1, 4, 2, 3])
+    return top, bottom
