@@ -1,17 +1,15 @@
 import numpy as np
 import tensornetwork as tn
 from typing import List
-import matplotlib.pyplot as plt
 import pickle
 import sys
 # insert at 1, 0 is the script path (or '' in REPL)
 sys.path.insert(1, '/home/noa/PycharmProjects/DMRG_py')
 import basicOperations as bops
-import DMRG as dmrg
 import magic.magicRenyi as renyi
 import magic.basicDefs as basicdefs
-import torch
 import gc
+
 
 digs = '012'
 def int2base(x, base=3, length=None):
@@ -128,10 +126,6 @@ d = 3
 n = 8
 stepSize = 0.05
 jRange = 2 / 3
-Js = [np.round(stepSize * i, 3) for i in range(int(jRange / stepSize))]
-Es = np.zeros(len(Js), dtype=complex)
-p2s = np.zeros(len(Js), dtype=complex)
-m2s = np.zeros(len(Js), dtype=complex)
 SPlus = np.zeros((d, d), dtype=complex)
 SPlus[1, 0] = 1
 SPlus[2, 1] = 1
@@ -141,21 +135,20 @@ SY = 1j * (SPlus - SMinus) / np.sqrt(2)
 SZ = np.diag([-1, 0, 1])
 SDotS = np.kron(SX, SX) + np.kron(SY, SY) + np.kron(SZ, SZ)
 psi0 = bops.getStartupState(n, mode='aklt')
-for i in range(len(Js)):
-   J = Js[i]
-   # localTerm = SDotS + J * np.linalg.matrix_power(SDotS, 2)
-   # gs, E0, truncErrs = dmrg.DMRG(psi0, [np.zeros((d, d), dtype=complex) for i in range(n)],
-   #                                      [np.copy(localTerm) for i in range(n - 1)], d=d)
-   with open('results/haldane/psi_haldane_J_' + str(np.round(J, 5)) + '_16', 'rb') as f:
-       gs = pickle.load(f)
-   m2 = renyi.getSecondRenyiExact(gs, d)
-   gc.collect()
-   with open('results/m2_' + str(J), 'wb') as f:
-       pickle.dump(m2, f)
-   # renyi.getSecondRenyiFromRandomVecs(gs, d, outdir='results/haldane_J_' + str(np.round(J, 5)),
-   #                                    rep=2, speedup=True)
 
-test = False 
+# Js = [np.round(stepSize * i, 3) for i in range(int(jRange / stepSize))]
+rep = sys.argv[1]
+J = np.round(stepSize * int(sys.argv[2]), 3)
+indir = sys.argv[3]
+outdir = sys.argv[4]
+# localTerm = SDotS + J * np.linalg.matrix_power(SDotS, 2)
+# gs, E0, truncErrs = dmrg.DMRG(psi0, [np.zeros((d, d), dtype=complex) for i in range(n)],
+#                                      [np.copy(localTerm) for i in range(n - 1)], d=d)
+with open(indir + '/psi_haldane_J_' + str(np.round(J, 5)) + '_15', 'rb') as f:
+    gs = pickle.load(f)
+renyi.getSecondRenyiFromRandomVecs(gs, d, outdir=outdir + '/haldane_J_' + str(np.round(J, 5)),
+                                   rep=rep, speedup=True)
+test = False
 if test:
     n = 4
     psi0 = bops.getStartupState(n, d=3, mode='aklt')

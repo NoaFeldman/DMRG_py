@@ -90,17 +90,17 @@ def getUPhi(phi, d):
         u[1, 1] = np.cos(phi)
         return u
 
-# Based on my analysis in unitary_alternatives.
-# We eventually calculate for each site M_i \rho_ij G_j M_k \rho_kl G_l
-# for real Gaussian M, G.
-# Averaging we get \delta_il\delta_jk
-# This function returns mat_ij = M_iG_j
-hadamard = np.ones((2, 2)) * np.sqrt(0.5)
-hadamard[1, 1] *= -1
-vecsPool = [np.array(arr) for arr in [[np.sqrt(2), 0], [0, np.sqrt(2)], [1, 1], [1, -1], [1, 1j], [1, -1j]]]
-vecsPool = vecsPool + [-arr for arr in vecsPool] + [1j * arr for arr in vecsPool] + [-1j * arr for arr in vecsPool]
+
+def getVecsPool(d=2, random_option='full'):
+    vecsPool = [np.array(arr) for arr in [[1, 1], [1, -1], [1, 1j], [1, -1j]]]
+    if random_option == 'full':
+        vecsPool += [np.sqrt(2), 0], [0, np.sqrt(2)]
+    vecsPool = vecsPool + [-arr for arr in vecsPool] + [1j * arr for arr in vecsPool] + [-1j * arr for arr in vecsPool]
+    return vecsPool
+
 
 def getNonUnitaryRandomOps(d, n, N, direction=0):
+    vecsPool = getVecsPool()
     vecs = [[vecsPool[np.random.randint(len(vecsPool))] for i in range(N)] for j in range(n)]
     res = [[tn.Node(np.outer(vecs[j][i], np.conj(vecs[(j+1) % n][i]))) for i in range(N)] for j in range(n)]
     return res

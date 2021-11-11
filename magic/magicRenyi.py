@@ -76,20 +76,18 @@ def get2PsiVectorized(psi: List[tn.Node], d: int):
         p = paulis[i]
         traceP = p.transpose().reshape([d**2])
         tracePs[i, :] = traceP
-    psi2 = []
+    psi2 = [None for i in range(len(psi))]
     for i in range(len(psi)):
-        psi2.append(tn.Node(ketBra(psi[i], d)))
+        psi2[i] = tn.Node(ketBra(psi[i], d))
     return psi2, tn.Node(tracePs / np.sqrt(d))
 
 
-def getSecondRenyiFromRandomVecs(psi: List[tn.Node], d: int, outdir='results', rep=1, speedup=False):
+def getSecondRenyiFromRandomVecs(psi: List[tn.Node], d: int, outdir='results', rep=1, speedup=False, rank=2):
     psi2, tracePs = get2PsiVectorized(psi, d)
     for i in range(len(psi)):
         bops.applySingleSiteOp(psi2, tracePs, i)
     M = 1000
     steps = 1000 # d**(2 * len(psi))
-    if speedup:
-        deltaIndices = [i * (d**2+1) for i in range(d**2)]
     try:
         os.mkdir(outdir)
     except FileExistsError:
@@ -134,10 +132,10 @@ def getSecondRenyiFromRandomVecs(psi: List[tn.Node], d: int, outdir='results', r
                     currDagger = bops.multiContraction(currDagger, v, '1', '0', cleanOr1=True)
                     curr = bops.multiContraction(curr, site, '1', '0', cleanOr1=True, cleanOr2=True)
                     curr = bops.multiContraction(curr, v, '1', '0', cleanOr1=True, cleanOr2=True)
-            mySum += curr.tensor[0, 0] ** 2 * currDagger.tensor[0, 0] ** 2
+            mySum += curr.tensor[0, 0] ** rank * currDagger.tensor[0, 0] ** rank
         with open(outdir + '/est_' + str(rep) + '_' + str(step), 'wb') as f:
             pickle.dump(mySum / M, f)
-            print(mySum / M)
+            # print(mySum / M)
         mySum = 0
 
 
@@ -157,7 +155,7 @@ def int2base(x, base, N=None):
 
 
 def getPOp(index, paulis, d, n):
-    pauliString = int2base(index, d**2, N=n)
+    pauliString = int2base(index, np.square(d), N=n)
     op = np.eye(1)
     for char in pauliString:
         op = np.kron(op, paulis[int(char)])
