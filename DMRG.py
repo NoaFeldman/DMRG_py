@@ -26,11 +26,15 @@ def getDMRGH(N, onsiteTerms, neighborTerms, d=2):
             neighborTerm = np.reshape(neighborTerms[i], (2, 2, 2, 2))
         elif d == 3:
             neighborTerm = np.reshape(neighborTerms[i], (3, 3, 3, 3))
-        pairOp = tn.Node(neighborTerm, \
+        else:
+            print(" d unsupported!")
+            return -1
+        pairOp = tn.Node(neighborTerm,
                          axis_names=['s' + str(i) + '*', 's' + str(i+1) + '*', 's' + str(i), 's' + str(i+1)])
-        splitted = tn.split_node(pairOp, [pairOp[0], pairOp[2]], [pairOp[1], pairOp[3]], \
+        splitted = tn.split_node(pairOp, [pairOp[0], pairOp[2]], [pairOp[1], pairOp[3]],
                                           left_name=('l2r' + str(i)), right_name=('r2l' + str(i) + '*'), edge_name='m')
-        hr2l[i+1] = bops.permute(splitted[1], [1, 2, 0])
+        splitted[1].reorder_axes([1, 2, 0])
+        hr2l[i + 1] = splitted[1]
         hl2r[i] = splitted[0]
     return HOp(hSingles, hr2l, hl2r)
 
@@ -253,24 +257,23 @@ def applyHToM(HL, HR, H, M, k):
 
     # Add I(Left) x h.single(k1) x h.identity(k2) x I(Right)
     # And I(Left) x h.identity(k1) x h.single(k2) x I(Right)
-    Hv = bops.addNodes(Hv, \
-                       bops.permute(bops.multiContraction(M, H.singles[k1], '1', '0'), [0, 3, 1, 2]))
-    Hv = bops.addNodes(Hv, \
-                       bops.permute(bops.multiContraction(M, H.singles[k2], '2', '0'), [0, 1, 3, 2]))
+    Hv = bops.addNodes(Hv, bops.multiContraction(M, H.singles[k1], '1', '0').reorder_axes([0, 3, 1, 2]))
+    Hv = bops.addNodes(Hv, bops.multiContraction(M, H.singles[k2], '2', '0').reorder_axes([0, 1, 3, 2]))
 
     # Add HL.openOp x h.r2l(k1) x h.identity(k2) x I(Right)
     # And I(Left) x h.identity(k1) x h.l2r(k2) x HR.openOp
-    HK1R2L = bops.permute(bops.multiContraction(M, H.r2l[k1], '1', '0'), [0, 4, 3, 1, 2])
-    Hv = bops.addNodes(Hv, \
-                       bops.multiContraction(HL.openOp, HK1R2L, '02', '01'))
-    HK2L2R = bops.permute(bops.multiContraction(M, H.l2r[k2], '2', '0'), [0, 1, 3, 4, 2])
-    Hv = bops.addNodes(Hv, \
-                       bops.multiContraction(HK2L2R, HR.openOp, '43', '02'))
+    HK1R2L = bops.multiContraction(M, H.r2l[k1], '1', '0')
+    if HK1R2L is not None:
+        HK1R2L.reorder_axes([0, 4, 3, 1, 2])
+    Hv = bops.addNodes(Hv, bops.multiContraction(HL.openOp, HK1R2L, '02', '01'))
+    HK2L2R = bops.multiContraction(M, H.l2r[k2], '2', '0')
+    if HK2L2R is not None:
+        HK2L2R.reorder_axes([0, 1, 3, 4, 2])
+    Hv = bops.addNodes(Hv, bops.multiContraction(HK2L2R, HR.openOp, '43', '02'))
 
     # Add I(Left) x h.l2r(k1) x h.r2l(k2) x I(Right)
     HK1K2 = bops.multiContraction(M, H.l2r[k1], '1', '0')
-    HK1K2 = bops.multiContraction(HK1K2, H.r2l[k2], '14', '02')
-    HK1K2 = bops.permute(HK1K2, [0, 2, 3, 1])
+    HK1K2 = bops.multiContraction(HK1K2, H.r2l[k2], '14', '02').reorder_axes([0, 2, 3, 1])
     Hv = bops.addNodes(Hv, HK1K2)
 
     return Hv
@@ -368,10 +371,10 @@ def getGroundState(H, HLs, HRs, psi, psiCompare=None, accuration=10**(-12), maxB
         truncErrs.append(truncErr)
         if np.abs((ECurr - E0) / E0) < accuration:
             return psi, ECurr, truncErrs
-        if (i-1) % 10 == 0:
+        if (i+1) % 10 == 0:
             bondDim = min(bondDim * 2, maxBondDim)
         E0 = ECurr
-    print('DMRG: Sweeped for 500 times and still didn\'t converge.')
+    print('DMRG: Sweeped for 500 times and still did not converge.')
 
 
 def stateEnergy(psi: List[tn.Node], H: HOp):
@@ -379,7 +382,7 @@ def stateEnergy(psi: List[tn.Node], H: HOp):
     for i in range(len(psi)):
         psiCopy = bops.copyState(psi)
         single_i = bops.copyState([H.singles[i]])[0]
-        psiCopy[i] = bops.permute(tn.contract(psiCopy[i][1] ^ single_i[0], name=('site' + str(i))), [0, 2, 1])
+        psiCopy[i] = tn.contract(psiCopy[i][1] ^ single_i[0], name=('site' + str(i))).reorder_axes([0, 2, 1])
         E += bops.getOverlap(psiCopy, psi)
         bops.removeState(psiCopy)
         tn.remove_node(single_i)

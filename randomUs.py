@@ -94,7 +94,7 @@ def getUPhi(phi, d):
 def getVecsPool(d=2, random_option='full'):
     vecsPool = [np.array(arr) for arr in [[1, 1], [1, -1], [1, 1j], [1, -1j]]]
     if random_option == 'full':
-        vecsPool += [np.sqrt(2), 0], [0, np.sqrt(2)]
+        vecsPool += [np.array([np.sqrt(2), 0]), np.array([0, np.sqrt(2)])]
     vecsPool = vecsPool + [-arr for arr in vecsPool] + [1j * arr for arr in vecsPool] + [-1j * arr for arr in vecsPool]
     return vecsPool
 
