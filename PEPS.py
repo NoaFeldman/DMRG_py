@@ -6,31 +6,72 @@ import randomMeasurements as rm
 import sys
 import tensornetwork as tn
 
-chi = 256
 
+def bmpsRowStep(gammaL, lambdaMid, gammaR, lambdaSide, envOp, lattice='squared', chi=128, shrink=True):
+    if lattice == 'squared':
+        row = bops.multiContraction(bops.multiContraction(
+            bops.multiContraction(bops.multiContraction(lambdaSide, gammaL, '1', '0', isDiag1=True),
+                                  lambdaMid, '2', '0', cleanOr1=True, cleanOr2=True, isDiag2=True),
+                                  gammaR, '2', '0', cleanOr1=True, cleanOr2=True),
+                                  lambdaSide, '3', '0', cleanOr1=True, isDiag2=True)
+        opRow = tn.Node(bops.multiContraction(row, envOp, '12', '01', cleanOr1=True).tensor\
+                        .transpose([0, 2, 4, 5, 1, 3]))
 
-def bmpsRowStep(gammaL, lambdaMid, gammaR, lambdaSide, envOp):
-    row = bops.multiContraction(bops.multiContraction(
-        bops.multiContraction(bops.multiContraction(lambdaSide, gammaL, '1', '0', isDiag1=True),
-                              lambdaMid, '2', '0', cleanOr1=True, cleanOr2=True, isDiag2=True),
-                              gammaR, '2', '0', cleanOr1=True, cleanOr2=True),
-                              lambdaSide, '3', '0', cleanOr1=True, isDiag2=True)
-    opRow = bops.permute(bops.multiContraction(row, envOp, '12', '01', cleanOr1=True), [0, 2, 4, 5, 1, 3])
-    [U, S, V, truncErr] = bops.svdTruncation(opRow, [0, 1, 2], [3, 4, 5], dir='>*<', maxBondDim=chi)
-    print(np.max(truncErr))
-    newLambdaMid = bops.multNode(S, 1 / np.sqrt(sum(S.tensor**2)))
+        leftEdges = [0, 1, 2]
+        rightEdges = [3, 4, 5]
+        sideLegsNumber = 2
+        siteIndexNumber = 3
+    elif lattice == 'triangular':
+        row = bops.multiContraction(bops.multiContraction(
+            bops.multiContraction(bops.multiContraction(lambdaSide, gammaL, '1', '0', isDiag1=True),
+                                  lambdaMid, '3', '0', cleanOr1=True, cleanOr2=True, isDiag2=True),
+                                  gammaR, '3', '0', cleanOr1=True, cleanOr2=True),
+                                  lambdaSide, '5', '0', cleanOr1=True, isDiag2=True)
+        opRow = tn.Node(bops.multiContraction(row, envOp, '123', '156', cleanOr1=True).tensor.transpose(
+                             [0, 3, 6, 5, 4, 9, 8, 2, 1, 7]))
+        leftEdges = list(range(5))
+        rightEdges = list(range(5, 10))
+        sideLegsNumber = 3
+        siteIndexNumber = 4
+    else: # elif lattice == 'unionJack':
+        row = bops.multiContraction(bops.multiContraction(
+            bops.multiContraction(bops.multiContraction(lambdaSide, gammaL, '1', '0', isDiag1=True),
+                                  lambdaMid, '4', '0', cleanOr1=True, cleanOr2=True, isDiag2=True),
+                                  gammaR, '4', '0', cleanOr1=True, cleanOr2=True),
+                                  lambdaSide, '7', '0', cleanOr1=True, isDiag2=True)
+        # envOp =
+        #    \ /
+        #     O
+        #  \|/ \|/
+        # --O---O--
+        #  /|\ /|\
+        # Op order: top-left-right
+        # in site ops, index order is top middle and anti-clockwise
+        opRow = tn.Node(bops.multiContraction(row, envOp, '2345', '2018', cleanOr1=True).tensor.transpose(
+            [0, 1, 4, 5, 6, 7, 8, 9, 10, 11, 3, 2, 13, 12]))
+        leftEdges = list(range(7))
+        rightEdges = list(range(7, 14))
+        sideLegsNumber = 4
+        siteIndexNumber = 5
+    [U, S, V, truncErr] = bops.svdTruncation(opRow, leftEdges, rightEdges, dir='>*<', maxBondDim=chi)
+    if len(truncErr) > 0:
+        print(np.max(truncErr))
+    newLambdaMid = tn.Node(np.diag(S.tensor) / np.sqrt(sum(np.diag(S.tensor)**2))) # bops.multNode(S, 1 / np.sqrt(sum(S.tensor**2)))
     lambdaSideInv = tn.Node(np.array([1 / val if val > 1e-15 else 0 for val in lambdaSide.tensor], dtype=complex))
     newGammaL = bops.multiContraction(lambdaSideInv, U, '1', '0', cleanOr2=True, isDiag1=True)
-    splitter = tn.Node(bops.getLegsSplitterTensor(newGammaL[0].dimension, newGammaL[1].dimension))
-    newGammaL = bops.unifyLegs(newGammaL, 0, 1)
-    newGammaR = bops.multiContraction(V, lambdaSideInv, '2', '0', cleanOr1=True, cleanOr2=True, isDiag2=True)
-    newGammaR = bops.unifyLegs(newGammaR, 2, 3)
+    splitter = tn.Node(bops.getLegsSplitterTensor([newGammaL[i].dimension for i in range(sideLegsNumber)]))
+    newGammaR = bops.multiContraction(V, lambdaSideInv, [siteIndexNumber - 1], '0', cleanOr1=True, cleanOr2=True, isDiag2=True)
+    newGammaL = bops.unifyLegs(newGammaL, list(range(sideLegsNumber)))
+    newGammaR = bops.unifyLegs(newGammaR,
+                        list(range(len(newGammaR.tensor.shape) - sideLegsNumber, len(newGammaR.tensor.shape))))
     newLambdaSide = bops.multiContraction(bops.multiContraction(
         lambdaSide, splitter, '1', '0', cleanOr1=True, isDiag1=True),
-        splitter, '01', '01', cleanOr1=True, cleanOr2=True)
+        splitter, list(range(sideLegsNumber)), list(range(sideLegsNumber)), cleanOr1=True, cleanOr2=True)
     temp = newLambdaSide
     newLambdaSide = tn.Node(np.diag(newLambdaSide.tensor))
     tn.remove_node(temp)
+    if shrink:
+        b = 1
     return newGammaL, newLambdaMid, newGammaR, newLambdaSide
 
 def fidelity(rho, sigma):
@@ -117,6 +158,45 @@ def bmpsSides(cUp: tn.Node, dUp: tn.Node, cDown: tn.Node, dDown: tn.Node, AEnv: 
     return X
 
 
+#
+#    O---0---0--
+#   / \ / \ / \ /
+#  O---A---B---A--
+#   \ / \ / \ / \
+#    O---0---0--
+# 0 Is obtained in getBMPSRowOps. We are looking for O.
+# We obtain
+#    O--
+#   / \
+#  O---
+#   \ /
+#    O--
+# And then decompose it to get
+#    O--
+#   / \
+# The decomposition direction is determined by the attachment of lambda to gamma in 0:
+#  edgeOp = --L--G--
+#               / \
+def bmpsTriangularCorner(edgeOp:tn.Node, AEnv: tn.Node, BEnv: tn.Node, steps):
+    d = AEnv[0].dimension
+    left = tn.Node(np.ones((edgeOp[3].dimension, d, d, d, edgeOp[0].dimension)))
+    right = tn.Node(np.ones((edgeOp[3].dimension, d, d, d, edgeOp[0].dimension)))
+    for i in range(steps):
+        left = bops.multiContraction(bops.multiContraction(bops.multiContraction(left, edgeOp, '0', '3'),
+                                                           AEnv, '0126', '4503'), edgeOp, '03', '01')
+        left = bops.multiContraction(bops.multiContraction(bops.multiContraction(left, edgeOp, '0', '3'),
+                                                           BEnv, '0126', '4503'), edgeOp, '03', '01')
+        # right = bops.multiContraction(bops.multiContraction(bops.multiContraction(right, edgeOp, '0', '3'),
+        #                                                     BEnv, '6012', '0123'), edgeOp, '03', '01')
+        # right = bops.multiContraction(bops.multiContraction(bops.multiContraction(right, edgeOp, '0', '3'),
+        #                                                     AEnv, '6012', '0123'), edgeOp, '03', '01')
+    [d, leftX, te] = bops.svdTruncation(left, [0, 1, 2], [3, 4], '>>')
+    [edgeOp, r, te] = bops.svdTruncation(edgeOp, [0, 1, 2], [3], '<<', maxBondDim=leftX[0].dimension)
+    [d, rightX, te] = bops.svdTruncation(right, [0, 1, 2], [3, 4], '>>')
+    return leftX, edgeOp
+
+
+
 # Start with a 2*2 DM, increase later
 def bmpsCols(upRow: tn.Node, downRow: tn.Node, AEnv: tn.Node, BEnv: tn.Node, steps,
                  option='right', X=None):
@@ -145,13 +225,11 @@ def bmpsCols(upRow: tn.Node, downRow: tn.Node, AEnv: tn.Node, BEnv: tn.Node, ste
     return X
 
 
-def bmpsDensityMatrix(cUp, dUp, cDown, dDown, AEnv, BEnv, A, B, steps):
-    rightRow = bmpsCols(cUp, dUp, cDown, dDown, AEnv, BEnv, steps, 'right')
-    leftRow = bmpsCols(cUp, dUp, cDown, dDown, AEnv, BEnv, steps, 'left')
-    upRow = bops.multiContraction(cUp, dUp, '2', '0')
-    downRow = bops.multiContraction(cDown, dDown, '2', '0')
+def bmpsDensityMatrix(up_row, down_row, AEnv, BEnv, A, B, steps):
+    rightRow = bmpsCols(up_row, down_row, AEnv, BEnv, steps, 'right')
+    leftRow = bmpsCols(up_row, down_row, AEnv, BEnv, steps, 'left')
     circle = bops.multiContraction(
-        bops.multiContraction(bops.multiContraction(leftRow, upRow, '3', '0'), rightRow, '5', '0'), downRow, '07', '03')
+        bops.multiContraction(bops.multiContraction(leftRow, up_row, '3', '0'), rightRow, '5', '0'), down_row, '07', '03')
 
 
     parityTensor = np.eye(4, dtype=complex)

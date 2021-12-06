@@ -4,7 +4,7 @@ import math
 from typing import Any, Dict, List, Optional, Set, Text, Tuple, Union, \
     Sequence, Iterable, Type
 import jax.numpy as jnp
-import torch
+# import torch
 
 def torchTranspose(arr, dim):
     return arr.permute(dim)
@@ -39,18 +39,17 @@ init('numpy')
 def setBackend(backend, dev=None):
     init(backend, dev)
 
-def getLegsSplitterTensor(dim1, dim2):
-    splitter = np.zeros((dim1, dim2, dim1 * dim2), dtype=complex)
-    for i in range(dim1):
-        for j in range(dim2):
-            splitter[i, j, i * dim2 + j] = 1
+def getLegsSplitterTensor(dims):
+    fullDim = np.product(dims)
+    splitter = np.eye(fullDim, dtype=complex).reshape(dims + [fullDim])
     return splitter
 
 
 # Assumes unified legs are in consecutive order
-def unifyLegs(node: tn.Node, leg1: int, leg2: int, cleanOriginal=True) -> tn.Node:
+def unifyLegs(node: tn.Node, legs: List[int], cleanOriginal=True) -> tn.Node:
     shape = node.get_tensor().shape
-    newTensor = reshape(node.get_tensor(), list(shape[:leg1]) + [shape[leg1] * shape[leg2]] + list(shape[leg2 + 1:]))
+    newTensor = reshape(node.get_tensor(), list(shape[:legs[0]]) + [np.product([shape[i] for i in legs])] +
+                        list(shape[legs[-1] + 1:]))
     if cleanOriginal:
         tn.remove_node(node)
     return tn.Node(newTensor)
@@ -214,28 +213,28 @@ def addNodes(node1, node2, cleanOr1=False, cleanOr2=False):
     # TODO asserts
     if node1 is None:
         if node2 is None:
-            res =  None
+            res = None
         else:
-            res =  node2
+            res = node2
     else:
         if node2 is None:
-            res =  node1
+            res = node1
         else:
             result = copyState([node1])[0]
             result.set_tensor(result.get_tensor() + node2.get_tensor())
-            res =  result
+            res = result
     if cleanOr1:
         tn.remove_node(node1)
     if cleanOr2:
         tn.remove_node(node2)
     return res
 
-def multNode(node, c):
+def multNode(node: tn.Node, c):
     node.set_tensor(node.get_tensor() * c)
     return node
 
 
-def getNodeNorm(node):
+def getNodeNorm(node: tn.Node):
     copy = copyState([node])[0]
     copyConj = copyState([node], conj=True)[0]
     for i in range(node.get_rank()):
@@ -286,22 +285,6 @@ def contractDiag(node: tn.Node, diag: np.array, edgeNum: int):
     return node
 
 
-def permute(node: tn.Node, permutation) -> tn.Node:
-    if node is None:
-        return None
-    axisNames = []
-    for i in range(len(permutation)):
-        axisNames.append(node.edges[permutation[i]].name)
-    result = tn.Node(transpose(node.tensor, permutation))
-    if len(set(axisNames)) == len(axisNames):
-        result.add_axis_names(axisNames)
-    for i in range(len(axisNames)):
-        result.get_edge(i).set_name(axisNames[i])
-    result.set_name(node.name)
-    tn.remove_node(node)
-    return result
-
-
 def svdTruncation(node: tn.Node, leftEdges: List[int], rightEdges: List[int],
                   dir: str, maxBondDim=128, leftName='U', rightName='V',  edgeName='default', normalize=False, maxTrunc=15):
     # np.seterr(all='raise')
@@ -338,8 +321,10 @@ def svdTruncation(node: tn.Node, leftEdges: List[int], rightEdges: List[int],
     if maxTrunc > 0:
         meaningful = sum(np.round(np.diag(S.tensor) / norm, maxTrunc) > 0)
         S.tensor = S.tensor[:meaningful, :meaningful]
-        U.tensor = U.tensor[:, :, :meaningful]
-        V.tensor = V.tensor[:meaningful, :, :]
+        U.tensor = U.tensor.transpose([-1 * i for i in range(1, len(U.tensor.shape) + 1)])[:meaningful, :]. \
+            transpose([-1 * i for i in range(1, len(U.tensor.shape) + 1)])
+        # U.tensor = U.tensor[:, :, :meaningful]
+        V.tensor = V.tensor[:meaningful, :]
     if normalize:
         S = multNode(S, 1 / norm)
     for e in S.edges:
@@ -500,7 +485,7 @@ def minusState(psi: List[tn.Node]):
 
 def applySingleSiteOp(psi: List[tn.Node], op: tn.Node, i: int):
     psi[i][1] ^ op[1]
-    psi[i] = permute(tn.contract_between(psi[i], op), [0, 2, 1])
+    psi[i] = tn.contract_between(psi[i], op).reorder_axes([0, 2, 1])
 
 
 # n spins, last two are maximally entangled and the first n - 2 are in a product state with them.
@@ -601,7 +586,11 @@ def getExplicitVec(psi, d=2):
 def getExpectationValue(psi: List[tn.Node], ops: List[tn.Node]):
     psiCopy = copyState(psi)
     for i in range(len(psiCopy)):
-        psiCopy[i] = permute(multiContraction(psiCopy[i], ops[i], '1', '1'), [0, 2, 1])
+        psiCopy[i] = multiContraction(psiCopy[i], ops[i], '1', '1').reorder_axes([0, 2, 1])
     result = getOverlap(psi, psiCopy)
     removeState(psiCopy)
     return result
+
+
+def permute(node: tn.Node, perm: List[int]) -> tn.Node:
+    return tn.Node(node.tensor.transpose(perm))

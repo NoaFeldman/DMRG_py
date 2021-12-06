@@ -373,6 +373,8 @@ def getGroundState(H, HLs, HRs, psi, psiCompare=None, accuration=10**(-12), maxB
             return psi, ECurr, truncErrs
         if (i+1) % 10 == 0:
             bondDim = min(bondDim * 2, maxBondDim)
+            if bondDim == 4096:
+                print(4096)
         E0 = ECurr
     print('DMRG: Sweeped for 500 times and still did not converge.')
 
@@ -413,11 +415,11 @@ def getidx(N, q):
     return np.array(res).reshape(len(res), 1)
 
 
-def DMRG(psi0, onsiteTerms, neighborTerms, d=2, maxBondDim=256):
+def DMRG(psi0, onsiteTerms, neighborTerms, d=2, maxBondDim=256, accuracy=1e-12):
     H = getDMRGH(len(psi0), onsiteTerms, neighborTerms, d=d)
     psi0Copy = bops.copyState(psi0)
     HLs, HRs = getHLRs(H, psi0Copy)
-    return getGroundState(H, HLs, HRs, psi0Copy, maxBondDim=maxBondDim)
+    return getGroundState(H, HLs, HRs, psi0Copy, maxBondDim=maxBondDim, accuration=accuracy)
 
 
 example = False

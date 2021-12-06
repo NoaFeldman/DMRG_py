@@ -11,7 +11,7 @@ d = 2
 def toEnvOperator(op):
     op.reorder_axes([0, 4, 1, 5, 2, 6, 3, 7])
     result = bops.unifyLegs(bops.unifyLegs(bops.unifyLegs(bops.unifyLegs(
-        op, 6, 7), 4, 5), 2, 3), 0, 1)
+        op, [6, 7]), [4, 5]), [2, 3]), [0, 1])
     tn.remove_node(op)
     return result
 
