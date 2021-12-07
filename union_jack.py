@@ -4,6 +4,8 @@ import PEPS as peps
 import basicOperations as bops
 import pepsExpect as pe
 import pickle
+import magic.magicRenyi as magic
+import matplotlib.pyplot as plt
 
 d = 2
 explicit = False
@@ -51,14 +53,27 @@ def getSiteTensors(J=0):
     l = bops.permute(l, [0, 1, 6] + list(range(2, 6)))
     [mid, ul, te] = bops.svdTruncation(l, list(range(5)), list(range(5, 7)), '<<')
     mid = bops.permute(mid, [0, 1, 5] + list(range(2, 5)))
+    # mid site indices: ul, dl, dr, ur, physical
     mid_site = bops.permute(bops.multiContraction(basic_site, mid, '0', '0'), [1, 2, 3, 4, 0])
     corner_site = bops.multiContraction(bops.multiContraction(bops.multiContraction(bops.multiContraction(
         basic_site, ul, '0', '1'), dl, '1', '1'), dr, '2', '1'), ur, '3', '1')
-    return mid_site, corner_site
+    boundary_top_left = bops.multiContraction(basic_site, ul, '0', '1')
+    boundary_top_right = bops.multiContraction(basic_site, ur, '0', '1')
+    boundary_bottom_left = bops.multiContraction(basic_site, dl, '0', '1')
+    boundary_bottom_right = bops.multiContraction(basic_site, dr, '0', '1')
+    boundary_top_edge = bops.multiContraction(bops.multiContraction(basic_site, dl, '0', '1'), dr, '1', '1')
+    boundary_right_edge = bops.multiContraction(bops.multiContraction(basic_site, ul, '0', '1'), dl, '1', '1')
+    boundary_bottom_edge = bops.multiContraction(bops.multiContraction(basic_site, ur, '0', '1'), ul, '1', '1')
+    boundary_left_edge = bops.multiContraction(bops.multiContraction(basic_site, dr, '0', '1'), ur, '1', '1')
+    return [mid_site, corner_site,
+            boundary_top_left, boundary_top_right, boundary_bottom_left, boundary_bottom_right,
+            boundary_top_edge, boundary_right_edge, boundary_bottom_edge, boundary_left_edge]
 
 
 def save_boundaries(J=0):
-    A, B = getSiteTensors(J)
+    [A, B,
+     boundary_top_left, boundary_top_right, boundary_bottom_left, boundary_bottom_right,
+     boundary_top_edge, boundary_right_edge, boundary_bottom_edge, boundary_left_edge] = getSiteTensors(J)
     nonPhysicalLegs = 1
     GammaTensor = np.ones((nonPhysicalLegs, d ** 2, nonPhysicalLegs), dtype=complex)
     GammaC = tn.Node(GammaTensor, name='GammaC', backend=None)
@@ -89,14 +104,63 @@ def get_boundaries(J=0):
         return [up_row, down_row, left_row, right_row, openA, openB, A, B]
 
 
-# TODO prepare corners for pure state
 # TODO move functions outside of union_jack (maybe square_lattice)
 # TODO 3*3 dm?
 # TODO Renyi 2 vs J, Renyi 1/2 vs J
-J = 1
-save_boundaries(J)
-[up_row, down_row, left_row, right_row, openA, openB, A, B] = get_boundaries(J)
-AEnv = pe.toEnvOperator(bops.multiContraction(A, A, '4', '4*'))
-BEnv = pe.toEnvOperator(bops.multiContraction(B, B, '4', '4*'))
-dm = peps.bmpsDensityMatrix(up_row, down_row, AEnv, BEnv, openA, openB, steps=50)
-b = 1
+def get_explicit_pure_state(w=2, h=3):
+    n = 2 * w * h
+    right_edge = [2 * (w - 1 + w * i) for i in range(h)]
+    left_edge = [w * 2 * i for i in range(h)]
+    outside = [i + 1 for i in right_edge] + [2 * i + 1 for i in range(w * (h - 1), w * h)]
+    zh0 = np.array([(-1)**(bin(i).count("1")) * int(i not in outside) for i in range(2**n)])
+    neighbors = []
+    neighbors += [[2 * i, 2 * (i + w)] for i in range(w * (h - 1))]
+    neighbors += [[2 * i, 2 * i + 1] for i in range(w * (h - 1)) if 2*i not in right_edge]
+    neighbors += [[2 * i, 2 * i + 2] for i in range(w * h) if 2*i not in right_edge]
+    neighbors += [[2 * i, 2 * i - 1] for i in range(w * (h - 1)) if 2*i not in left_edge]
+    neighbors += [[2 * i, 2 * i - (2 * w - 1)] for i in range(w,  w * h) if 2*i not in right_edge]
+    neighbors += [[2 * i, 2 * i - (2 * w + 1)] for i in range(w,  w * h) if 2*i not in left_edge]
+    CZ = np.ones(2**n)
+    for pair in neighbors:
+        for i in range(2**n):
+            CZ[i] *= (-1)**(int(i & 2**pair[0] > 0) * int(i & 2**pair[1] > 0))
+    del neighbors
+    czhz0 = np.matmul(np.diag(CZ), zh0)
+    del zh0
+    triangles = []
+    triangles += [[2 * i, 2 * i + 1, 2 * i + 2] for i in range(w * (h - 1)) if 2*i not in right_edge]
+    triangles += [[2 * i, 2 * i + 1, 2 * (i + w)] for i in range(w * (h - 1)) if 2*i not in right_edge]
+    triangles += [[2 * i, 2 * i - 1, 2 * (i + w)] for i in range(w * (h - 1)) if 2*i not in left_edge]
+    triangles += [[2 * i, 2 * i - (2 * w - 1), 2 * i + 2] for i in range(w,  w * h) if 2*i not in right_edge]
+    CCZ = np.ones(2 ** n, dtype=complex)
+    for tri in triangles:
+        for i in range(2 ** n):
+            CCZ[i] *= (-1) ** \
+                      (int(i & 2 ** tri[0] > 0) * int(i & 2 ** tri[1] > 0) * int(i & 2 ** tri[2] > 0))
+    # del triangles
+    in_system = [i for i in range(2**n) if (i & sum([2^j for j in np.unique(outside)])) == 0]
+    return czhz0[in_system], CCZ[in_system]
+
+
+def get_second_renyi_pure(J):
+    [mid_site, corner_site, boundary_top_left, boundary_top_right, boundary_bottom_left, boundary_bottom_right,
+        boundary_top_edge, boundary_right_edge, boundary_bottom_edge, boundary_left_edge] = getSiteTensors(J)
+    psi5 = bops.multiContraction(bops.multiContraction(bops.multiContraction(bops.multiContraction(
+        boundary_top_left, mid_site, '0', '0'), boundary_bottom_left, '0', '0'),
+        boundary_bottom_right, '0', '0'), boundary_top_right, '0', '0').tensor.reshape([d**5])
+    return magic.getSecondRenyiExact_dm(np.outer(psi5, np.conj(psi5)), d)
+
+J_step = 0.05
+Js = [J_step * i for i in range(int(1/J_step) + 1)]
+m2s_tn = np.zeros(len(Js))
+for j in range(len(Js)):
+    [mid_site, corner_site, boundary_top_left, boundary_top_right, boundary_bottom_left, boundary_bottom_right,
+        boundary_top_edge, boundary_right_edge, boundary_bottom_edge, boundary_left_edge] = getSiteTensors(Js[j])
+    psi5 = bops.contract(bops.contract(bops.contract(bops.contract(
+        mid_site, boundary_top_left, '0', '0'), boundary_bottom_left, '0', '0'),
+        boundary_bottom_right, '0', '0'), boundary_top_right, '0', '0').tensor.transpose([1, 0, 4, 2, 3]).reshape([d**5])
+    dm5 = np.outer(psi5, np.conj(psi5))
+    dm5 /= np.trace(dm5)
+    m2s_tn[j] = magic.getSecondRenyiExact_dm(dm5, d)
+plt.plot(Js, m2s_tn)
+plt.show()

@@ -3,7 +3,7 @@ import numpy as np
 import math
 from typing import Any, Dict, List, Optional, Set, Text, Tuple, Union, \
     Sequence, Iterable, Type
-import jax.numpy as jnp
+# import jax.numpy as jnp
 # import torch
 
 def torchTranspose(arr, dim):
@@ -243,6 +243,12 @@ def getNodeNorm(node: tn.Node):
     if BACKEND == 'pytorch':
         norm2 = norm2.numpy()
     return np.sqrt(norm2)
+
+
+def contract(node1: tn.Node, node2: tn.Node, edges1, edges2, nodeName=None,
+                     cleanOr1=False, cleanOr2=False, isDiag1=False, isDiag2=False) -> tn.Node:
+    return multiContraction(node1, node2, edges1, edges2, nodeName,
+                            cleanOr1, cleanOr2, isDiag1, isDiag2)
 
 
 def multiContraction(node1: tn.Node, node2: tn.Node, edges1, edges2, nodeName=None,

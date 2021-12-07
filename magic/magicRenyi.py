@@ -169,6 +169,11 @@ def getSecondRenyiExact(psi: List[tn.Node], d: int):
         dm = bops.multiContraction(bops.multiContraction(psi[i], dm, '0', '1'), psi[i], [2 * i + 2], '0*')
     dm = bops.multiContraction(bops.multiContraction(psi[n - 1], dm, '0', '1'), psi[n - 1], [2 * n, 1], '02*')
     dm = dm.tensor.transpose(list(range(n)) + list(range(2*n - 1, n-1, -1))).reshape([d**n, d**n])
+    return getSecondRenyiExact_dm(dm, d)
+
+
+def getSecondRenyiExact_dm(dm, d):
+    n = int(np.log(len(dm)) / np.log(d))
     paulis = basicdefs.getPauliMatrices(d)
     renyiSum = 0
     for i in range(d**(2 * n)):
@@ -176,3 +181,5 @@ def getSecondRenyiExact(psi: List[tn.Node], d: int):
         renyiSum += np.abs(np.matmul(dm, pOp).trace())**4 / d**(2*n)
     print('renyi sum = ' + str(renyiSum))
     return -np.log(renyiSum) / np.log(d) - n
+
+
