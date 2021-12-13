@@ -1,11 +1,7 @@
-from typing import Optional
-from scipy import linalg
 import numpy as np
 import basicOperations as bops
-import randomMeasurements as rm
-import sys
 import tensornetwork as tn
-
+import matplotlib.pyplot as plt
 
 def bmpsRowStep(gammaL, lambdaMid, gammaR, lambdaSide, envOp, lattice='squared', chi=128, shrink=True):
     if lattice == 'squared':
@@ -81,9 +77,10 @@ def fidelity(rho, sigma):
     vals = vals.astype('complex')
     vals = np.sqrt(vals)
     uSigmaU = np.matmul(np.conj(np.transpose(u)), np.matmul(sigma, u))
-    sqrtRhoSig = np.array([uSigmaU[i] * vals[i] for i in range(len(vals))])
-    toTrace = np.transpose(np.array([sqrtRhoSig[:, i] * vals[i] for i in range(len(vals))]))
-    vals = np.linalg.eigvalsh(toTrace)
+    sqrtRhoSigSqrtRho = np.matmul(np.diag(vals), np.matmul(uSigmaU, np.diag(vals)))
+    vals = np.linalg.eigvalsh(sqrtRhoSigSqrtRho)
+    # round to get rid of small negative numerical errors in vals
+    vals = np.round(vals, 8)
     return sum(np.sqrt(vals))**2
 
 
@@ -96,9 +93,8 @@ def checkConvergence(oldGammaC, oldLambdaC, oldGammaD, oldLambdaD, GammaC, Lambd
 
 
 def getRowDM(GammaL, LambdaL, GammaR, LambdaR, sites, d):
-    c = bops.multiContraction(bops.multiContraction(LambdaR, GammaL, '1', '0', isDiag1=True),
-                              LambdaL, '2', '0', isDiag2=True)
-    row = bops.multiContraction(bops.multiContraction(c, GammaR, '2', '0'), LambdaR, '3', '0', isDiag2=True)
+    c = bops.contract(bops.contract(LambdaR, GammaL, '1', '0', isDiag1=True), LambdaL, '2', '0', isDiag2=True)
+    row = bops.contract(bops.contract(c, GammaR, '2', '0'), LambdaR, '3', '0', isDiag2=True)
     for i in range(sites):
         row = bops.multiContraction(row, GammaL, [len(row.edges) - 1], [0])
         row = bops.multiContraction(row, LambdaL, [len(row.edges) - 1], [0], isDiag2=True)
@@ -119,19 +115,12 @@ def getBMPSRowOps(GammaC, LambdaC, GammaD, LambdaD, AEnv, BEnv, steps):
         GammaC, LambdaC, GammaD, LambdaD = bmpsRowStep(GammaC, LambdaC, GammaD, LambdaD, op)
         GammaD, LambdaD, GammaC, LambdaC = bmpsRowStep(GammaD, LambdaD, GammaC, LambdaC, op)
         # if i > 0:
-        #     convergence.append(
-        #         checkConvergence(oldGammaC, oldLambdaC, oldGammaD, oldLambdaD, GammaC, LambdaC, GammaD, LambdaD, 2))
+        #     convergence.append(checkConvergence(oldGammaC, oldLambdaC, oldGammaD, oldLambdaD,
+        #                          GammaC, LambdaC, GammaD, LambdaD, AEnv[0].dimension))
         bops.removeState([oldGammaC, oldLambdaC, oldGammaD, oldLambdaD])
-        print(GammaC.tensor.shape)
-        print(LambdaC.tensor.shape)
-        print(GammaD.tensor.shape)
-        print(LambdaD.tensor.shape)
-    # cUp = bops.multiContraction(GammaC, LambdaC, '2', '0', isDiag2=True)
-    # dUp = bops.multiContraction(GammaD, LambdaD, '2', '0', isDiag2=True)
-    # GammaC, LambdaC, GammaD, LambdaD = bmpsRowStep(GammaC, LambdaC, GammaD, LambdaD, op)
-    # cDown = bops.multiContraction(GammaC, LambdaC, '2', '0', isDiag2=True)
-    # dDown = bops.multiContraction(GammaD, LambdaD, '2', '0', isDiag2=True)
     bops.removeState([GammaC, LambdaC, GammaD, LambdaD, oldGammaC, oldLambdaC, oldGammaD, oldLambdaD])
+    # plt.plot(convergence)
+    # plt.show()
     return GammaC, LambdaC, GammaD, LambdaD
 
 

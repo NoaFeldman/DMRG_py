@@ -183,3 +183,16 @@ def getSecondRenyiExact_dm(dm, d):
     return -np.log(renyiSum) / np.log(d) - n
 
 
+def getHalfRenyiExact_dm(dm, d):
+    n = int(np.log(len(dm)) / np.log(d))
+    paulis = basicdefs.getPauliMatrices(d)
+    renyiSum = 0
+    for i in range(d**(2 * n)):
+        pOp = getPOp(i, paulis, d, n)
+        if np.abs(np.matmul(dm, pOp).trace()) / d**n > 1e-10:
+            b = 1
+        renyiSum += np.abs(np.matmul(dm, pOp).trace()) / d**n
+    print('renyi sum = ' + str(renyiSum))
+    return np.log(renyiSum)
+
+
