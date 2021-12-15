@@ -361,9 +361,9 @@ def getHLRs(H, psi, workingSite=None):
     return HLs, HRs
 
 
-def getGroundState(H, HLs, HRs, psi, psiCompare=None, accuration=10**(-12), maxBondDim=256):
+def getGroundState(H, HLs, HRs, psi, psiCompare=None, accuration=10**(-12), maxBondDim=256, initial_bond_dim=2):
     truncErrs = []
-    bondDim = 2
+    bondDim = initial_bond_dim
     [psi, E0, truncErr, HLs, HRs] = dmrgSweep(psi, H, HLs, HRs, psiCompare, maxBondDim=maxBondDim)
     truncErrs.append(truncErr)
     for i in range(500):

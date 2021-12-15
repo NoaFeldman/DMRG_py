@@ -6,6 +6,7 @@ import pepsExpect as pe
 import pickle
 import magic.magicRenyi as magic
 import matplotlib.pyplot as plt
+import magic.min_relative_entropy as dmin
 
 d = 2
 explicit = False
@@ -99,7 +100,7 @@ def save_boundaries(J=0.0):
 
 
 def get_boundaries(J=0.0):
-    with open('/home/noa/PycharmProjects/DMRG_py/results/union_jack_boundaries_J_' + str(J), 'rb') as f:
+    with open('results/union_jack_boundaries_J_' + str(J), 'rb') as f:
         [up_row, down_row, left_row, right_row, open_mid, open_corner, mid_site, corner_site] = pickle.load(f)
         return [up_row, down_row, left_row, right_row, open_mid, open_corner, mid_site, corner_site]
 
@@ -142,7 +143,7 @@ def get_mixed_dm(J=0.):
     dm = np.round(dm, 10)
     return dm
 
-run = False
+run = True
 if run:
     J_step = 0.005
     Js = [J_step * i for i in range(int(1/J_step) + 1)]
@@ -151,6 +152,7 @@ if run:
         J = Js[j]
         # save_boundaries(J)
         dm = get_mixed_dm(J)
+        dmin.get_min_relative_entropy(dm)
         m05s_mixed[j] = magic.getHalfRenyiExact_dm(dm, d)
 
 
