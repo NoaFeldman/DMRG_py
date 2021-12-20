@@ -91,6 +91,13 @@ def getUPhi(phi, d):
         return u
 
 
+def getUEta(eta, d):
+    if d == 2:
+        u = np.array([[np.exp(1j * eta), 0], [0, np.exp(-1j * eta)]])
+        return u
+
+
+
 def getVecsPool(d=2, random_option='full'):
     vecsPool = [np.array(arr) for arr in [[1, 1], [1, -1], [1, 1j], [1, -1j]]]
     if random_option == 'full':

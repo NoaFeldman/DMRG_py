@@ -165,7 +165,7 @@ def getHLR(psi, l, H, dir, HLRold):
 # k is the working site
 def lanczos(HL, HR, H, k, psi, psiCompare):
     [T, base] = getTridiagonal(HL, HR, H, k, psi, psiCompare)
-    [Es, Vs] = np.linalg.eig(T)
+    [Es, Vs] = np.linalg.eigh(T)
     minIndex = np.argmin(Es)
     E0 = Es[minIndex]
     M = None
@@ -197,8 +197,8 @@ def getTridiagonal(HL, HR, H, k, psi, psiCompare=None):
 
     psiCopy = bops.copyState(psi)
 
-    base = []
-    base.append(bops.copyState([v])[0])
+    basis = []
+    basis.append(bops.copyState([v])[0])
     Hv = applyHToM(HL, HR, H, v, k)
     alpha = bops.multiContraction(v, Hv, '0123', '0123*').get_tensor()
 
@@ -220,7 +220,7 @@ def getTridiagonal(HL, HR, H, k, psi, psiCompare=None):
         counter += 1
 
         v = bops.multNode(w, 1 / beta)
-        base.append(bops.copyState([v])[0])
+        basis.append(bops.copyState([v])[0])
 
         if psiCompare is not None:
             copyV = bops.copyState([v])[0]
@@ -230,7 +230,7 @@ def getTridiagonal(HL, HR, H, k, psi, psiCompare=None):
         alpha = bops.multiContraction(v, Hv, '0123', '0123*').get_tensor()
         Tarr[counter][1] = alpha
         w = bops.addNodes(bops.addNodes(Hv, bops.multNode(v, -alpha)), \
-                          bops.multNode(bops.copyState([base[counter-1]])[0], -beta), cleanOr2=True)
+                          bops.multNode(bops.copyState([basis[counter - 1]])[0], -beta), cleanOr2=True)
         formBeta = beta
         beta = bops.getNodeNorm(w)
     T = np.zeros((len(Tarr), len(Tarr)), dtype=complex)
@@ -243,7 +243,7 @@ def getTridiagonal(HL, HR, H, k, psi, psiCompare=None):
         T[i][i+1] = Tarr[i][2]
     T[len(Tarr)-1][len(Tarr)-2] = Tarr[len(Tarr)-1][0]
     T[len(Tarr) - 1][len(Tarr) - 1] = Tarr[len(Tarr) - 1][1]
-    return [T, base]
+    return [T, basis]
 
 
 def applyHToM(HL, HR, H, M, k):
@@ -317,6 +317,8 @@ def dmrgSweep(psi, H, HLs, HRs, psiCompare=None, maxBondDim=128):
     maxTruncErr = 0
     while k > 0:
         if psiCompare is None:
+            if k == 13:
+                b = 1
             [psi, newHR, E0, truncErr] = dmrgStep(HLs[k], HRs[k+2], H, psi, k, '<<', psiCompare, maxBondDim=maxBondDim)
             # if HRs[k+1] is not None:
             # TODO remove all nodes in HLR
@@ -361,15 +363,16 @@ def getHLRs(H, psi, workingSite=None):
     return HLs, HRs
 
 
-def getGroundState(H, HLs, HRs, psi, psiCompare=None, accuration=10**(-12), maxBondDim=256, initial_bond_dim=2):
+def getGroundState(H, HLs, HRs, psi, psiCompare=None, accuracy=10**(-12), maxBondDim=256, initial_bond_dim=2):
     truncErrs = []
     bondDim = initial_bond_dim
     [psi, E0, truncErr, HLs, HRs] = dmrgSweep(psi, H, HLs, HRs, psiCompare, maxBondDim=maxBondDim)
     truncErrs.append(truncErr)
     for i in range(500):
+        print(E0)
         [psi, ECurr, truncErr, HLs, HRs] = dmrgSweep(psi, H, HLs, HRs, psiCompare, maxBondDim=bondDim)
         truncErrs.append(truncErr)
-        if np.abs((ECurr - E0) / E0) < accuration:
+        if np.abs((ECurr - E0) / E0) < accuracy:
             return psi, ECurr, truncErrs
         if (i+1) % 10 == 0:
             bondDim = min(bondDim * 2, maxBondDim)
@@ -415,11 +418,11 @@ def getidx(N, q):
     return np.array(res).reshape(len(res), 1)
 
 
-def DMRG(psi0, onsiteTerms, neighborTerms, d=2, maxBondDim=256, accuracy=1e-12):
+def DMRG(psi0, onsiteTerms, neighborTerms, d=2, maxBondDim=256, accuracy=1e-12, initial_bond_dim=2):
     H = getDMRGH(len(psi0), onsiteTerms, neighborTerms, d=d)
     psi0Copy = bops.copyState(psi0)
     HLs, HRs = getHLRs(H, psi0Copy)
-    return getGroundState(H, HLs, HRs, psi0Copy, maxBondDim=maxBondDim, accuration=accuracy)
+    return getGroundState(H, HLs, HRs, psi0Copy, maxBondDim=maxBondDim, accuracy=accuracy, initial_bond_dim=initial_bond_dim)
 
 
 example = False
