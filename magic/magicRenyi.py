@@ -5,6 +5,7 @@ from typing import List
 import basicOperations as bops
 import pickle
 import os
+import randomUs as ru
 
 
 # Vectorize all matrices. trPs, trPDaggers are built such that applying them to the vectorized DM we get the vector
@@ -49,8 +50,41 @@ def getSecondRenyi(psi, d):
     for i in range(n):
         bops.applySingleSiteOp(psi4, trPs, i)
     renyiSum = bops.getOverlap(psi4, psi4)
-    print('renyisum = ' + str(renyiSum))
     return -np.log(renyiSum) / np.log(d) - n
+
+
+def getSecondRenyi_optimizedBasis(psi, d, opt='min'):
+    if opt == 'min':
+        best_result = 100
+    else:
+        best_result = 0
+    best_basis = None
+    thetas = [0.1 * np.pi * i for i in range(6)]
+    phis = [0.1 * np.pi * i for i in range(6)]
+    etas = [0.1 * np.pi * i for i in range(6)]
+    for ti in range(len(thetas)):
+        theta = thetas[ti]
+        u_theta = ru.getUTheta(theta, d)
+        for pi in range(len(phis)):
+            phi = phis[pi]
+            u_phi = ru.getUPhi(phi, d)
+            for ei in range(len(etas)):
+                eta = etas[ei]
+                u_eta = ru.getUEta(eta, d)
+                u = tn.Node(np.matmul(u_eta, np.matmul(u_theta, u_phi)))
+                psi_copy = bops.copyState(psi)
+                for site in range(len(psi)):
+                    psi_copy[site] = bops.permute(bops.contract(psi_copy[site], u, '1', '0'), [0, 2, 1])
+                curr = getSecondRenyi(psi_copy, d)
+                if opt == 'min':
+                    if curr < best_result:
+                        best_result = curr
+                        best_basis = [theta, phi, eta]
+                else:
+                    if curr > best_result:
+                        best_result = curr
+                        best_basis = [theta, phi, eta]
+    return best_result, best_basis
 
 
 def tensorKetBra(tensorKet, chiL, chiR, d, tensorBra=None):
@@ -195,4 +229,5 @@ def getHalfRenyiExact_dm(dm, d):
     print('renyi sum = ' + str(renyiSum))
     return np.log(renyiSum)
 
-
+# TODO try renyi half / sqrt(purity)
+# TODO See if I can compare renyi half to D_min (generally definitely not. But maybe with translational symmetry or some requirement on the entanglement)

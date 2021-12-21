@@ -133,16 +133,16 @@ def get_full_basis(d, n):
             curr = np.eye(1)
             for site in range(n):
                 curr = np.kron(single_site_ops[string_indices[site]], curr)
-            basis.append(curr / d**n)
+            basis.append(curr)
         return basis
 
 
 def robustness_constraints(rho, pure, d=2, n=5):
     full_basis = get_full_basis(d, n)
-    x_rho = np.zeros(len(full_basis))
+    # This is effectively len(full_basis) x len(pure), but the constraints are required to be squared.
+    x_rho = np.zeros(len(pure))
     for i in range(len(full_basis)):
         x_rho[i] = np.trace(np.matmul(full_basis[i], rho))
-    # This is effectively len(full_basis) x len(pure), but the constraints are required to be squared.
     constraint_mat = np.zeros((len(pure), len(pure)))
     for pure_ind in range(len(pure)):
         for i in range(len(full_basis)):
@@ -153,4 +153,12 @@ def robustness_constraints(rho, pure, d=2, n=5):
 def robustness_obj_func(x):
     return sum(np.abs(x))
 
-# TODO robustness optimization: constraint is that constraint_mat.x = x_rho and obj_func is robustness_obj_func
+
+def get_robustness(rho, d=2, n=5):
+    pure = get_stab_pure(d, n)
+    constraint_mat, x_rho = robustness_constraints(rho, pure)
+    linear_constraint = LinearConstraint(constraint_mat, x_rho, x_rho)
+    res = minimize(robustness_obj_func, x_rho, method='trust-constr',
+                   constraints=[linear_constraint],
+                   options={'verbose': 1})
+    b = 1

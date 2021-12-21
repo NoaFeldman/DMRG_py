@@ -152,7 +152,7 @@ if run:
         J = Js[j]
         # save_boundaries(J)
         dm = get_mixed_dm(J)
-        dmin.get_min_relative_entropy(dm)
+        dmin.get_robustness(dm)
         m05s_mixed[j] = magic.getHalfRenyiExact_dm(dm, d)
 
 
