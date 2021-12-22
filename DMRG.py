@@ -369,7 +369,6 @@ def getGroundState(H, HLs, HRs, psi, psiCompare=None, accuracy=10**(-12), maxBon
     [psi, E0, truncErr, HLs, HRs] = dmrgSweep(psi, H, HLs, HRs, psiCompare, maxBondDim=maxBondDim)
     truncErrs.append(truncErr)
     for i in range(500):
-        print(E0)
         [psi, ECurr, truncErr, HLs, HRs] = dmrgSweep(psi, H, HLs, HRs, psiCompare, maxBondDim=bondDim)
         truncErrs.append(truncErr)
         if np.abs((ECurr - E0) / E0) < accuracy:
