@@ -3,7 +3,7 @@ import pickle
 import sys
 # insert at 1, 0 is the script path (or '' in REPL)
 sys.path.insert(1, '/home/noa/PycharmProjects/DMRG_py')
-import magic.magicRenyi as renyi
+import magicRenyi as renyi
 # import gc
 
 

@@ -3,7 +3,7 @@ from typing import List
 from scipy.optimize import linprog
 import pickle
 from scipy.optimize import minimize, NonlinearConstraint, LinearConstraint, Bounds
-import magic.basicDefs as basic
+import basicDefs as basic
 
 digs = '012345'
 def int2base(x, base=3, length=None):

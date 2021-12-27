@@ -1,19 +1,19 @@
 import tensornetwork as tn
 import numpy as np
-import magic.basicDefs as basicdefs
 from typing import List
 import basicOperations as bops
 import pickle
 import os
 import randomUs as ru
-
+from basicOperations import dagger
+import basicDefs
 
 # Vectorize all matrices. trPs, trPDaggers are built such that applying them to the vectorized DM we get the vector
 # (tr(\rho), tr(X\rho), tr(Y\rho), tr(Z\rho)), or its eqiovalent in general d.
 # the state returned is a state with each site representing a tensor product of 4 copies of the state,
 # two regular and two conjugated.
 def get4PsiVectorized(psi: List[tn.Node], d: int):
-    paulis = basicdefs.getPauliMatrices(d)
+    paulis = basicDefs.getPauliMatrices(d)
     tracePs = np.zeros((d**2, d**4), dtype=complex)
     for i in range(len(paulis)):
         p = paulis[i]
@@ -104,7 +104,7 @@ def ketBra(site: tn.Node, d):
 
 
 def get2PsiVectorized(psi: List[tn.Node], d: int):
-    paulis = basicdefs.getPauliMatrices(d)
+    paulis = basicDefs.getPauliMatrices(d)
     tracePs = np.zeros((d**2, d**2), dtype=complex)
     for i in range(len(paulis)):
         p = paulis[i]
@@ -208,7 +208,7 @@ def getSecondRenyiExact(psi: List[tn.Node], d: int):
 
 def getSecondRenyiExact_dm(dm, d):
     n = int(np.log(len(dm)) / np.log(d))
-    paulis = basicdefs.getPauliMatrices(d)
+    paulis = basicDefs.getPauliMatrices(d)
     renyiSum = 0
     for i in range(d**(2 * n)):
         pOp = getPOp(i, paulis, d, n)
@@ -217,17 +217,43 @@ def getSecondRenyiExact_dm(dm, d):
     return -np.log(renyiSum) / np.log(d) - n
 
 
-def getHalfRenyiExact_dm(dm, d):
+def getHalfRenyiExact_dm(dm, d, paulis=None):
     n = int(np.log(len(dm)) / np.log(d))
-    paulis = basicdefs.getPauliMatrices(d)
+    if paulis is None:
+        paulis = basicDefs.getPauliMatrices(d)
     renyiSum = 0
     for i in range(d**(2 * n)):
         pOp = getPOp(i, paulis, d, n)
         if np.abs(np.matmul(dm, pOp).trace()) / d**n > 1e-10:
             b = 1
         renyiSum += np.abs(np.matmul(dm, pOp).trace()) / d**n
-    print('renyi sum = ' + str(renyiSum))
     return np.log(renyiSum)
 
-# TODO try renyi half / sqrt(purity)
-# TODO See if I can compare renyi half to D_min (generally definitely not. But maybe with translational symmetry or some requirement on the entanglement)
+
+def getHalfRenyiExact_dm_optimized(dm, d):
+    best_result = 100
+    worst_result = 0
+    best_basis = None
+    worst_basis = None
+    thetas = [0.25 * np.pi * i for i in range(3)]
+    phis = [0.25 * np.pi * i for i in range(3)]
+    etas = [0.25 * np.pi * i for i in range(3)]
+    for ti in range(len(thetas)):
+        theta = thetas[ti]
+        u_theta = ru.getUTheta(theta, d)
+        for pi in range(len(phis)):
+            phi = phis[pi]
+            u_phi = ru.getUPhi(phi, d)
+            for ei in range(len(etas)):
+                eta = etas[ei]
+                u_eta = ru.getUEta(eta, d)
+                u = np.matmul(u_eta, np.matmul(u_theta, u_phi))
+                paulis = [np.matmul(u, np.matmul(p, dagger(u))) for p in basicDefs.getPauliMatrices(d)]
+                curr = getHalfRenyiExact_dm(dm, d, paulis)
+                if curr < best_result:
+                    best_result = curr
+                    best_basis = [theta, phi, eta]
+                if curr > worst_result:
+                    worst_result = curr
+                    worst_basis = [theta, phi, eta]
+    return best_result, best_basis, worst_result, worst_basis
