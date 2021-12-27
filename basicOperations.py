@@ -600,3 +600,7 @@ def getExpectationValue(psi: List[tn.Node], ops: List[tn.Node]):
 
 def permute(node: tn.Node, perm: List[int]) -> tn.Node:
     return tn.Node(node.tensor.transpose(perm))
+
+
+def dagger(mat:np.array) -> np.array:
+    return np.conj(np.transpose(mat))
