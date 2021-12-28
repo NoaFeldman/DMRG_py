@@ -2,7 +2,7 @@ import numpy as np
 import pickle
 import sys
 # insert at 1, 0 is the script path (or '' in REPL)
-sys.path.insert(1, '/home/noa/PycharmProjects/DMRG_py')
+sys.path.insert(1, '/')
 import magicRenyi as renyi
 # import gc
 

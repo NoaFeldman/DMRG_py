@@ -4,12 +4,9 @@ from typing import List
 import pickle
 import sys
 # insert at 1, 0 is the script path (or '' in REPL)
-sys.path.insert(1, '/home/noa/PycharmProjects/DMRG_py')
+sys.path.insert(1, '/')
 import basicOperations as bops
-import magic.magicRenyi as renyi
-import magic.basicDefs as basicdefs
-import gc
-
+import magicRenyi as renyi
 
 digs = '012'
 def int2base(x, base=3, length=None):
@@ -44,18 +41,18 @@ def getAKLTState(N):
 
 
 def getLocalT(a1, a2):
-    return basicdefs.omega ** (- a1 * a2 / 2) * \
-           np.matmul(np.linalg.matrix_power(basicdefs.pauliZ, a1),
-                     np.linalg.matrix_power(basicdefs.pauliX, a2))
+    return basicDefs.omega ** (- a1 * a2 / 2) * \
+           np.matmul(np.linalg.matrix_power(basicDefs.pauliZ, a1),
+                     np.linalg.matrix_power(basicDefs.pauliX, a2))
 
 
 def getLocalA0():
-    mat = np.zeros((basicdefs.d, basicdefs.d), dtype=complex)
-    for a1 in range(basicdefs.d):
-        for a2 in range(basicdefs.d):
+    mat = np.zeros((basicDefs.d, basicDefs.d), dtype=complex)
+    for a1 in range(basicDefs.d):
+        for a2 in range(basicDefs.d):
             curr = getLocalT(a1, a2)
             mat += curr
-    mat /= basicdefs.d
+    mat /= basicDefs.d
     return tn.Node(mat)
 
 
@@ -74,7 +71,7 @@ def wignerFunction(uVec, psi):
 
 
 def getBasicState(N):
-    baseTensor = np.ones((1, basicdefs.d, 1), dtype=complex) / np.sqrt(basicdefs.d)
+    baseTensor = np.ones((1, basicDefs.d, 1), dtype=complex) / np.sqrt(basicDefs.d)
     psi = [tn.Node(baseTensor) for i in range(N)]
     psi[N-1].tensor /= np.sqrt(bops.getOverlap(psi, psi))
     return psi
@@ -82,8 +79,8 @@ def getBasicState(N):
 
 def getTGate():
     mat = np.eye(3, dtype=complex)
-    mat[1, 1] *= np.exp(1j * 2 * np.pi / (basicdefs.d * 4))
-    mat[2, 2] *= np.exp(2 * 1j * 2 * np.pi / (basicdefs.d * 4))
+    mat[1, 1] *= np.exp(1j * 2 * np.pi / (basicDefs.d * 4))
+    mat[2, 2] *= np.exp(2 * 1j * 2 * np.pi / (basicDefs.d * 4))
     return tn.Node(mat)
 
 
@@ -92,13 +89,13 @@ def getMana(psi, us):
     for j in range(len(us)):
         u = us[j]
         wu = wignerFunction(u, psi)
-        manaSum += np.abs(wu) / basicdefs.d ** len(psi)
+        manaSum += np.abs(wu) / basicDefs.d ** len(psi)
     return np.log(manaSum)
 
 
 def getUs(N):
-    us = [np.zeros(2*N, dtype=int) for j in range(basicdefs.d**(2*N))]
-    for j in range(basicdefs.d**(2*N)):
+    us = [np.zeros(2*N, dtype=int) for j in range(basicDefs.d ** (2 * N))]
+    for j in range(basicDefs.d ** (2 * N)):
         trinary = int2base(j, length=2*N)
         for i in range(2*N):
             us[j][i] = int(trinary[i])
@@ -153,8 +150,8 @@ if test:
     n = 4
     psi0 = bops.getStartupState(n, d=3, mode='aklt')
     op = np.eye(3, dtype=complex)
-    op[1, 1] *= basicdefs.omega**(1/4)
-    op[1, 1] *= basicdefs.omega**(2/4)
+    op[1, 1] *= basicDefs.omega ** (1 / 4)
+    op[1, 1] *= basicDefs.omega ** (2 / 4)
     bops.applySingleSiteOp(psi0, tn.Node(op), 1)
     renyi.getSecondRenyi(psi0, d)
     renyi.getSecondRenyiExact(psi0, d)

@@ -65,7 +65,6 @@ def init(backend):
 def singleAttempt():
     curr1Tensor = prng.random_sample((chi, d, chi)) + 1j * prng.random_sample((chi, d, chi))
     curr2Tensor = prng.random_sample((chi, d, chi)) + 1j * prng.random_sample((chi, d, chi))
-    print(curr1Tensor)
     if backend == 'jax':
         curr1Tensor = jnp.array(curr1Tensor)
         curr2Tensor = jnp.array(curr2Tensor)
