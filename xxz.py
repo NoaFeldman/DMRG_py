@@ -24,17 +24,17 @@ def get_t_ising_dmrg_terms(h):
     return onsite_terms, neighbor_terms
 
 
-t_gate = np.array([[1, 0], [0, np.exp(1j * np.pi / 4)]])
+t_z = np.array([[0, np.exp(1j * np.pi / 4)], [np.exp(-1j * np.pi / 4), 0]])
 hadamard = np.array([[1, 1, ], [1, -1]]) / np.sqrt(2)
-rotated_t_gate = np.matmul(hadamard, np.matmul(t_gate, hadamard))
+rotated_t_gate = np.matmul(hadamard, np.matmul(t_z, hadamard))
 def get_magic_ising_dmrg_terms(h):
-    onsite_terms = [- h * t_gate for i in range(n)]
+    onsite_terms = [- h * t_z for i in range(n)]
     neighbor_terms = [- np.kron(basic.pauli2Z, basic.pauli2Z) for i in range(n - 1)]
     return onsite_terms, neighbor_terms
 
 def get_magic_xxz_dmrg_terms(delta):
     onsite_terms = [0 * np.eye(d) for i in range(n)]
-    neighbor_terms = [np.kron(t_gate, t_gate) * delta + \
+    neighbor_terms = [np.kron(t_z, t_z) * delta + \
                       np.kron(basic.pauli2X, basic.pauli2X) + \
                       np.kron(basic.pauli2Y, basic.pauli2Y) for i in range(n - 1)]
     return onsite_terms, neighbor_terms
@@ -42,7 +42,7 @@ def get_magic_xxz_dmrg_terms(delta):
 
 n = 16
 d = 2
-psi = bops.getStartupState(n, d, mode='antiferromagnetic')
+psi = bops.getStartupState(n, d)
 model = sys.argv[1]
 indir = sys.argv[2]
 if model == 'xxz':
@@ -76,10 +76,12 @@ for pi in range(len(params)):
     param = params[pi]
     try:
         with open(indir + '/magic/results/' + model + '/' + param_name + '_' + str(param), 'rb') as f:
-            [psi, m2, m2_optimized, best_basis, mhalf, m2_maximized, worst_basis] = pickle.load(f)
+            [psi, m2, m2_optimized, best_basis, mhalf, m2_maximized, worst_basis,
+             mhalf_optimized, mhalf_best_basis, mhalf_maximized, mhalf_worst_basis] = pickle.load(f)
     except FileNotFoundError or EOFError:
         onsite_terms, neighbor_terms = h_func(param)
-        psi, E0, truncErrs = dmrg.DMRG(psi, onsite_terms, neighbor_terms, initial_bond_dim=4)
+        psi_bond_dim = psi[int(n/2)].tensor.shape[0]
+        psi, E0, truncErrs = dmrg.DMRG(psi, onsite_terms, neighbor_terms, initial_bond_dim=4, accuracy=1e-10)
         if psi[int(n/2)].tensor.shape[0] > 4:
             psi_copy = bops.relaxState(psi, 4)
             print(bops.getOverlap(psi, psi_copy))
@@ -97,6 +99,14 @@ for pi in range(len(params)):
         reorder = [0, 2, 4, 6, 8, 10, 12, 14, 1, 3, 5, 7, 9, 11, 13, 16, 15, 17]
         dm = curr.tensor.transpose(reorder).reshape([d ** int(n / 2), d ** int(n / 2)])
         mhalf = magicRenyi.getHalfRenyiExact_dm(dm, d)
+        curr = bops.contract(psi[int(n / 2)], psi[int(n / 2)], '0', '0*')
+        for site in range(int(n / 2) + 1, n):
+            curr = bops.contract(curr, psi[site], [2 * (site - int(n / 2)) - 1], '0')
+            curr = bops.contract(curr, psi[site], [2 * (site - int(n / 2))], '0*')
+        reorder = [0, 2, 4, 6, 8, 10, 12, 14, 1, 3, 5, 7, 9, 11, 13, 16, 15, 17]
+        dm = curr.tensor.transpose(reorder).reshape([d ** int(n / 2), d ** int(n / 2)])
+        mhalf_optimized, mhalf_best_basis, mhalf_maximized, mhalf_worst_basis = \
+            magicRenyi.getHalfRenyiExact_dm_optimized(dm, d)
     magnetization[pi] = bops.getExpectationValue(psi, [tn.Node(basic.pauli2Z) for site in range(n)])
     cicj[pi] = sum([bops.getExpectationValue(psi,
                                              [tn.Node(np.eye(d)) for site in range(i)] + [tn.Node(np.array([[0, 1], [0, 0]]))] +
@@ -114,14 +124,6 @@ for pi in range(len(params)):
     m2s_maximized[pi] = m2_maximized
     best_bases.append([phase / np.pi for phase in best_basis])
     worst_bases.append([phase / np.pi for phase in worst_basis])
-    curr = bops.contract(psi[int(n / 2)], psi[int(n / 2)], '0', '0*')
-    for site in range(int(n / 2) + 1, n):
-        curr = bops.contract(curr, psi[site], [2 * (site - int(n / 2)) - 1], '0')
-        curr = bops.contract(curr, psi[site], [2 * (site - int(n / 2))], '0*')
-    reorder = [0, 2, 4, 6, 8, 10, 12, 14, 1, 3, 5, 7, 9, 11, 13, 16, 15, 17]
-    dm = curr.tensor.transpose(reorder).reshape([d ** int(n / 2), d ** int(n / 2)])
-    mhalf_optimized, mhalf_best_basis, mhalf_maximized, mhalf_worst_basis = \
-        magicRenyi.getHalfRenyiExact_dm_optimized(dm, d)
     mhalves_optimized[pi] = mhalf_optimized
     mhalves_maximized[pi] = mhalf_maximized
     print(param)
