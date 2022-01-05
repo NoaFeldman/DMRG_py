@@ -119,7 +119,8 @@ def renyiEntropy(n, w, h, M, estimateFunc, arguments, filename, d=2, excludeIndi
     for m in range(M * 2**N * 10):
         ops = getNonUnitaryRandomOps(d, n, N)
         for ind in excludeIndices:
-            ops[ind] = [tn.Node(np.eye(d, dtype=complex)) for i in range(n)]
+            for copy in range(len(ops[0])):
+                ops[copy][ind] = [tn.Node(np.eye(d, dtype=complex)) for i in range(n)]
         estimation = 1
         for i in range(n):
             expectation = wrapper(estimateFunc, arguments + [ops[i]])
