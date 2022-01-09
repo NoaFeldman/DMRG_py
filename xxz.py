@@ -24,11 +24,18 @@ def get_t_ising_dmrg_terms(h):
     return onsite_terms, neighbor_terms
 
 
+def get_xy_dmrg_terms(gamma):
+    onsite_terms = [0 * np.eye(2) for i in range(n)]
+    neighbor_terms = [-(1 + gamma) * np.kron(basic.pauli2X, basic.pauli2X) -
+                      (1 - gamma) * np.kron(basic.pauli2Y, basic.pauli2Y) for i in range(n - 1)]
+    return onsite_terms, neighbor_terms
+
+
 t_z = np.array([[0, np.exp(1j * np.pi / 4)], [np.exp(-1j * np.pi / 4), 0]])
 hadamard = np.array([[1, 1, ], [1, -1]]) / np.sqrt(2)
 rotated_t_gate = np.matmul(hadamard, np.matmul(t_z, hadamard))
 def get_magic_ising_dmrg_terms(h):
-    onsite_terms = [- h * t_z for i in range(n)]
+    onsite_terms = [- h * rotated_t_gate for i in range(n)]
     neighbor_terms = [- np.kron(basic.pauli2Z, basic.pauli2Z) for i in range(n - 1)]
     return onsite_terms, neighbor_terms
 
@@ -59,8 +66,12 @@ elif model == 't_ising':
     h_func = get_t_ising_dmrg_terms
 elif model == 'ising_magic':
     param_name = 'h'
-    params = [np.round(i * 0.1, 1) for i in range(25)]
+    params = [np.round(i * 0.1, 1) for i in range(16)]
     h_func = get_magic_ising_dmrg_terms
+elif model == 'xy':
+    param_name = 'gamma'
+    params = [np.round(i * 0.1, 1) for i in range(-10, 11)]
+    h_func = get_xy_dmrg_terms
 p2s = np.zeros(len(params))
 m2s = np.zeros(len(params))
 m2s_optimized = np.zeros(len(params))
@@ -116,8 +127,11 @@ for pi in range(len(params)):
             [tn.Node(np.eye(d)) for site in range(i)] + [tn.Node(np.array([[0, 0], [1, 0]]))] +
             [tn.Node(np.eye(d)) for site in range(j - i - 1)] + [tn.Node(np.array([[0, 1], [0, 0]]))] +
             [tn.Node(np.eye(d)) for site in range(n - j - 1)]) for i in range(n - 1) for j in range(i + 1, n)])
-    mhalves[pi] = mhalf
     print(psi[int(n/2)].tensor.shape)
+    if psi[int(n / 2)].tensor.shape[0] > 4:
+        psi_copy = bops.relaxState(psi, 4)
+        print(bops.getOverlap(psi, psi_copy))
+    mhalves[pi] = mhalf
     p2s[pi] = bops.getRenyiEntropy(psi, 2, int(n / 2))
     m2s[pi] = m2
     m2s_optimized[pi] = m2_optimized
@@ -131,12 +145,21 @@ for pi in range(len(params)):
         pickle.dump([psi, m2, m2_optimized, best_basis, mhalf, m2_maximized, worst_basis,
                      mhalf_optimized, mhalf_best_basis, mhalf_maximized, mhalf_worst_basis], f)
         # pickle.dump([psi, m2, m2_optimized, best_basis, mhalf, m2_maximized, worst_basis], f)
-plt.plot(params, p2s)
-plt.plot(params, m2s / 6)
-plt.plot(params, m2s_optimized / 6, '--k')
-plt.plot(params, m2s_maximized / 6, ':k')
-plt.plot(params, np.real(magnetization))
-plt.plot(params, np.real(cicj) / 12, '--k')
-plt.plot(params, mhalves)
-plt.legend([r'$p_2$', r'$m_2/6$', r'$m_2/6$ optimized', r'$m_2/6$ maximized', 'magnetization', r'$c_i c_j^\dagger$ + h.c.', r'$m_{1/2}$'])
+f, axs = plt.subplots(3, 1, gridspec_kw={'wspace':0, 'hspace':0}, sharex='all')
+axs[1].plot(params, m2s)
+axs[1].plot(params, m2s_optimized, '--k')
+axs[1].plot(params, m2s_maximized, ':k')
+axs[1].legend([r'$m_2$', r'$m_2$ optimized', r'$m_2$ maximized'])
+axs[2].plot(params, mhalves)
+axs[2].plot(params, mhalves_optimized, '--k')
+axs[2].plot(params, mhalves_maximized, ':k')
+axs[2].legend([r'$m_{1/2}$', r'$m_{1/2}$ optimized', r'$m_{1/2}$ maximized'])
+axs[0].plot(params, p2s)
+axs[0].plot(params, np.real(magnetization))
+axs[0].plot(params, np.real(cicj) / np.max(cicj))
+axs[0].legend([r'$p_2$', r'$S_z$', r'($c_i c_j^\dagger$ + h.c.)/' + str(np.round(np.real(np.max(cicj)), 1))])
+print(best_bases)
+print(worst_bases)
+plt.title(model)
+plt.xlabel(param_name)
 plt.show()
