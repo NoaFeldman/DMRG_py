@@ -57,11 +57,20 @@ with open(dirname + boundaryFile, 'rb') as f:
 [cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>')
 [cDown, dDown, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>')
 
-norm = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h,
-                               [tn.Node(np.eye(d)) for i in range(w * h)])
-leftRow = bops.multNode(leftRow, 1 / norm**(2/w))
-print(pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h,
-                               [tn.Node(np.eye(d)) for i in range(w * h)]))
+if option == 'toricG_torus':
+    norm = pe.applyLocalOperators_torus(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h,
+                                  [tn.Node(np.eye(d)) for i in range(w * h)])
+    print(norm)
+    A = bops.multNode(A, 1 / norm ** (1 / (w*h)))
+    # B = bops.multNode(B, 1 / norm ** (2 / (w*h)))
+    print(pe.applyLocalOperators_torus(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h,
+                                 [tn.Node(np.eye(d)) for i in range(w * h)]))
+else:
+    norm = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h,
+                                  [tn.Node(np.eye(d)) for i in range(w * h)])
+    leftRow = bops.multNode(leftRow, 1 / norm ** (2 / w))
+    print(pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h,
+                                 [tn.Node(np.eye(d)) for i in range(w * h)]))
 
 try:
     os.mkdir(newdir)
