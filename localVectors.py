@@ -18,6 +18,7 @@ dirname = sys.argv[6]
 option = sys.argv[7]
 theta = None
 phi = None
+estimate_func = pe.applyLocalOperators
 if option == 'ising':
     magField = np.round(float(sys.argv[8]), 1)
     if int(magField) == magField:
@@ -38,6 +39,13 @@ elif option == 'toricG':
     opt = sys.argv[9]
     newdir = dirname + 'toric_g_' + str(g) + '_n_' + str(n) + '_w_' + str(w) + '_h_' + str(h) + '_' + opt
     argvl = 10
+elif option == 'toricG_torus':
+    g = np.round(float(sys.argv[8]), 2)
+    boundaryFile = 'toricBoundaries_g_' + str(g)
+    opt = sys.argv[9]
+    newdir = dirname + 'toric_g_' + str(g) + '_n_' + str(n) + '_w_' + str(w) + '_h_' + str(h) + '_' + opt
+    argvl = 10
+    estimate_func = pe.applyLocalOperators_torus
 excludeIndices = []
 if len(sys.argv) > argvl:
     for i in range(argvl, len(sys.argv)):
@@ -59,7 +67,7 @@ try:
     os.mkdir(newdir)
 except FileExistsError:
     pass
-ru.renyiEntropy(n, w, h, M, pe.applyLocalOperators, [cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h],
+ru.renyiEntropy(n, w, h, M, estimate_func, [cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h],
                       newdir + '/rep_' + str(rep), excludeIndices=excludeIndices)
-# ru.renyiNegativity(n, l * 4, M, option, toricCode.applyLocalOperators, [cUp, dUp, cDown, dDown, leftRow, rightRow, toricCode.A, toricCode.B, l],
+# ru.renyiNegativity(n, l * 4, M, model, toricCode.applyLocalOperators, [cUp, dUp, cDown, dDown, leftRow, rightRow, toricCode.A, toricCode.B, l],
 #                    newdir + '/')

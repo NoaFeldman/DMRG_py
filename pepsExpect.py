@@ -93,3 +93,31 @@ def verticalPair(topSite, bottomSite, cleanTop=True, cleanBottom=True):
     [top, bottom, te] = bops.svdTruncation(pair, [0, 1, 2, 6], [3, 4, 5, 7], '>>', maxBondDim=16)
     top.reorder.axes([0, 1, 4, 2, 3])
     return top, bottom
+
+
+def applyLocalOperators_torus(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h, ops):
+    if w == 4:
+        for i in range(int(h/2)):
+            left0 = applyOpTosite(B, ops[i * 8])
+            left1 = applyOpTosite(A, ops[i * 8 + 1])
+            left2 = applyOpTosite(B, ops[i * 8 + 2])
+            left3 = applyOpTosite(A, ops[i * 8 + 3])
+            left = bops.permute(bops.multiContraction(left0, bops.multiContraction(left1,
+                                        bops.multiContraction(left2, left3, '2', '0'), '2', '0'), '20', '06'),
+                                [0, 2, 4, 6, 1, 3, 5, 7])
+
+            right0 = applyOpTosite(A, ops[i * 8 + 4])
+            right1 = applyOpTosite(B, ops[i * 8 + 5])
+            right2 = applyOpTosite(A, ops[i * 8 + 6])
+            right3 = applyOpTosite(B, ops[i * 8 + 7])
+            right = bops.permute(bops.multiContraction(right0, bops.multiContraction(right1,
+                                         bops.multiContraction(right2, right3, '2', '0'), '2', '0'), '20', '06'),
+                            [0, 2, 4, 6, 1, 3, 5, 7])
+            curr = bops.multiContraction(left, right, '4567', '0123')
+            if i == 0:
+                circle = curr
+            elif i > 0 and i < h/2 - 1:
+                circle = bops.multiContraction(circle, curr, '4567', '0123')
+            else:
+                result = bops.multiContraction(circle, curr, '45670123', '01234567').tensor
+        return result
