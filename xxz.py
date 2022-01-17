@@ -35,7 +35,7 @@ t_z = np.array([[0, np.exp(1j * np.pi / 4)], [np.exp(-1j * np.pi / 4), 0]])
 hadamard = np.array([[1, 1, ], [1, -1]]) / np.sqrt(2)
 rotated_t_gate = np.matmul(hadamard, np.matmul(t_z, hadamard))
 def get_magic_ising_dmrg_terms(h):
-    onsite_terms = [- h * rotated_t_gate for i in range(n)]
+    onsite_terms = [- h * t_z for i in range(n)]
     neighbor_terms = [- np.kron(basic.pauli2Z, basic.pauli2Z) for i in range(n - 1)]
     return onsite_terms, neighbor_terms
 
@@ -46,6 +46,18 @@ def get_magic_xxz_dmrg_terms(delta):
                       np.kron(basic.pauli2Y, basic.pauli2Y) for i in range(n - 1)]
     return onsite_terms, neighbor_terms
 
+def get_magic_xxz_real_pairs_dmrg_terms(delta):
+    onsite_terms = [0 * np.eye(d) for i in range(n)]
+    neighbor_terms = [np.kron(t_z, np.conj(t_z)) * delta + \
+                      np.kron(basic.pauli2X, basic.pauli2X) + \
+                      np.kron(basic.pauli2Y, basic.pauli2Y) for i in range(n - 1)]
+    return onsite_terms, neighbor_terms
+
+def get_xy_magic_dmrg_terms(gamma):
+    onsite_terms = [0 * np.eye(2) for i in range(n)]
+    neighbor_terms = [-(1 + gamma) * np.kron(basic.pauli2X, basic.pauli2X) -
+                      (1 - gamma) * np.kron(t_z, t_z) for i in range(n - 1)]
+    return onsite_terms, neighbor_terms
 
 n = 16
 d = 2
@@ -57,9 +69,13 @@ if model == 'xxz':
     params = [np.round(i * 0.1 - 2, 1) for i in range(1, 40)]
     h_func = get_xxz_dmrg_terms
 elif model == 'magic_xxz':
-        param_name = 'delta'
-        params = [np.round(i * 0.1 - 2, 1) for i in range(1, 40)]
-        h_func = get_magic_xxz_dmrg_terms
+    param_name = 'delta'
+    params = [np.round(i * 0.1 - 2, 1) for i in range(1, 40)]
+    h_func = get_magic_xxz_dmrg_terms
+elif model == 'magic_xxz_real_pairs':
+    param_name = 'delta'
+    params = [np.round(i * 0.1 - 2, 1) for i in range(1, 40)]
+    h_func = get_magic_xxz_real_pairs_dmrg_terms
 elif model == 't_ising':
     param_name = 'h'
     params = [np.round(i * 0.1, 1) for i in range(25)]
@@ -72,6 +88,10 @@ elif model == 'xy':
     param_name = 'gamma'
     params = [np.round(i * 0.1, 1) for i in range(-10, 11)]
     h_func = get_xy_dmrg_terms
+elif model == 'xy_magic':
+    param_name = 'gamma'
+    params = [np.round(i * 0.1, 1) for i in range(-10, 11)]
+    h_func = get_xy_magic_dmrg_terms
 p2s = np.zeros(len(params))
 m2s = np.zeros(len(params))
 m2s_optimized = np.zeros(len(params))
@@ -156,10 +176,11 @@ axs[2].plot(params, mhalves_maximized, ':k')
 axs[2].legend([r'$m_{1/2}$', r'$m_{1/2}$ optimized', r'$m_{1/2}$ maximized'])
 axs[0].plot(params, p2s)
 axs[0].plot(params, np.real(magnetization))
-axs[0].plot(params, np.real(cicj) / np.max(cicj))
-axs[0].legend([r'$p_2$', r'$S_z$', r'($c_i c_j^\dagger$ + h.c.)/' + str(np.round(np.real(np.max(cicj)), 1))])
+axs[0].plot(params, np.real(cicj) / np.max(np.abs(cicj)))
+axs[0].legend([r'$p_2$', r'$S_z$', r'($c_i c_j^\dagger$ + h.c.)/' + str(np.round(np.real(np.max(np.abs(cicj))), 1))])
 print(best_bases)
 print(worst_bases)
 plt.title(model)
 plt.xlabel(param_name)
+b = 1
 plt.show()
