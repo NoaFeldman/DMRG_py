@@ -59,9 +59,9 @@ def getSecondRenyi_optimizedBasis(psi, d, opt='min'):
     else:
         best_result = 0
     best_basis = None
-    thetas = [0.1 * np.pi * i for i in range(6)]
-    phis = [0.1 * np.pi * i for i in range(6)]
-    etas = [0.1 * np.pi * i for i in range(6)]
+    thetas = [0.1 * np.pi * i for i in range(6)] + [np.pi / 4]
+    phis = [0.1 * np.pi * i for i in range(6)] + [np.pi / 4]
+    etas = [0.1 * np.pi * i for i in range(6)] + [np.pi / 4]
     for ti in range(len(thetas)):
         theta = thetas[ti]
         u_theta = ru.getUTheta(theta, d)
@@ -235,9 +235,9 @@ def getHalfRenyiExact_dm_optimized(dm, d):
     worst_result = 0
     best_basis = None
     worst_basis = None
-    thetas = [0.25 * np.pi * i for i in range(3)]
-    phis = [0.25 * np.pi * i for i in range(3)]
-    etas = [0.25 * np.pi * i for i in range(3)]
+    thetas = [0.05 * np.pi * i for i in range(1)]
+    phis = np.array([0, 0.1, 0.25]) * np.pi
+    etas = np.array([0, 0.1, 0.25]) * np.pi
     for ti in range(len(thetas)):
         theta = thetas[ti]
         u_theta = ru.getUTheta(theta, d)
