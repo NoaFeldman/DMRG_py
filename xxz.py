@@ -192,7 +192,7 @@ def run():
         p2s[pi] = bops.getRenyiEntropy(psi, 2, int(n / 2))
         best_bases.append([phase / np.pi for phase in best_basis])
         worst_bases.append([phase / np.pi for phase in worst_basis])
-        print(param)
+        print(param) 
         with open(filename(indir, model, param_name, param, n), 'wb') as f:
             pickle.dump([psi, m2, m2_optimized, best_basis, mhalf, m2_maximized, worst_basis,
                          mhalf_optimized, mhalf_best_basis, mhalf_maximized, mhalf_worst_basis], f)
