@@ -53,6 +53,17 @@ def getSecondRenyi(psi, d):
     return -np.log(renyiSum) / np.log(d) - n
 
 
+def getSecondRenyi_basis(psi, d, theta, phi, eta):
+    u_theta = ru.getUTheta(theta, d)
+    u_phi = ru.getUPhi(phi, d)
+    u_eta = ru.getUEta(eta, d)
+    u = tn.Node(np.matmul(u_eta, np.matmul(u_theta, u_phi)))
+    psi_copy = bops.copyState(psi)
+    for site in range(len(psi)):
+        psi_copy[site] = bops.permute(bops.contract(psi_copy[site], u, '1', '0'), [0, 2, 1])
+    return getSecondRenyi(psi_copy, d)
+
+
 def getSecondRenyi_optimizedBasis(psi, d, opt='min'):
     if opt == 'min':
         best_result = 100
@@ -64,18 +75,11 @@ def getSecondRenyi_optimizedBasis(psi, d, opt='min'):
     etas = [0.1 * np.pi * i for i in range(6)] + [np.pi / 4]
     for ti in range(len(thetas)):
         theta = thetas[ti]
-        u_theta = ru.getUTheta(theta, d)
         for pi in range(len(phis)):
             phi = phis[pi]
-            u_phi = ru.getUPhi(phi, d)
             for ei in range(len(etas)):
                 eta = etas[ei]
-                u_eta = ru.getUEta(eta, d)
-                u = tn.Node(np.matmul(u_eta, np.matmul(u_theta, u_phi)))
-                psi_copy = bops.copyState(psi)
-                for site in range(len(psi)):
-                    psi_copy[site] = bops.permute(bops.contract(psi_copy[site], u, '1', '0'), [0, 2, 1])
-                curr = getSecondRenyi(psi_copy, d)
+                curr = getSecondRenyi_basis(psi, d, theta, phi, eta)
                 if opt == 'min':
                     if curr < best_result:
                         best_result = curr
@@ -230,6 +234,15 @@ def getHalfRenyiExact_dm(dm, d, paulis=None):
     return np.log(renyiSum)
 
 
+def getHalfRenyiExact_dm_basis(dm, d, theta, phi, eta):
+    u_theta = ru.getUTheta(theta, d)
+    u_phi = ru.getUPhi(phi, d)
+    u_eta = ru.getUEta(eta, d)
+    u = np.matmul(u_eta, np.matmul(u_theta, u_phi))
+    paulis = [np.matmul(u, np.matmul(p, dagger(u))) for p in basicDefs.getPauliMatrices(d)]
+    return getHalfRenyiExact_dm(dm, d, paulis=paulis)
+
+
 def getHalfRenyiExact_dm_optimized(dm, d):
     best_result = 100
     worst_result = 0
@@ -240,16 +253,11 @@ def getHalfRenyiExact_dm_optimized(dm, d):
     etas = np.array([0, 0.1, 0.25]) * np.pi
     for ti in range(len(thetas)):
         theta = thetas[ti]
-        u_theta = ru.getUTheta(theta, d)
         for pi in range(len(phis)):
             phi = phis[pi]
-            u_phi = ru.getUPhi(phi, d)
             for ei in range(len(etas)):
                 eta = etas[ei]
-                u_eta = ru.getUEta(eta, d)
-                u = np.matmul(u_eta, np.matmul(u_theta, u_phi))
-                paulis = [np.matmul(u, np.matmul(p, dagger(u))) for p in basicDefs.getPauliMatrices(d)]
-                curr = getHalfRenyiExact_dm(dm, d, paulis)
+                curr = getHalfRenyiExact_dm_basis(dm, d, theta, phi, eta)
                 if curr < best_result:
                     best_result = curr
                     best_basis = [theta, phi, eta]
