@@ -179,7 +179,8 @@ def run():
         print(psi[int(n/2)].tensor.shape)
         if psi[int(n / 2)].tensor.shape[0] > 4:
             psi_copy = bops.relaxState(psi, 4)
-            print(bops.getOverlap(psi, psi_copy))
+        else:
+            psi_copy = psi
         dm = get_half_system_dm(psi)
         for ti in range(len(thetas)):
             theta = thetas[ti]
@@ -187,12 +188,12 @@ def run():
                 phi = phis[phi_i]
                 for ei in range(len(etas)):
                     eta = etas[ei]
-                    m2s[pi, ti, phi_i, ei] = magicRenyi.getSecondRenyi_basis(psi, d, theta, phi, eta)
+                    m2s[pi, ti, phi_i, ei] = magicRenyi.getSecondRenyi_basis(psi_copy, d, theta, phi, eta)
                     mhalves[pi, ti, phi_i, ei] = magicRenyi.getHalfRenyiExact_dm_basis(dm, d, theta, phi, eta)
         p2s[pi] = bops.getRenyiEntropy(psi, 2, int(n / 2))
         best_bases.append([phase / np.pi for phase in best_basis])
         worst_bases.append([phase / np.pi for phase in worst_basis])
-        print(param) 
+        print(param)
         with open(filename(indir, model, param_name, param, n), 'wb') as f:
             pickle.dump([psi, m2, m2_optimized, best_basis, mhalf, m2_maximized, worst_basis,
                          mhalf_optimized, mhalf_best_basis, mhalf_maximized, mhalf_worst_basis], f)
