@@ -22,7 +22,7 @@ for n in [2, 3, 4]:
         else:
             with open('results/expected_' + option + '_NA_' + str(N) + '_n_' + str(n), 'rb') as f:
                 expected = pickle.load(f)
-        # with open('results/organized_' + option + '_NB_' + str(N) + '_' + str(n) + '_' + str(N), 'rb') as f:
+        # with open('results/organized_' + model + '_NB_' + str(N) + '_' + str(n) + '_' + str(N), 'rb') as f:
         with open('results/organized_' + option + '_optimized_' + str(n) + '_' + str(N), 'rb') as f:
             organized = np.array(pickle.load(f))
             organized = organized[organized < 40000]

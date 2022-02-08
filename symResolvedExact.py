@@ -27,7 +27,7 @@ def getNumerics(NA, n, Qs):
     for i in range(len(fluxes)):
         flux = fluxes[i]
         if i == 0:
-            filename = 'results/organized_MPS_optimized_' + str(n) + '_' + str(NA)
+            filename = 'results/XX_optimized/organized_XX_' + str(n) + '_' + str(NA)
         else:
             filename = 'results/organized_MPS_flux_' + str(flux) + '_' + str(n) + '_' + str(NA)
         with open(filename, 'rb') as f:
@@ -103,5 +103,3 @@ def getExact(NA, n, Qs):
 # plt.xlabel('S', fontsize=22)
 # plt.ylabel(r'$p_n$', fontsize=22)
 # plt.show()
-
-
