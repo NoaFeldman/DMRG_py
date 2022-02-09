@@ -134,12 +134,14 @@ elif model == 'xy_magic':
     params = [np.round(i * 0.1, 1) for i in range(-10, 10)]
     h_func = get_xy_magic_dmrg_terms
 
+thetas = [t * np.pi for t in [0.0, 0.15, 0.25, 0.4]]
+phis = [p * np.pi for p in [0.0, 0.15, 0.25, 0.4]]
+etas = [e * np.pi for e in [0.0, 0.15, 0.25, 0.4]]
+
+
 def run():
     psi = bops.getStartupState(n, d)
     p2s = np.zeros(len(params))
-    thetas = [0.0, 0.15, 0.25, 0.4]
-    phis = [0.0, 0.15, 0.25, 0.4]
-    etas = [0.0, 0.15, 0.25, 0.4]
     m2s = np.zeros((len(params), len(thetas), len(phis), len(etas)))
     mhalves = np.zeros((len(params), len(thetas), len(phis), len(etas)))
     best_bases = []
@@ -197,9 +199,9 @@ def run():
         with open(filename(indir, model, param_name, param, n), 'wb') as f:
             pickle.dump([psi, m2, m2_optimized, best_basis, mhalf, m2_maximized, worst_basis,
                          mhalf_optimized, mhalf_best_basis, mhalf_maximized, mhalf_worst_basis], f)
-    with open(indir + '/magic/results/m2s_' + param_name + 's_' + str(params[range_i]) + '_' + str(params[range_f - 1]), 'wb') as f:
+    with open(indir + '/magic/results/' + model + 'm2s_' + param_name + 's_' + str(params[0]) + '_' + str(params[-1]), 'wb') as f:
         pickle.dump(m2s, f)
-    with open(indir + '/magic/results/mhalves_' + param_name + 's_' + str(params[range_i]) + '_' + str(params[range_f - 1]), 'wb') as f:
+    with open(indir + '/magic/results/' + model + 'mhalves_' + param_name + 's_' + str(params[0]) + '_' + str(params[-1]), 'wb') as f:
         pickle.dump(mhalves, f)
     # f, axs = plt.subplots(3, 1, gridspec_kw={'wspace':0, 'hspace':0}, sharex='all')
     # for ti in range(len(thetas)):
@@ -254,4 +256,32 @@ def analyze_scaling():
         axs[1].plot(ns, m2s_maximized[:, pi], ':k', color=color[0])
     plt.show()
 
-# analyze_scaling()
+
+def darken(color, i):
+    result = '#'
+    for ci in range(1, len(color)):
+        result += hex(int(color[ci], base=16) + i)[2] if color[ci] != 'f' else color[ci]
+    return result
+
+
+def get_color_gradient(color):
+    result = [color]
+    for i in range(len(thetas)):
+        result.append(darken(color, 3*i))
+    return result
+
+
+def analyze_basis():
+    with open(indir + '/magic/results/' + model + '/m2s', 'rb') as f:
+        m2s = pickle.load(f)
+    for ti in range(len(thetas)):
+        for pi in range(len(phis)):
+            color = "#" + ''.join([random.choice('ABCDEF6789') for i in range(6)])
+            gradient = get_color_gradient(color)
+            for ei in range(len(etas)):
+                plt.plot(params, m2s[:, ti, pi, ei], color=gradient[ei])
+            plt.legend([str(eta) for eta in etas])
+    plt.xlabel(param_name)
+    plt.ylabel('r$m_2$')
+    plt.show()
+# analyze_basis()
