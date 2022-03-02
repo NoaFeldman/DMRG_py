@@ -66,7 +66,7 @@ def test_dmrg_xxz(N):
     psi, E0, truncErrs = dmrg.DMRG(psi, onsite_terms, neighbor_terms, accuracy=1e-12)
 
 
-cpu_num = sys.argv[1]
+cpu_num = int(sys.argv[1])
 set_mkl_threads(cpu_num)
 
 opt = sys.argv[2]
