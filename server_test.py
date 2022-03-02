@@ -80,4 +80,4 @@ elif opt == 'DMRG':
     test_dmrg_xxz(N)
 end = time.time()
 with open(result_file_name + '_' + opt + '_N_' + str(N), 'wb') as f:
-    pickle.dump(end - start)
+    pickle.dump(end - start, f)
