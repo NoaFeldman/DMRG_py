@@ -11,6 +11,30 @@ import basicDefs as basic
 import sys
 
 
+def set_mkl_threads(threadNum):
+    try:
+        import mkl
+        mkl.set_num_threads(threadNum)
+        return 0
+    except:
+        pass
+
+    for name in ["libmkl_rt.so", "libmkl_rt.dylib", "mkl_Rt.dll"]:
+        try:
+            mkl_rt = ctypes.CDLL(name)
+            mkl_rt.mkl_set_num_threads(ctypes.byref(ctypes.c_int(1)))
+            return 0
+        except:
+            pass
+
+    os.environ["OMP_NUM_THREADS"] = str(threadNum)  # export OMP_NUM_THREADS=4
+    os.environ["OPENBLAS_NUM_THREADS"] = str(threadNum)  # export OPENBLAS_NUM_THREADS=4
+    os.environ["MKL_NUM_THREADS"] = str(threadNum)  # export MKL_NUM_THREADS=6
+    os.environ["VECLIB_MAXIMUM_THREADS"] = str(threadNum)  # export VECLIB_MAXIMUM_THREADS=4
+    os.environ["NUMEXPR_NUM_THREADS"] = str(threadNum)  # export NUMEXPR_NUM_THREADS=6
+
+
+
 def test_toric_code_moment_estimation(N, dirname):
     boundaryFile = 'toricBoundaries'
     with open(dirname + boundaryFile, 'rb') as f:
@@ -42,12 +66,15 @@ def test_dmrg_xxz(N):
     psi, E0, truncErrs = dmrg.DMRG(psi, onsite_terms, neighbor_terms, accuracy=1e-12)
 
 
-opt = sys.argv[1]
-result_file_name = sys.argv[2]
+cpu_num = sys.argv[1]
+set_mkl_threads(cpu_num)
+
+opt = sys.argv[2]
+result_file_name = sys.argv[3]
 start = time.time()
-N = int(sys.argv[3])
+N = int(sys.argv[4])
 if opt == 'PEPS':
-    dirname = sys.argv[4]
+    dirname = sys.argv[5]
     test_toric_code_moment_estimation(N, dirname)
 elif opt == 'DMRG':
     test_dmrg_xxz(N)
