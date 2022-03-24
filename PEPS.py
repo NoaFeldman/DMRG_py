@@ -2,6 +2,8 @@ import numpy as np
 import basicOperations as bops
 import tensornetwork as tn
 import matplotlib.pyplot as plt
+import pepsExpect as pe
+
 
 def bmpsRowStep(gammaL, lambdaMid, gammaR, lambdaSide, envOp, lattice='squared', chi=128, shrink=True):
     if lattice == 'squared':
@@ -260,3 +262,53 @@ def twoCopiesEntanglement(circle, A, B):
 
     p2 = bops.multiContraction(doubleCircle, ABNet, '01234567', '01234567').tensor
     return p2
+
+
+def applyBMPS(A: tn.Node, B:tn.Node, db=2, d=2, steps=50):
+    AEnv = pe.toEnvOperator(bops.multiContraction(A, A, '4', '4*'))
+    BEnv = pe.toEnvOperator(bops.multiContraction(B, B, '4', '4*'))
+
+    envOpAB = bops.permute(bops.multiContraction(AEnv, BEnv, '1', '3'), [0, 3, 2, 4, 1, 5])
+    envOpBA = bops.permute(bops.multiContraction(BEnv, AEnv, '1', '3'), [0, 3, 2, 4, 1, 5])
+    curr = bops.permute(bops.multiContraction(envOpBA, envOpAB, '45', '01'), [0, 2, 4, 6, 1, 3, 5, 7])
+
+    for i in range(2):
+        [C, D, te] = bops.svdTruncation(curr, [0, 1, 2, 3], [4, 5, 6, 7], '>>', normalize=True)
+        curr = bops.permute(bops.multiContraction(D, C, '23', '12'), [1, 3, 0, 5, 2, 4])
+        curr = bops.permute(bops.multiContraction(curr, envOpAB, '45', '01'), [0, 2, 4, 6, 1, 3, 5, 7])
+
+    currAB = curr
+
+    openA = tn.Node(np.transpose(np.reshape(np.kron(A.tensor, A.tensor), [db ** 2, db ** 2, db ** 2, db ** 2, d, d]),
+                                 [4, 0, 1, 2, 3, 5]))
+    openB = tn.Node(np.transpose(np.reshape(np.kron(B.tensor, B.tensor), [db ** 2, db ** 2, db ** 2, db ** 2, d, d]),
+                                 [4, 0, 1, 2, 3, 5]))
+
+    rowTensor = np.zeros((11, 4, 4, 11), dtype=complex)
+    rowTensor[0, 0, 0, 0] = 1
+    rowTensor[1, 0, 0, 2] = 1
+    rowTensor[2, 0, 0, 3] = 1
+    rowTensor[3, 0, 3, 4] = 1
+    rowTensor[4, 3, 0, 1] = 1
+    rowTensor[5, 0, 0, 6] = 1
+    rowTensor[6, 0, 3, 7] = 1
+    rowTensor[7, 3, 0, 8] = 1
+    rowTensor[8, 0, 0, 5] = 1
+    row = tn.Node(rowTensor)
+
+    upRow = bops.unifyLegs(bops.unifyLegs(bops.unifyLegs(bops.unifyLegs(
+        bops.permute(bops.multiContraction(row, tn.Node(currAB.tensor), '12', '04'), [0, 2, 3, 4, 7, 1, 5, 6]), [5, 6]),
+        [5, 6]), [0, 1]), [0, 1])
+    [C, D, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>', normalize=True)
+    upRow = bops.multiContraction(D, C, '2', '0')
+    [cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>', normalize=True)
+    GammaC, LambdaC, GammaD, LambdaD = getBMPSRowOps(cUp, tn.Node(np.ones(cUp[2].dimension)), dUp,
+                                                          tn.Node(np.ones(dUp[2].dimension)), AEnv, BEnv, 50)
+    cUp = bops.multiContraction(GammaC, LambdaC, '2', '0', isDiag2=True)
+    dUp = bops.multiContraction(GammaD, LambdaD, '2', '0', isDiag2=True)
+    upRow = bops.multiContraction(cUp, dUp, '2', '0')
+    downRow = bops.copyState([upRow])[0]
+    rightRow = bmpsCols(upRow, downRow, AEnv, BEnv, steps, option='right', X=upRow)
+    leftRow = bmpsCols(upRow, downRow, AEnv, BEnv, steps, option='left', X=upRow)
+
+    return upRow, downRow, leftRow, rightRow, openA, openB

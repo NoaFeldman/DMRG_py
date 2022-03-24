@@ -433,6 +433,14 @@ def shiftWorkingSite(psi: List[tn.Node], k, dir, maxBondDim=None):
     return psi
 
 
+def moveOrthogonalityCenter(psi, n):
+    k = len(psi) - 1
+    while k > n:
+        psi = shiftWorkingSite(psi, k, '<<')
+        k -=1
+    return psi
+
+
 def removeState(psi):
     for i in range(len(psi)):
         tn.remove_node(psi[i])
