@@ -58,4 +58,24 @@ def toric_code():
 
     b = 1
 
+
+def x_star_projector(eigenvalue, site_num=4):
+    H = tn.Node(np.array([[1, 1], [1, -1]]) / np.sqrt(2))
+    quadX_tensor = np.zeros(tuple([2] * 2 * site_num), dtype=complex)
+    for i in range(2**site_num):
+        if (eigenvalue == 1 and bin(i).count('1') % 2 == 0) or (eigenvalue == -1 and bin(i).count('1') % 2 == 1):
+            curr_index = np.zeros((2 * site_num), dtype=int)
+            for j in range(site_num):
+                curr_index[j * 2] = int((i & 2**j) / 2**j)
+                curr_index[j * 2 + 1] = int((i & 2**j) / 2**j)
+            quadX_tensor[tuple(curr_index)] = 1
+    quadX = tn.Node(quadX_tensor)
+    for i in range(2 * site_num):
+        quadX = bops.contract(H, quadX, '0', [i])
+    return quadX
+
+
+x1 = x_star_projector(1, 1)
+xm1 = x_star_projector(-1, 1)
+b = 1
 toric_code()
