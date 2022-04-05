@@ -53,7 +53,8 @@ def bmpsRowStep(gammaL, lambdaMid, gammaR, lambdaSide, envOp, lattice='squared',
         siteIndexNumber = 5
     [U, S, V, truncErr] = bops.svdTruncation(opRow, leftEdges, rightEdges, dir='>*<', maxBondDim=chi)
     if len(truncErr) > 0:
-        print(np.max(truncErr))
+        if np.max(truncErr) > 1e-14:
+            print(np.max(truncErr))
     newLambdaMid = tn.Node(np.diag(S.tensor) / np.sqrt(sum(np.diag(S.tensor)**2))) # bops.multNode(S, 1 / np.sqrt(sum(S.tensor**2)))
     lambdaSideInv = tn.Node(np.array([1 / val if val > 1e-15 else 0 for val in lambdaSide.tensor], dtype=complex))
     newGammaL = bops.multiContraction(lambdaSideInv, U, '1', '0', cleanOr2=True, isDiag1=True)
@@ -295,6 +296,8 @@ def applyBMPS(A: tn.Node, B:tn.Node, db=2, d=2, steps=50):
     rowTensor[7, 3, 0, 8] = 1
     rowTensor[8, 0, 0, 5] = 1
     row = tn.Node(rowTensor)
+    closer = tn.Node(np.array([1, 0, 0, 1]))
+    row = bops.contract(bops.contract(envOpAB, closer, '0', '0'), closer, '0', '0')
 
     upRow = bops.unifyLegs(bops.unifyLegs(bops.unifyLegs(bops.unifyLegs(
         bops.permute(bops.multiContraction(row, tn.Node(currAB.tensor), '12', '04'), [0, 2, 3, 4, 7, 1, 5, 6]), [5, 6]),

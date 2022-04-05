@@ -6,7 +6,7 @@ import PEPS as peps
 import pickle
 import randomUs as ru
 from typing import List
-
+import matplotlib.pyplot as plt
 
 def toric_code(g=0.0):
     #
@@ -71,15 +71,6 @@ def toric_code(g=0.0):
     M = bops.contract(bops.contract(bops.contract(bops.contract(
         circle, openB, '07', '14'), openA, '017', '124'), openA, '523', '134'), openB, '5018', '1234')
     mat = np.round(np.real(M.tensor.transpose([0, 2, 4, 6, 1, 3, 5, 7]). reshape([4**4, 4**4]) / 0.03125), 10)
-    H = np.array([[1, 1], [1, -1]]) / np.sqrt(2)
-    Hs_left = np.eye(1)
-    Hs_right = np.eye(1)
-    for i in range(8):
-        Hs_left = np.kron(Hs_left, np.array([[1, 1/(1+g)], [1, -1/(1+g)]]))
-        Hs_right = np.kron(Hs_right, np.array([[1, 1+g], [1, -1-g]]))
-    rotated_mat = np.round(np.matmul(Hs_left, np.matmul(mat, Hs_right)), 8)
-    id = tn.Node(np.eye(4))
-    traced_out = bops.contract(bops.contract(bops.contract(M, id, '67', '01'), id, '45', '01'), id, '23', '01')
     b = 1
 
 # w and h are the dimensions of the system *tensor-wise* and not site-wise (when each tensor is two sites).
@@ -113,15 +104,6 @@ def get_local_vectors(w, h, list_of_sectors, free_site_choices):
                                            int_results[2 * ci - 1, ri + 1] *
                                            int_results[2 * ci - 2, ri + 1])
         int_results[2 * ci + 1, h - 1] = list_of_sectors[ci + 1][-1]
-    return int_results
-
-
-up_spin = np.array([1, 0])
-down_spin = np.array([0, 1])
-def get_random_local_vectors(w, h, list_of_sectors) -> List[np.array]:
-    int_results = get_local_vectors(w, h, list_of_sectors, [np.random.randint(2) * 2 - 1 for i in range((h-1) * (w - 1))])
-    if int_results is None:
-        return None
     results = [None for i in range(w * h)]
     for wi in range(w):
         for hi in range(h):
@@ -132,10 +114,20 @@ def get_random_local_vectors(w, h, list_of_sectors) -> List[np.array]:
     return results
 
 
+up_spin = np.array([1, 0]) * np.sqrt(2)
+down_spin = np.array([0, 1]) * np.sqrt(2)
+def get_random_local_vectors(w, h, list_of_sectors, bulk_ints=None) -> List[np.array]:
+    if bulk_ints is None:
+        bulk_ints = [np.random.randint(2) * 2 - 1 for i in range((h-1) * (w - 1))]
+    results = get_local_vectors(w, h, list_of_sectors, bulk_ints)
+    return results
+
+
 # boundary_sectors are the sector eigenvalues on the boundary from the top left corner and down the left edge,
 # then top-bottom for the middle, and then top to bottom in the right edge.
 def get_list_of_sectors(w, h, boundary_identifier):
     # After all of the boundary sections but one are set, the last one is determined by them
+    boundary_length = 2 * (w + h - 1)
     boundary_sectors = [int(c) * 2 - 1 for c in bin(boundary_identifier).split('b')[1]]
     boundary_sectors = [-1] * (boundary_length - len(boundary_sectors)) + boundary_sectors
     boundary_sectors.append(np.prod(boundary_sectors))
@@ -146,14 +138,13 @@ def get_list_of_sectors(w, h, boundary_identifier):
     return res
 
 
-
-
-def get_random_operators(w, h, n, list_of_sectors):
+def get_random_operators(w, h, n, list_of_sectors, bulk_ints=None):
     random_local_vectors = [None for ni in range(n)]
     for ni in range(n):
-        random_local_vectors[ni] = get_random_local_vectors(w, h, list_of_sectors)
-        if random_local_vectors[ni] is None:
-            return None
+        if bulk_ints is None:
+            random_local_vectors[ni] = get_random_local_vectors(w, h, list_of_sectors)
+        else:
+            random_local_vectors[ni] = get_random_local_vectors(w, h, list_of_sectors, bulk_ints[ni])
     results = [None for ni in range(n)]
     for ni in range(n):
         results[ni] = [tn.Node(np.outer(random_local_vectors[ni][si], random_local_vectors[(ni + 1) % n][si]))
@@ -161,72 +152,59 @@ def get_random_operators(w, h, n, list_of_sectors):
     return results
 
 
-def get_explicit_block(w, h):
-    res = []
+def get_explicit_block(w, h, g, boundary_identifier=0):
     num_of_free_site_choices = (h - 1) * (w - 1)
-    list_of_sectors = get_list_of_sectors(w, h, [1]  * (h * 2 + 1 + 2 * (w - 1)))
-    for i in range(2**num_of_free_site_choices):
-        choices = [int(c) * 2 - 1 for c in bin(i).split('b')[1]]
-        choices = [-1] * (num_of_free_site_choices - len(choices)) + choices
-        local_vectors = get_local_vectors(w, h, list_of_sectors, choices)
-        global_vector = np.eye(1)
-        for hi in range(h):
-            for wi in range(w):
-                global_vector = np.kron(global_vector, local_vectors[hi, wi])
-        res.append(global_vector)
-    b = 1
+    block_size = 2**num_of_free_site_choices
+    ops = [[None for i in range(block_size)] for j in range(block_size)]
+    list_of_sectors = get_list_of_sectors(w, h, boundary_identifier)
+    for i in range(block_size):
+        for j in range(block_size):
+            choices_i = [int(c) * 2 - 1 for c in bin(i).split('b')[1]]
+            choices_i = [-1] * (num_of_free_site_choices - len(choices_i)) + choices_i
+            choices_j = [int(c) * 2 - 1 for c in bin(j).split('b')[1]]
+            choices_j = [-1] * (num_of_free_site_choices - len(choices_j)) + choices_j
+            ops[i][j] = get_random_operators(w, h, 2, list_of_sectors, [choices_i, choices_j])[0]
 
-w = 2
-h = 2
+    with open('results/toricBoundaries_gauge_' + str(np.round(g, 8)), 'rb') as f:
+        [upRow, downRow, leftRow, rightRow, openA, openB, A, B] = pickle.load(f)
+    [cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>')
+    [cDown, dDown, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>')
+    norm = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h,
+                                  [tn.Node(np.eye(4)) for i in range(w * h)])
+    leftRow = bops.multNode(leftRow, 1 / norm ** (2 / w))
+
+    res = np.zeros((block_size, block_size), dtype=complex)
+    for i in range(block_size):
+        for j in range(block_size):
+            res[i, j] = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h,
+                                  ops[i][j])
+    res /= 2**(2*w*h)
+    return res
+
+w = 4
+h = 4
 n = 2
 M = 1000
 d = 4
+gs = [0.1 * G for G in range(11)]
+num_of_boundary_options = 2 * (w + h -1)
+colors = ['#0000FF', '#9D02D7', '#EA5F94', '#FA8775', '#FFB14E', '#FFD700', '#ff6f3c', '#FFD700', '#2f0056', '#930043']
+for bi in range(num_of_boundary_options):
+    p2s = np.zeros(len(gs), dtype=complex)
+    svNs = np.zeros(len(gs), dtype=complex)
+    for gi in range(len(gs)):
+        g = gs[gi]
+        block = get_explicit_block(w, h, g, bi)
+        p2s[gi] = np.trace(np.linalg.matrix_power(block, 2))
+        evals = np.round(np.linalg.eigvalsh(block), 8)
+        svNs[gi] = np.sum([0 if evals[i] == 0 else -np.log(evals[i]) * evals[i] for i in range(len(evals))])
+        print([bi, g, p2s[gi], svNs[gi], evals])
+    plt.plot(gs, p2s * 1e2, color=colors[bi])
+    plt.plot(gs, svNs, '--k', color=colors[bi])
+plt.show()
+# TODO run getExplicitBlock for Q = 0, N_A/4, N_A/2)
 
-estimate_func = pe.applyLocalOperators
-with open('results/toricBoundaries_gauge_', 'rb') as f:
-    [upRow, downRow, leftRow, rightRow, openA, openB, A, B] = pickle.load(f)
-[cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>')
-[cDown, dDown, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>')
-norm = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h,
-                                  [tn.Node(np.eye(d)) for i in range(w * h)])
-leftRow = bops.multNode(leftRow, 1 / norm ** (2 / w))
-circle = bops.contract(bops.contract(bops.contract(
-    upRow, rightRow, '3', '0'), downRow, '5', '0'), leftRow, '70', '03')
-
-M = bops.contract(bops.contract(bops.contract(bops.contract(
-    circle, openB, '07', '14'), openA, '017', '124'), openA, '523', '134'), openB, '5018', '1234')
-mat = np.real(M.tensor.transpose([0, 4, 2, 6, 1, 5, 3, 7]). reshape([4**4, 4**4]))
-H = np.array([[1, 1], [1, -1]]) / np.sqrt(2)
-Hs = np.eye(1)
-for i in range(8):
-    Hs = np.kron(Hs, H)
-rotated_mat = np.matmul(Hs, np.matmul(mat, Hs))
-rotated_mat = np.round(rotated_mat / np.trace(rotated_mat), 8)
-boundary_length = h * 2 + 1 + 2 * (w - 1) - 1
-steps_num = 1000
-for si in range(2**(boundary_length)):
-    list_of_sectors = get_list_of_sectors(w, h, si)
-    mysum = 0
-    for i in range(steps_num):
-        random_ops = get_random_operators(w, h, n, list_of_sectors)
-        if random_ops == None:
-            break
-        tst0 = np.kron(random_ops[0][0].tensor, np.kron(random_ops[0][1].tensor, np.kron(random_ops[0][2].tensor, random_ops[0][3].tensor)))
-        tst1 = np.kron(random_ops[1][0].tensor, np.kron(random_ops[1][1].tensor, np.kron(random_ops[1][2].tensor, random_ops[1][3].tensor)))
-        exact_result = np.round(np.trace(np.matmul(mat, tst0)) * np.trace(np.matmul(mat, tst1)), 8)
-        peps_result = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h, random_ops[0]) * \
-            pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h, random_ops[1])
-        peps_result = np.round(peps_result, 8)
-        if peps_result != exact_result:
-            print(si, exact_result, peps_result)
-        mysum += peps_result
-    block_size = 2**((w - 1) * (h - 1))
-    hilbert_space_size = 2**(2 * w * 2 * h)
-    norm = block_size / hilbert_space_size
-    avg = mysum / steps_num / norm**n
-    print(list_of_sectors, np.log(avg) / np.log(2))
-    b = 1
-
+# list_of_sectors = get_list_of_sectors(w, h, 0)
 # ru.renyiEntropy(n, w, h, M, estimate_func, [cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h],
 #                       'results/gauge/gauge_rep_' + str(1), get_ops_func=get_random_operators,
 #                       get_ops_arguments=[w, h, n, list_of_sectors])
