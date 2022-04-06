@@ -8,6 +8,7 @@ import randomUs as ru
 from typing import List
 import matplotlib.pyplot as plt
 
+
 def toric_code(g=0.0):
     #
     #    O
@@ -123,14 +124,18 @@ def get_random_local_vectors(w, h, list_of_sectors, bulk_ints=None) -> List[np.a
     return results
 
 
-# boundary_sectors are the sector eigenvalues on the boundary from the top left corner and down the left edge,
-# then top-bottom for the middle, and then top to bottom in the right edge.
-def get_list_of_sectors(w, h, boundary_identifier):
+def get_boundary_sectors(boundary_identifier):
     # After all of the boundary sections but one are set, the last one is determined by them
     boundary_length = 2 * (w + h - 1)
     boundary_sectors = [int(c) * 2 - 1 for c in bin(boundary_identifier).split('b')[1]]
     boundary_sectors = [-1] * (boundary_length - len(boundary_sectors)) + boundary_sectors
     boundary_sectors.append(np.prod(boundary_sectors))
+    return boundary_sectors
+
+# boundary_sectors are the sector eigenvalues on the boundary from the top left corner and down the left edge,
+# then top-bottom for the middle, and then top to bottom in the right edge.
+def get_list_of_sectors(w, h, boundary_identifier):
+    boundary_sectors = get_boundary_sectors(boundary_identifier)
     res = [[boundary_sectors[i] for i in range(h)]]
     for i in range(1, w):
         res.append([boundary_sectors[h - 2 + i * 2]] + [1] * (h - 1) + [boundary_sectors[h - 1 + i * 2]])
@@ -180,6 +185,68 @@ def get_explicit_block(w, h, g, boundary_identifier=0):
                                   ops[i][j])
     res /= 2**(2*w*h)
     return res
+
+def get_Z_plaquette_projector():
+    #
+    #    O
+    #    |
+    #  __*__O
+    #    |
+    # bond down, bond left, in, out
+    tensor_op_bottom_left = np.zeros((2, 2, 4, 4), dtype=complex)
+    for i in range(2):
+        tensor_op_bottom_left[0, 0, i + 2 * i, i + 2 * i] = 1
+        tensor_op_bottom_left[1, 1, i + 2 * i, i + 2 * i] = 1
+        tensor_op_bottom_left[0, 1, i + 2 * (i^1), i + 2 * (i^1)] = 1
+        tensor_op_bottom_left[1, 0, i + 2 * (i ^ 1), i + 2 * (i ^ 1)] = 1
+    # |
+    # O
+    #    O____
+    # bond up, bond right, O top in, O right in, O top out, O right out
+    tensor_op_top_right = np.zeros((2, 2, 2, 2, 2, 2), dtype=complex)
+    for i in range(2):
+        for j in range(2):
+            tensor_op_top_right[i, j, i, j, i, j] = 1
+    tensor_op_top_right.reshape([2, 2, 4, 4])
+    op_bottom_left = tn.Node(tensor_op_bottom_left)
+    op_top_right = tn.Node(tensor_op_top_right)
+    op_A = bops.permute(bops.contract(op_top_right, op_bottom_left, '2', '3'), [0, 1, 3, 4, 2, 5])
+    op_B = bops.permute(bops.contract(op_bottom_left, op_top_right, '2', '3'), [3, 4, 0, 1, 2, 5])
+    return op_A, op_B
+
+
+op_A, op_B = get_Z_plaquette_projector()
+minus_boundary = np.array([0, 1], dtype=complex)
+plus_boundary = np.array([1, 0], dtype=complex)
+def normalize_by_gauge_invariant_projector(w, h, random_vectors, boundary_identifier):
+    boundary_sectors = get_boundary_sectors(boundary_identifier)
+    leftRows = [None for hi in range(int(h/2))]
+    for hi in range(int(h/2)):
+        up_vec = plus_boundary if boundary_sectors[2 * hi] == 1 else minus_boundary
+        down_vec = plus_boundary if boundary_sectors[2 * hi + 1] == 1 else minus_boundary
+        leftRows[hi] = tn.Node(np.outer(up_vec, down_vec).reshape([1, 2, 2, 1]))
+    cUps = [None for wi in range(int(w / 2))]
+    cDowns = [None for wi in range(int(w / 2))]
+    dUps = [None for wi in range(int(w / 2))]
+    dDowns = [None for wi in range(int(w / 2))]
+    for wi in range(w / 2):
+        cUps[wi] = tn.Node(plus_boundary) if boundary_sectors[h+4*wi] else tn.Node(plus_boundary)
+        cDowns[wi] = tn.Node(plus_boundary) if boundary_sectors[h+4*wi + 1] else tn.Node(plus_boundary)
+        dUps[wi] = tn.Node(plus_boundary) if boundary_sectors[h+4*wi + 2] else tn.Node(plus_boundary)
+        dDowns[wi] = tn.Node(plus_boundary) if boundary_sectors[h+4*wi + 3] else tn.Node(plus_boundary)
+    rightRows = [None for hi in range(h - 1)]
+    rightRows[0] = \
+        tn.Node(np.outer(plus_boundary, plus_boundary).reshape([1, 2, 2, 1])) \
+            if boundary_sectors[h + 2 * w] == 1 else \
+        tn.Node(np.outer(minus_boundary, plus_boundary).reshape([1, 2, 2, 1]))
+    for hi in range(1, int(h/2)):
+        up_vec = plus_boundary if boundary_sectors[h + 2 * w + 2 * hi] == 1 else minus_boundary
+        down_vec = plus_boundary if boundary_sectors[h + 2 * w + 2 * hi + 1] == 1 else minus_boundary
+        rightRows[hi] = tn.Node(np.outer(up_vec, down_vec).reshape([1, 2, 2, 1]))
+    random_ops = [tn.Node(np.outer(vec, np.conj(vec.transpose()))) for vec in random_vectors]
+    # TODO test
+    return pe.applyLocalOperators_detailedBoundary(
+        cUps, dUps, cDowns, dDowns, leftRows, rightRows, op_A, op_B, h, w, random_ops)
 
 w = 4
 h = 4
