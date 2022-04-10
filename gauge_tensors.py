@@ -7,6 +7,7 @@ import pickle
 import randomUs as ru
 from typing import List
 import matplotlib.pyplot as plt
+import os
 
 
 def toric_code(g=0.0):
@@ -124,7 +125,7 @@ def get_random_local_vectors(w, h, list_of_sectors, bulk_ints=None) -> List[np.a
     return results
 
 
-def get_boundary_sectors(boundary_identifier):
+def get_boundary_sectors(w, h, boundary_identifier):
     # After all of the boundary sections but one are set, the last one is determined by them
     boundary_length = 2 * (w + h - 1)
     boundary_sectors = [int(c) * 2 - 1 for c in bin(boundary_identifier).split('b')[1]]
@@ -135,7 +136,7 @@ def get_boundary_sectors(boundary_identifier):
 # boundary_sectors are the sector eigenvalues on the boundary from the top left corner and down the left edge,
 # then top-bottom for the middle, and then top to bottom in the right edge.
 def get_list_of_sectors(w, h, boundary_identifier):
-    boundary_sectors = get_boundary_sectors(boundary_identifier)
+    boundary_sectors = get_boundary_sectors(w, h, boundary_identifier)
     res = [[boundary_sectors[i] for i in range(h)]]
     for i in range(1, w):
         res.append([boundary_sectors[h - 2 + i * 2]] + [1] * (h - 1) + [boundary_sectors[h - 1 + i * 2]])
@@ -207,19 +208,24 @@ def get_Z_plaquette_projector():
     for i in range(2):
         for j in range(2):
             tensor_op_top_right[i, j, i, j, i, j] = 1
-    tensor_op_top_right.reshape([2, 2, 4, 4])
+    tensor_op_top_right = tensor_op_top_right.reshape([2, 2, 4, 4])
     op_bottom_left = tn.Node(tensor_op_bottom_left)
     op_top_right = tn.Node(tensor_op_top_right)
-    op_A = bops.permute(bops.contract(op_top_right, op_bottom_left, '2', '3'), [0, 1, 3, 4, 2, 5])
-    op_B = bops.permute(bops.contract(op_bottom_left, op_top_right, '2', '3'), [3, 4, 0, 1, 2, 5])
+    op_A = bops.permute(bops.contract(op_top_right, op_bottom_left, '2', '3'), [2, 0, 1, 3, 4, 5])
+    op_B = bops.permute(bops.contract(op_bottom_left, op_top_right, '2', '3'), [2, 3, 4, 0, 1, 5])
     return op_A, op_B
 
 
 op_A, op_B = get_Z_plaquette_projector()
 minus_boundary = np.array([0, 1], dtype=complex)
 plus_boundary = np.array([1, 0], dtype=complex)
-def normalize_by_gauge_invariant_projector(w, h, random_vectors, boundary_identifier):
-    boundary_sectors = get_boundary_sectors(boundary_identifier)
+def normalize_by_gauge_invariant_projector(w, h, random_vectors, cUps, dUps, cDowns, dDowns, leftRows, rightRows):
+    random_ops = [tn.Node(np.outer(vec, np.conj(vec.transpose()))) for vec in random_vectors]
+    return pe.applyLocalOperators_detailedBoundary(
+        cUps, dUps, cDowns, dDowns, leftRows, rightRows, op_A, op_B, h, w, random_ops)
+
+
+def get_projective_boundary_operators(w, h, boundary_sectors):
     leftRows = [None for hi in range(int(h/2))]
     for hi in range(int(h/2)):
         up_vec = plus_boundary if boundary_sectors[2 * hi] == 1 else minus_boundary
@@ -229,11 +235,11 @@ def normalize_by_gauge_invariant_projector(w, h, random_vectors, boundary_identi
     cDowns = [None for wi in range(int(w / 2))]
     dUps = [None for wi in range(int(w / 2))]
     dDowns = [None for wi in range(int(w / 2))]
-    for wi in range(w / 2):
-        cUps[wi] = tn.Node(plus_boundary) if boundary_sectors[h+4*wi] else tn.Node(plus_boundary)
-        cDowns[wi] = tn.Node(plus_boundary) if boundary_sectors[h+4*wi + 1] else tn.Node(plus_boundary)
-        dUps[wi] = tn.Node(plus_boundary) if boundary_sectors[h+4*wi + 2] else tn.Node(plus_boundary)
-        dDowns[wi] = tn.Node(plus_boundary) if boundary_sectors[h+4*wi + 3] else tn.Node(plus_boundary)
+    for wi in range(int(w/2)):
+        cUps[wi] = tn.Node(plus_boundary.reshape([1, 2, 1])) if boundary_sectors[h+4*wi] == 1 else tn.Node(minus_boundary.reshape([1, 2, 1]))
+        cDowns[wi] = tn.Node(plus_boundary.reshape([1, 2, 1])) if boundary_sectors[h+4*wi + 1] == 1 else tn.Node(minus_boundary.reshape([1, 2, 1]))
+        dUps[wi] = tn.Node(plus_boundary.reshape([1, 2, 1])) if boundary_sectors[h+4*wi + 2] == 1 else tn.Node(minus_boundary.reshape([1, 2, 1]))
+        dDowns[wi] = tn.Node(plus_boundary.reshape([1, 2, 1])) if boundary_sectors[h+4*wi + 3] == 1 else tn.Node(minus_boundary.reshape([1, 2, 1]))
     rightRows = [None for hi in range(h - 1)]
     rightRows[0] = \
         tn.Node(np.outer(plus_boundary, plus_boundary).reshape([1, 2, 2, 1])) \
@@ -243,10 +249,46 @@ def normalize_by_gauge_invariant_projector(w, h, random_vectors, boundary_identi
         up_vec = plus_boundary if boundary_sectors[h + 2 * w + 2 * hi] == 1 else minus_boundary
         down_vec = plus_boundary if boundary_sectors[h + 2 * w + 2 * hi + 1] == 1 else minus_boundary
         rightRows[hi] = tn.Node(np.outer(up_vec, down_vec).reshape([1, 2, 2, 1]))
-    random_ops = [tn.Node(np.outer(vec, np.conj(vec.transpose()))) for vec in random_vectors]
-    # TODO test
-    return pe.applyLocalOperators_detailedBoundary(
-        cUps, dUps, cDowns, dDowns, leftRows, rightRows, op_A, op_B, h, w, random_ops)
+    return cUps, dUps, cDowns, dDowns, leftRows, rightRows
+
+
+
+# TODO start from a general basis, add optimization etc
+def get_random_vectors_general_basis(w, h, cUps, dUps, cDowns, dDowns, leftRows, rightRows):
+    spin_vecs = [np.array([1, 0]) * np.sqrt(2), np.array([0, 1]) * np.sqrt(2),
+                 np.array([1, 1]), np.array([1, -1]), np.array([1, 1j]), np.array([1, -1j])]
+    # TODO for the 1 site boundary, choose non random vectors
+    random_vectors = [np.kron(spin_vecs[np.random.randint(len(spin_vecs))],
+                              spin_vecs[np.random.randint(len(spin_vecs))]) for i in range(w*h)]
+    norm = normalize_by_gauge_invariant_projector(w, h, random_vectors, cUps, dUps, cDowns, dDowns, leftRows, rightRows)
+    if norm == 0:
+        return 0
+    random_vectors[0] = random_vectors[0] / np.sqrt(norm)
+    return random_vectors
+
+
+def get_random_operators_general_basis(w, h, n, cUps, dUps, cDowns, dDowns, leftRows, rightRows):
+    random_vectors = [None for ni in range(n)]
+    for ni in range(n):
+        random_vectors[ni] = get_random_vectors_general_basis(w, h, cUps, dUps, cDowns, dDowns, leftRows, rightRows)
+        if random_vectors[ni] == 0:
+            return 0
+    random_ops = [[tn.Node(np.outer(random_vectors[ni][si], np.conj(np.transpose(random_vectors[(ni + 1) % n][si]))))
+                   for si in range(w * h)] for ni in range(n)]
+    return random_ops
+
+
+def renyi_entropy_general_basis(w, h, n, boundary_identifier):
+    boundary_sectors = get_boundary_sectors(w, h, boundary_identifier)
+    cUps, dUps, cDowns, dDowns, leftRows, rightRows = get_projective_boundary_operators(w, h, boundary_sectors)
+    random_ops = get_random_operators_general_basis(w, h, n, cUps, dUps, cDowns, dDowns, leftRows, rightRows)
+    if random_ops == 0:
+        return None
+    res = 1
+    for ni in range(n):
+        res *= pe.applyLocalOperators_detailedBoundary(
+        cUps, dUps, cDowns, dDowns, leftRows, rightRows, op_A, op_B, h, w, random_ops[ni])
+    return res
 
 w = 4
 h = 4
@@ -254,24 +296,45 @@ n = 2
 M = 1000
 d = 4
 gs = [0.1 * G for G in range(11)]
-num_of_boundary_options = 2 * (w + h -1)
+num_of_boundary_options = 24 # 2**(2 * (w + h -1))
 colors = ['#0000FF', '#9D02D7', '#EA5F94', '#FA8775', '#FFB14E', '#FFD700', '#ff6f3c', '#FFD700', '#2f0056', '#930043']
-for bi in range(num_of_boundary_options):
-    p2s = np.zeros(len(gs), dtype=complex)
-    svNs = np.zeros(len(gs), dtype=complex)
-    for gi in range(len(gs)):
-        g = gs[gi]
-        block = get_explicit_block(w, h, g, bi)
-        p2s[gi] = np.trace(np.linalg.matrix_power(block, 2))
-        evals = np.round(np.linalg.eigvalsh(block), 8)
-        svNs[gi] = np.sum([0 if evals[i] == 0 else -np.log(evals[i]) * evals[i] for i in range(len(evals))])
-        print([bi, g, p2s[gi], svNs[gi], evals])
-    plt.plot(gs, p2s * 1e2, color=colors[bi])
-    plt.plot(gs, svNs, '--k', color=colors[bi])
-plt.show()
-# TODO run getExplicitBlock for Q = 0, N_A/4, N_A/2)
+# for bi in [0, num_of_boundary_options - 1, int('10101100110010', 2)]:
+#     p2s = np.zeros(len(gs), dtype=complex)
+#     svNs = np.zeros(len(gs), dtype=complex)
+#     for gi in range(len(gs)):
+#         g = gs[gi]
+#         block = get_explicit_block(w, h, g, bi)
+#         p2s[gi] = np.trace(np.linalg.matrix_power(block, 2))
+#         evals = np.round(np.linalg.eigvalsh(block), 8)
+#         svNs[gi] = np.sum([0 if evals[i] == 0 else -np.log(evals[i]) * evals[i] for i in range(len(evals))])
+#         mysum = 0
+#         counter = 0
+#         print([bi, g, p2s[gi], svNs[gi], evals])
+#     with open('results/gauge/four_by_four_blocks_' + str(bi), 'wb') as f:
+#         pickle.dump([p2s, svNs], f)
+#     plt.plot(gs, p2s * 1e2, color=colors[bi])
+#     plt.plot(gs, svNs, '--k', color=colors[bi])
+# plt.show()
 
-# list_of_sectors = get_list_of_sectors(w, h, 0)
-# ru.renyiEntropy(n, w, h, M, estimate_func, [cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h],
-#                       'results/gauge/gauge_rep_' + str(1), get_ops_func=get_random_operators,
-#                       get_ops_arguments=[w, h, n, list_of_sectors])
+estimate_func = pe.applyLocalOperators
+for gi in range(1, len(gs)):
+    g = gs[gi]
+    dirname = 'results/gauge/toric_g_' + str(g)
+    try:
+        os.mkdir(dirname)
+    except FileExistsError:
+        pass
+    with open('results/toricBoundaries_gauge_' + str(np.round(g, 8)), 'rb') as f:
+        [upRow, downRow, leftRow, rightRow, openA, openB, A, B] = pickle.load(f)
+    [cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>')
+    [cDown, dDown, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>')
+    norm = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h,
+                                  [tn.Node(np.eye(4)) for i in range(w * h)])
+    leftRow = bops.multNode(leftRow, 1 / norm ** (2 / w))
+
+    for bi in range(num_of_boundary_options):
+        list_of_sectors = get_list_of_sectors(w, h, bi)
+        ru.renyiEntropy(n, w, h, M, estimate_func, [cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h],
+                          dirname + '/gauge_rep_' + str(1) + '_g_' + str(g) + '_b_' + str(bi),
+                          get_ops_func=get_random_operators,
+                          get_ops_arguments=[w, h, n, list_of_sectors])

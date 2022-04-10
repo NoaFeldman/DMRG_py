@@ -17,12 +17,15 @@ def toEnvOperator(op):
 
 
 def applyOpTosite(site, op):
-    return toEnvOperator(bops.multiContraction(bops.multiContraction(site, op, '4', '1'), site, '4', '4*'))
+    if len(site.tensor.shape) == 6:
+        return bops.contract(site, op, '05', '10')
+    else:
+        return toEnvOperator(bops.multiContraction(bops.multiContraction(site, op, '4', '1'), site, '4', '4*'))
 
 
 def applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, h, w, ops):
     cUps = [cUp for i in range(int(w/2))]
-    dUp = [dUp for i in range(int(w/2))]
+    dUps = [dUp for i in range(int(w/2))]
     cDowns = [cDown for i in range(int(w/2))]
     dDowns = [dDown for i in range(int(w/2))]
     leftRows = [leftRow for i in range(int(h/2))]

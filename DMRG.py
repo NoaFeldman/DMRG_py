@@ -205,7 +205,6 @@ def getTridiagonal(HL, HR, H, k, psi, psiCompare=None):
     if psiCompare is not None:
         copyV = bops.copyState([v])[0]
         psiCopy = bops.assignNewSiteTensors(psiCopy, k, copyV, '>>')[0]
-    E = stateEnergy(psi, H)
     w = bops.addNodes(Hv, bops.multNode(v, -alpha))
     beta = bops.getNodeNorm(w)
     # Start with T as an array and turn into tridiagonal matrix at the end.
@@ -317,8 +316,6 @@ def dmrgSweep(psi, H, HLs, HRs, psiCompare=None, maxBondDim=128):
     maxTruncErr = 0
     while k > 0:
         if psiCompare is None:
-            if k == 13:
-                b = 1
             [psi, newHR, E0, truncErr] = dmrgStep(HLs[k], HRs[k+2], H, psi, k, '<<', psiCompare, maxBondDim=maxBondDim)
             # if HRs[k+1] is not None:
             # TODO remove all nodes in HLR
@@ -343,6 +340,7 @@ def dmrgSweep(psi, H, HLs, HRs, psiCompare=None, maxBondDim=128):
         #     tn.remove_node(HLs[k+1])
         if len(truncErr) > 0 and maxTruncErr < max(truncErr):
             maxTruncErr = max(truncErr)
+    print(psi[int(len(psi) / 2)].tensor.shape)
     return psi, E0, truncErr, HLs, HRs
 
 
@@ -363,7 +361,7 @@ def getHLRs(H, psi, workingSite=None):
     return HLs, HRs
 
 
-def getGroundState(H, HLs, HRs, psi, psiCompare=None, accuracy=10**(-12), maxBondDim=256, initial_bond_dim=2):
+def getGroundState(H, HLs, HRs, psi, psiCompare=None, accuracy=10**(-12), maxBondDim=1024, initial_bond_dim=2):
     truncErrs = []
     bondDim = initial_bond_dim
     [psi, E0, truncErr, HLs, HRs] = dmrgSweep(psi, H, HLs, HRs, psiCompare, maxBondDim=maxBondDim)
@@ -417,7 +415,7 @@ def getidx(N, q):
     return np.array(res).reshape(len(res), 1)
 
 
-def DMRG(psi0, onsiteTerms, neighborTerms, d=2, maxBondDim=256, accuracy=1e-12, initial_bond_dim=2):
+def DMRG(psi0, onsiteTerms, neighborTerms, d=2, maxBondDim=1024, accuracy=1e-12, initial_bond_dim=2):
     H = getDMRGH(len(psi0), onsiteTerms, neighborTerms, d=d)
     psi0Copy = bops.copyState(psi0)
     HLs, HRs = getHLRs(H, psi0Copy)

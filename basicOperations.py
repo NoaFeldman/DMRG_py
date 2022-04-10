@@ -291,6 +291,21 @@ def contractDiag(node: tn.Node, diag: np.array, edgeNum: int):
     return node
 
 
+
+
+def permute(node: tn.Node, perm: List[int]) -> tn.Node:
+    return tn.Node(node.tensor.transpose(perm))
+
+
+def dagger(mat:np.array) -> np.array:
+    return np.conj(np.transpose(mat))
+
+
+def inner_contract(node: tn.Node, indices: List[int]) -> tn.Node:
+    id = tn.Node(np.eye(node.tensor.shape[indices[0]]))
+    return contract(node, id, indices, '01')
+
+
 def svdTruncation(node: tn.Node, leftEdges: List[int], rightEdges: List[int],
                   dir: str, maxBondDim=128, leftName='U', rightName='V',  edgeName='default', normalize=False, maxTrunc=15):
     # np.seterr(all='raise')
@@ -414,7 +429,7 @@ def getEdgeNames(node: tn.Node):
 
 
 # k is curr working site, shift it by one in dir direction.
-def shiftWorkingSite(psi: List[tn.Node], k, dir, maxBondDim=None):
+def shiftWorkingSite(psi: List[tn.Node], k, dir, maxBondDim=1024):
     if dir == '<<':
         pair = multiContraction(psi[k-1], psi[k], [2], [0], cleanOr1=True, cleanOr2=True)
         if maxBondDim is None:
@@ -604,11 +619,3 @@ def getExpectationValue(psi: List[tn.Node], ops: List[tn.Node]):
     result = getOverlap(psi, psiCopy)
     removeState(psiCopy)
     return result
-
-
-def permute(node: tn.Node, perm: List[int]) -> tn.Node:
-    return tn.Node(node.tensor.transpose(perm))
-
-
-def dagger(mat:np.array) -> np.array:
-    return np.conj(np.transpose(mat))
