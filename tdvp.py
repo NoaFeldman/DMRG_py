@@ -16,30 +16,32 @@ def tdvp_step(psi: List[tn.Node], H: List[tn.Node], k: int,
     M = bops.contract(psi[k], psi[k+1], '2', '0')
     # TODO add Krylov here at some point
     H_effective = bops.permute(bops.contract(bops.contract(bops.contract(
-        projectors_left[k-1], H[k], '1', '2'), H[k+1], '4', '2'), projectors_right[k+2], '6', '1'),
+        projectors_left[k], H[k], '1', '2'), H[k+1], '4', '2'), projectors_right[k+1], '6', '1'),
         [0, 2, 4, 6, 1, 3, 5, 7])
     H_eff_shape = H_effective.tensor.shape
     forward_evolver = tn.Node(
         linalg.expm(-1j * (dt / 2) * H_effective.tensor.reshape([np.prod(H_eff_shape[:4]), np.prod(H_eff_shape[4:])]))
-            .reshape([H_eff_shape]))
+            .reshape(list(H_eff_shape)))
     M = bops.contract(M, forward_evolver, '0123', '0123')
     [A, C, B, te] = bops.svdTruncation(M, [0, 1], [2, 3], '>*<', maxBondDim=1024)
     if dir == '>>':
-        projectors_left[k] = bops.contract(bops.contract(bops.contract(
-            projectors_left[k-1], A, '0', '0'), H[k], '02', '20'), A, '02', '01*')
+        projectors_left[k+1] = bops.contract(bops.contract(bops.contract(
+            projectors_left[k], A, '0', '0'), H[k], '02', '20'), A, '02', '01*')
         M = bops.contract(C, B, '1', '0')
-        M_ind = k+1
+        psi[k] = A
+        M_ind = k + 1
     else:
-        projectors_right[k+1] = bops.contract(bops.contract(bops.contract(
-            B, projectors_right[k+2], '2', '0'), H[k+1], '12', '03'), B, '21', '12*')
+        projectors_right[k] = bops.contract(bops.contract(bops.contract(
+            B, projectors_right[k+1], '2', '0'), H[k+1], '12', '03'), B, '21', '12*')
         M = bops.contract(A, C, '2', '0')
+        psi[k+1] = B
         M_ind = k
     H_effective = bops.permute(bops.contract(bops.contract(
-        projectors_left[M_ind - 1], H[M_ind], '1', '2'), projectors_right[M_ind + 1], '4', '1'), [0, 2, 4, 1, 3, 5])
+        projectors_left[M_ind], H[M_ind], '1', '2'), projectors_right[M_ind], '4', '1'), [0, 2, 4, 1, 3, 5])
     H_eff_shape = H_effective.tensor.shape
     backward_evolver = tn.Node(
         linalg.expm(1j * (dt/2) * H_effective.tensor.reshape([np.prod(H_eff_shape[:3]), np.prod(H_eff_shape[3:])]))\
-        .reshape([H_eff_shape]))
+        .reshape(list(H_eff_shape)))
     psi[M_ind] = bops.contract(M, backward_evolver, '012', '012')
     return te
 
@@ -49,12 +51,12 @@ def tdvp_sweep(psi: List[tn.Node], H: List[tn.Node],
     max_te = 0
     for k in range(len(psi) - 1):
         te = tdvp_step(psi, H, k, projectors_left, projectors_right, '>>', dt)
-        if te > max_te:
-            max_te = te
-    for k in range(len(psi) - 1, -1, -1):
+        if len(te) > 0 and te[0] > max_te:
+            max_te = te[0]
+    for k in range(len(psi) - 2, -1, -1):
         te = tdvp_step(psi, H, k, projectors_left, projectors_right, '<<', dt)
-        if te > max_te:
-            max_te = te
+        if len(te) > 0 and te[0] > max_te:
+            max_te = te[0]
     return te
 
 def get_initial_projectors(psi: List[tn.Node], H: List[tn.Node]):
@@ -68,7 +70,6 @@ def get_initial_projectors(psi: List[tn.Node], H: List[tn.Node]):
             psi = bops.shiftWorkingSite(psi, ri, '<<')
     res_left[0] = tn.Node(np.eye(psi[0].shape[0]).reshape([psi[0].shape[0], 1, psi[0].shape[0]]))
     for ri in range(len(psi) - 1):
-        print(ri)
         res_left[ri+1] = bops.contract(bops.contract(bops.contract(
             res_left[ri], psi[ri], '0', '0'), H[ri], '02', '20'), psi[ri], '02', '01*')
         psi = bops.shiftWorkingSite(psi, ri, '>>')
@@ -99,4 +100,5 @@ for k in range(n-1, 0, -1):
 for k in range(n-1):
     psi0 = bops.shiftWorkingSite(psi0, k, '>>')
 projectors_left, projectors_right = get_initial_projectors(psi0, H)
+tdvp_sweep(psi0, H, projectors_left, projectors_right, delta * 1e-2)
 b = 1
