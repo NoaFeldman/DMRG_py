@@ -150,7 +150,7 @@ elif model == 'xy_magic':
     h_func = get_xy_magic_dmrg_terms
 elif model == 'kitaev':
     param_name = 'mu_t'
-    params = [[np.round(mui * 0.1, 8), np.round(ti * 0.1, 8)] for mui in range(-40, 40) for ti in range(-40, 40)]
+    params = [[np.round(mui * 0.1, 8), np.round(ti * 0.1, 8)] for mui in range(-40, 40, 2) for ti in range(-40, 40, 2)]
     h_func = get_kitaev_chain_dmrg_terms
 
 thetas = [t * np.pi for t in [0.0, 0.15, 0.25, 0.4]]
@@ -170,12 +170,11 @@ def run():
         param = params[pi]
         try:
             with open(filename(indir, model, param_name, param, n), 'rb') as f:
-                [psi, m2, m2_optimized, best_basis, mhalf, m2_maximized, worst_basis,
-                 mhalf_optimized, mhalf_best_basis, mhalf_maximized, mhalf_worst_basis] = pickle.load(f)
+                [psi_orig, m2, mhalf] = pickle.load(f)
         except FileNotFoundError or EOFError:
             onsite_terms, neighbor_terms = h_func(param)
             psi_bond_dim = psi[int(n/2)].tensor.shape[0]
-            psi, E0, truncErrs = dmrg.DMRG(psi, onsite_terms, neighbor_terms, accuracy=1e-12)
+            psi, E0, truncErrs = dmrg.DMRG(psi, onsite_terms, neighbor_terms, accuracy=1e-10)
             psi_orig = psi
             if psi[int(n / 2)].tensor.shape[0] > 4:
                 psi = bops.relaxState(psi, 4)
@@ -212,23 +211,7 @@ def run():
         pickle.dump(m2s, f)
     with open(indir + '/magic/results/' + model + 'mhalves_' + param_name + 's_' + str(params[0]) + '_' + str(params[-1]), 'wb') as f:
         pickle.dump(mhalves, f)
-    # f, axs = plt.subplots(3, 1, gridspec_kw={'wspace':0, 'hspace':0}, sharex='all')
-    # for ti in range(len(thetas)):
-    #     for phi_i in range(len(phis)):
-    #         for ei in range(len(etas)):
-    #             axs[1].plot(params, m2s[:, ti, phi_i, ei])
-    # for ti in range(len(thetas)):
-    #     for phi_i in range(len(phis)):
-    #         for ei in range(len(etas)):
-    #             axs[2].plot(params, mhalves[:, ti, phi_i, ei])
-    # axs[0].plot(params, p2s)
-    # axs[0].plot(params, np.real(szs) / max(1, np.max(np.abs(szs))))
-    # axs[0].legend([r'$p_2$', r'$S_z / $' + str(np.round(max(1, np.max(np.abs(szs))), 1))])
-    # plt.title(model)
-    # plt.xlabel(param_name)
-    # plt.show()
 
-# run()
 
 def analyze_scaling():
     ns = [8, 12, 16, 20]

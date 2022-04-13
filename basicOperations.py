@@ -612,10 +612,12 @@ def getExplicitVec(psi, d=2):
     return reshape(curr.tensor, [d**len(psi)])
 
 
-def getExpectationValue(psi: List[tn.Node], ops: List[tn.Node]):
+def getExpectationValue(psi: List[tn.Node], ops: List[tn.Node], opt='single_site_ops'):
     psiCopy = copyState(psi)
     for i in range(len(psiCopy)):
         psiCopy[i] = multiContraction(psiCopy[i], ops[i], '1', '1').reorder_axes([0, 2, 1])
+        if opt == 'multi_site_ops':
+            psiCopy[i] = unifyLegs(unifyLegs(permute(psiCopy[i], [0, 3, 2, 1, 4]), [3, 4]), [0, 1])
     result = getOverlap(psi, psiCopy)
     removeState(psiCopy)
     return result

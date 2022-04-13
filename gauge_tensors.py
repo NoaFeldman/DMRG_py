@@ -290,51 +290,54 @@ def renyi_entropy_general_basis(w, h, n, boundary_identifier):
         cUps, dUps, cDowns, dDowns, leftRows, rightRows, op_A, op_B, h, w, random_ops[ni])
     return res
 
-w = 4
-h = 4
-n = 2
-M = 1000
-d = 4
-gs = [0.1 * G for G in range(11)]
-num_of_boundary_options = 24 # 2**(2 * (w + h -1))
-colors = ['#0000FF', '#9D02D7', '#EA5F94', '#FA8775', '#FFB14E', '#FFD700', '#ff6f3c', '#FFD700', '#2f0056', '#930043']
-# for bi in [0, num_of_boundary_options - 1, int('10101100110010', 2)]:
-#     p2s = np.zeros(len(gs), dtype=complex)
-#     svNs = np.zeros(len(gs), dtype=complex)
-#     for gi in range(len(gs)):
-#         g = gs[gi]
-#         block = get_explicit_block(w, h, g, bi)
-#         p2s[gi] = np.trace(np.linalg.matrix_power(block, 2))
-#         evals = np.round(np.linalg.eigvalsh(block), 8)
-#         svNs[gi] = np.sum([0 if evals[i] == 0 else -np.log(evals[i]) * evals[i] for i in range(len(evals))])
-#         mysum = 0
-#         counter = 0
-#         print([bi, g, p2s[gi], svNs[gi], evals])
-#     with open('results/gauge/four_by_four_blocks_' + str(bi), 'wb') as f:
-#         pickle.dump([p2s, svNs], f)
-#     plt.plot(gs, p2s * 1e2, color=colors[bi])
-#     plt.plot(gs, svNs, '--k', color=colors[bi])
-# plt.show()
 
-estimate_func = pe.applyLocalOperators
-for gi in range(1, len(gs)):
-    g = gs[gi]
-    dirname = 'results/gauge/toric_g_' + str(g)
-    try:
-        os.mkdir(dirname)
-    except FileExistsError:
-        pass
+def double_boundary(op):
+    return
+
+
+def exact_purity(w, h, g, d=4):
     with open('results/toricBoundaries_gauge_' + str(np.round(g, 8)), 'rb') as f:
         [upRow, downRow, leftRow, rightRow, openA, openB, A, B] = pickle.load(f)
-    [cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>')
-    [cDown, dDown, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>')
-    norm = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h,
-                                  [tn.Node(np.eye(4)) for i in range(w * h)])
-    leftRow = bops.multNode(leftRow, 1 / norm ** (2 / w))
+        [cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>')
+        [cDown, dDown, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>')
+        norm = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h,
+                                      [tn.Node(np.eye(4)) for i in range(w * h)])
+        leftRow = bops.multNode(leftRow, 1 / norm ** (2 / w))
+    single_swap = np.array([[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1]])
+    double_swap = np.kron(single_swap, single_swap).reshape([2] * 8).transpose([3, 2, 1, 0, 4, 5, 6, 7]).reshape([2**4, 2**4])
+    return 
 
-    for bi in range(num_of_boundary_options):
-        list_of_sectors = get_list_of_sectors(w, h, bi)
-        ru.renyiEntropy(n, w, h, M, estimate_func, [cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h],
-                          dirname + '/gauge_rep_' + str(1) + '_g_' + str(g) + '_b_' + str(bi),
-                          get_ops_func=get_random_operators,
-                          get_ops_arguments=[w, h, n, list_of_sectors])
+
+
+run_estimations = False
+if run_estimations:
+    w = 4
+    h = 4
+    n = 2
+    M = 1000
+    d = 4
+    gs = [0.1 * G for G in range(11)]
+    num_of_boundary_options = 24 # 2**(2 * (w + h -1))
+    colors = ['#0000FF', '#9D02D7', '#EA5F94', '#FA8775', '#FFB14E', '#FFD700', '#ff6f3c', '#FFD700', '#2f0056', '#930043']
+    estimate_func = pe.applyLocalOperators
+    for gi in range(1, len(gs)):
+        g = gs[gi]
+        dirname = 'results/gauge/toric_g_' + str(g)
+        try:
+            os.mkdir(dirname)
+        except FileExistsError:
+            pass
+        with open('results/toricBoundaries_gauge_' + str(np.round(g, 8)), 'rb') as f:
+            [upRow, downRow, leftRow, rightRow, openA, openB, A, B] = pickle.load(f)
+        [cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>')
+        [cDown, dDown, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>')
+        norm = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h,
+                                      [tn.Node(np.eye(4)) for i in range(w * h)])
+        leftRow = bops.multNode(leftRow, 1 / norm ** (2 / w))
+
+        for bi in range(num_of_boundary_options):
+            list_of_sectors = get_list_of_sectors(w, h, bi)
+            ru.renyiEntropy(n, w, h, M, estimate_func, [cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h],
+                              dirname + '/gauge_rep_' + str(1) + '_g_' + str(g) + '_b_' + str(bi),
+                              get_ops_func=get_random_operators,
+                              get_ops_arguments=[w, h, n, list_of_sectors])

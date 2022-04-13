@@ -49,15 +49,15 @@ def tdvp_step(psi: List[tn.Node], H: List[tn.Node], k: int,
 def tdvp_sweep(psi: List[tn.Node], H: List[tn.Node],
                projectors_left: List[tn.Node], projectors_right: List[tn.Node], dt):
     max_te = 0
-    for k in range(len(psi) - 1):
-        te = tdvp_step(psi, H, k, projectors_left, projectors_right, '>>', dt)
-        if len(te) > 0 and te[0] > max_te:
-            max_te = te[0]
     for k in range(len(psi) - 2, -1, -1):
         te = tdvp_step(psi, H, k, projectors_left, projectors_right, '<<', dt)
-        if len(te) > 0 and te[0] > max_te:
+        if len(te) > 0 and np.max(te) > max_te:
             max_te = te[0]
-    return te
+    for k in range(len(psi) - 1):
+        te = tdvp_step(psi, H, k, projectors_left, projectors_right, '>>', dt)
+        if len(te) > 0 and np.max(te) > max_te:
+            max_te = te[0]
+    return max_te
 
 def get_initial_projectors(psi: List[tn.Node], H: List[tn.Node]):
     res_left = [None for i in range(len(psi))]
@@ -78,27 +78,80 @@ def get_initial_projectors(psi: List[tn.Node], H: List[tn.Node]):
 
 def get_XXZ_H(n, delta):
     d = 2
-    tensor = np.zeros((d, d, 4, 4), dtype=complex)
+    tensor = np.zeros((d, d, 5, 5), dtype=complex)
     tensor[:, :, 0, 0] = np.eye(d)
-    tensor[:, :, 0, 1] = basic.pauli2X
-    tensor[:, :, 0, 2] = basic.pauli2Y
-    tensor[:, :, 0, 3] = basic.pauli2Z * delta
-    tensor[:, :, 1, 0] = basic.pauli2X
-    tensor[:, :, 2, 0] = basic.pauli2Y
-    tensor[:, :, 3, 0] = basic.pauli2Z * delta
-    H = [tn.Node(tensor[:, :, 0, :].reshape(list(tensor.shape[:2]) + [1, tensor.shape[3]]))] + \
-        [tn.Node(tensor) for i in range(n-2)] + [tn.Node(tensor[:, :, :, 0].reshape(list(tensor.shape[:3]) + [1]))]
+    tensor[:, :, 1, 1] = np.eye(d)
+    tensor[:, :, 0, 2] = basic.pauli2X
+    tensor[:, :, 2, 1] = basic.pauli2X
+    tensor[:, :, 0, 3] = basic.pauli2Y
+    tensor[:, :, 3, 1] = basic.pauli2Y
+    tensor[:, :, 0, 4] = basic.pauli2Z * delta
+    tensor[:, :, 4, 1] = basic.pauli2Z
+    left_tensor = tn.Node(tensor[:, :, 0, :].reshape(list(tensor.shape[:2]) + [1, tensor.shape[3]]))
+    right_tensor = np.zeros((d, d, 5, 1), dtype=complex)
+    right_tensor[:, :, 1, 0] = np.eye(d)
+    right_tensor[:, :, 2, 0] = basic.pauli2X
+    right_tensor[:, :, 3, 0] = basic.pauli2Y
+    right_tensor[:, :, 4, 0] = basic.pauli2Z
+    H = [tn.Node(left_tensor)] + [tn.Node(tensor) for i in range(n-2)] + [tn.Node(right_tensor)]
     return H
 
 
-n = 16
+n = 8
 delta = 1
 H = get_XXZ_H(n, delta)
-psi0 = bops.getStartupState(n, d=2)
+psi0 = bops.getStartupState(int(n/2), d=2)
+psi0, E0, truncErrs = dmrg.DMRG(psi0, [np.eye(2) * 0 for i in range(n)],
+    [np.kron(basic.pauli2Z, basic.pauli2Z) * 0.5  + np.kron(basic.pauli2X, basic.pauli2X) + np.kron(basic.pauli2Y, basic.pauli2Y) for i in range(n-1)],
+    d=2, maxBondDim=1024, accuracy=1e-12, initial_bond_dim=2)
+psi0 = bops.copyState(psi0) + bops.copyState(psi0)
+# psi0 = [tn.Node(np.array([[[1], [0]]])) for i in range(int(n/2))] + [tn.Node(np.array([[[0], [1]]])) for i in range(int(n/2))]
 for k in range(n-1, 0, -1):
     psi0 = bops.shiftWorkingSite(psi0, k, '<<')
 for k in range(n-1):
     psi0 = bops.shiftWorkingSite(psi0, k, '>>')
 projectors_left, projectors_right = get_initial_projectors(psi0, H)
-tdvp_sweep(psi0, H, projectors_left, projectors_right, delta * 1e-2)
+psi = bops.copyState(psi0)
+
+psi0_vec = bops.getExplicitVec(psi0, d=2)
+
+curr = bops.contract(H[0], H[1], '3', '2')
+for i in range(2, n):
+    curr = bops.contract(curr, H[i], [1 + 2 * i], '2')
+H_mat = bops.permute(curr, [2, 0, 3, 5, 7, 9, 11, 13, 15, 1, 4, 6, 8, 10, 12, 14, 16, 17]).tensor.reshape([2**8, 2**8])
+
+dt = delta * 1e-2
+timesteps = 100
+
+time_evolver = linalg.expm(H_mat * 1j * dt)
+psi_vec = np.copy(psi0_vec)
+Xs = np.eye(1)
+for i in range(2):
+    Xs = np.kron(Xs, basic.pauli2X)
+for i in range(2, n):
+    Xs = np.kron(Xs, np.eye(2))
+xs_ops = [tn.Node(basic.pauli2X) for i in range(2)] + [tn.Node(np.eye(2)) for i in range(2, n)]
+
+p2s_tdvp = np.zeros(timesteps, dtype=complex)
+p2s_exact = np.zeros(timesteps, dtype=complex)
+overlaps_tdvp = np.zeros(timesteps, dtype=complex)
+overlaps_exact = np.zeros(timesteps, dtype=complex)
+overlaps_test = np.zeros(timesteps, dtype=complex)
+for ti in range(timesteps):
+    if ti == 30:
+        b = 1
+    te = tdvp_sweep(psi, H, projectors_left, projectors_right, dt)
+    print(ti, te)
+    psi_vec = np.matmul(time_evolver, psi_vec)
+    overlaps_tdvp[ti] = bops.getOverlap(psi0, psi)
+    overlaps_exact[ti] = np.matmul(np.conj(psi0_vec.T), psi_vec)
+    p2s_tdvp[ti] = bops.getRenyiEntropy(psi, 2, int(n/2))
+    rho = np.outer(psi_vec, np.conj(psi_vec.T)).reshape([2**(int(n/2)), 2**(int(n/2)), 2**(int(n/2)), 2**(int(n/2))])
+    rho_A = np.tensordot(rho, np.eye(2**(int(n/2))), [[1, 3], [0, 1]])
+    p2s_exact[ti] = np.trace(np.matmul(rho_A, rho_A))
+plt.plot(np.abs(overlaps_tdvp), color='red')
+plt.plot(np.abs(overlaps_exact), '--k', color='black')
+plt.plot(np.abs(p2s_tdvp), color='blue')
+plt.plot(np.abs(p2s_exact), '--k', color='orange')
+plt.show()
 b = 1

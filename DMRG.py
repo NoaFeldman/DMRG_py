@@ -340,7 +340,6 @@ def dmrgSweep(psi, H, HLs, HRs, psiCompare=None, maxBondDim=128):
         #     tn.remove_node(HLs[k+1])
         if len(truncErr) > 0 and maxTruncErr < max(truncErr):
             maxTruncErr = max(truncErr)
-    print(psi[int(len(psi) / 2)].tensor.shape)
     return psi, E0, truncErr, HLs, HRs
 
 
@@ -366,17 +365,17 @@ def getGroundState(H, HLs, HRs, psi, psiCompare=None, accuracy=10**(-12), maxBon
     bondDim = initial_bond_dim
     [psi, E0, truncErr, HLs, HRs] = dmrgSweep(psi, H, HLs, HRs, psiCompare, maxBondDim=maxBondDim)
     truncErrs.append(truncErr)
-    for i in range(500):
+    for i in range(1000):
+        if i == 499:
+            b = 1
         [psi, ECurr, truncErr, HLs, HRs] = dmrgSweep(psi, H, HLs, HRs, psiCompare, maxBondDim=bondDim)
         truncErrs.append(truncErr)
         if np.abs((ECurr - E0) / E0) < accuracy:
             return psi, ECurr, truncErrs
         if (i+1) % 10 == 0:
             bondDim = min(bondDim * 2, maxBondDim)
-            if bondDim == 4096:
-                print(4096)
         E0 = ECurr
-    print('DMRG: Sweeped for 500 times and still did not converge.')
+    print('DMRG: Sweeped for 1000 times and still did not converge.')
 
 
 def stateEnergy(psi: List[tn.Node], H: HOp):
