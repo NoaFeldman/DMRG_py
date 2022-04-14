@@ -35,7 +35,7 @@ def set_mkl_threads(threadNum):
 
 
 
-def test_toric_code_moment_estimation(N, dirname):
+def test_toric_code_moment_estimation(N, dirnamei, w=2):
     boundaryFile = 'toricBoundaries'
     with open(dirname + boundaryFile, 'rb') as f:
         [upRow, downRow, leftRow, rightRow, openA, openB, A, B] = pickle.load(f)
@@ -48,7 +48,6 @@ def test_toric_code_moment_estimation(N, dirname):
     except FileExistsError:
         pass
     n = 2
-    w = 2
     h = int(N / (2 * w))
     M = 1000
     estimate_func = pe.applyLocalOperators
@@ -66,6 +65,7 @@ def test_dmrg_xxz(N):
     psi, E0, truncErrs = dmrg.DMRG(psi, onsite_terms, neighbor_terms, accuracy=1e-12)
 
 
+print(sys.argv)
 cpu_num = int(sys.argv[1])
 set_mkl_threads(cpu_num)
 
@@ -76,6 +76,9 @@ N = int(sys.argv[4])
 if opt == 'PEPS':
     dirname = sys.argv[5]
     test_toric_code_moment_estimation(N, dirname)
+elif opt == 'PEPS4':
+    dirname = sys.argv[5]
+    test_toric_code_moment_estimation(N, dirname, w=4)
 elif opt == 'DMRG':
     test_dmrg_xxz(N)
 end = time.time()
