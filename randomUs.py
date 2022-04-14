@@ -113,14 +113,18 @@ def getNonUnitaryRandomOps(d, n, N, direction=0):
     return res
 
 
-def renyiEntropy(n, w, h, M, estimateFunc, arguments, filename, d=2, excludeIndices=[]):
+def renyiEntropy(n, w, h, M, estimateFunc, arguments, filename, d=2, excludeIndices=[],
+                 get_ops_func=None, get_ops_arguments=None):
     avg = 0
     N = w * h
-    for m in range(M * 2**N * 10):
-        ops = getNonUnitaryRandomOps(d, n, N)
-        for ind in excludeIndices:
-            for copy in range(len(ops)):
-                ops[copy][ind] = tn.Node(np.eye(d, dtype=complex))
+    for m in range(M * 2**N):
+        if get_ops_func is None:
+            ops = getNonUnitaryRandomOps(d, n, N)
+            for ind in excludeIndices:
+                for copy in range(len(ops)):
+                    ops[copy][ind] = tn.Node(np.eye(d, dtype=complex))
+        else:
+            ops = wrapper(get_ops_func, get_ops_arguments)
         estimation = 1
         for i in range(n):
             expectation = wrapper(estimateFunc, arguments + [ops[i]])
@@ -129,6 +133,7 @@ def renyiEntropy(n, w, h, M, estimateFunc, arguments, filename, d=2, excludeIndi
         if m % M == M - 1:
             with open(filename + '_n_' + str(n) + '_w_' + str(w) + '_h_' + str(h) + '_M_' + str(M) + '_m_' + str(m), 'wb') as f:
                 pickle.dump(avg / M, f)
+                print(avg / M * 2**(7 * n))
                 avg = 0
             gc.collect()
 

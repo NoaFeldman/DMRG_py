@@ -17,34 +17,48 @@ def toEnvOperator(op):
 
 
 def applyOpTosite(site, op):
-    return toEnvOperator(bops.multiContraction(bops.multiContraction(site, op, '4', '1'), site, '4', '4*'))
+    if len(site.tensor.shape) == 6:
+        return bops.contract(site, op, '05', '10')
+    else:
+        return toEnvOperator(bops.multiContraction(bops.multiContraction(site, op, '4', '1'), site, '4', '4*'))
 
 
-def applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h, ops):
-    if w == 2:
-        left = leftRow
-        for i in range(int(h/2)):
-            left = bops.multiContraction(left, cUp, '3', '0', cleanOr1=True)
+def applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, h, w, ops):
+    cUps = [cUp for i in range(int(w/2))]
+    dUps = [dUp for i in range(int(w/2))]
+    cDowns = [cDown for i in range(int(w/2))]
+    dDowns = [dDown for i in range(int(w/2))]
+    leftRows = [leftRow for i in range(int(h/2))]
+    rightRows = [rightRow for i in range(int(h/2))]
+    return applyLocalOperators_detailedBoundary(
+        cUps, dUps, cDowns, dDowns, leftRows, rightRows, A, B, h, w, ops)
+
+def applyLocalOperators_detailedBoundary(
+        cUps, dUps, cDowns, dDowns, leftRows, rightRows, A, B, h, w, ops):
+    if h == 2:
+        left = leftRows[0]
+        for i in range(int(w / 2)):
+            left = bops.multiContraction(left, cUps[i], '3', '0', cleanOr1=True)
             leftUp = applyOpTosite(B, ops[i * 4])
             leftDown = applyOpTosite(A, ops[i * 4 + 1])
             left = bops.multiContraction(left, leftUp, '23', '30', cleanOr1=True)
             left = bops.multiContraction(left, leftDown, '14', '30', cleanOr1=True)
-            left = bops.multiContraction(left, dDown, '04', '21', cleanOr1=True).reorder_axes([3, 2, 1, 0])
+            left = bops.multiContraction(left, dDowns[i], '04', '21', cleanOr1=True).reorder_axes([3, 2, 1, 0])
 
-            left = bops.multiContraction(left, dUp, '3', '0', cleanOr1=True)
+            left = bops.multiContraction(left, dUps[i], '3', '0', cleanOr1=True)
             rightUp = applyOpTosite(A, ops[i * 4 + 2])
             rightDown = applyOpTosite(B, ops[i * 4 + 3])
             left = bops.multiContraction(left, rightUp, '23', '30', cleanOr1=True)
             left = bops.multiContraction(left, rightDown, '14', '30', cleanOr1=True)
-            left = bops.multiContraction(left, cDown, '04', '21', cleanOr1=True).reorder_axes([3, 2, 1, 0])
+            left = bops.multiContraction(left, cDowns[i], '04', '21', cleanOr1=True).reorder_axes([3, 2, 1, 0])
 
             bops.removeState([leftUp, leftDown, rightDown, rightUp])
 
-        return bops.multiContraction(left, rightRow, '0123', '3210').tensor * 1
-    elif w == 4:
-        left = bops.multiContraction(leftRow, leftRow, '3', '0')
-        for i in range(int(h/2)):
-            left = bops.multiContraction(left, cUp, '5', '0', cleanOr1=True)
+        return bops.multiContraction(left, rightRows[0], '0123', '3210').tensor * 1
+    elif h == 4:
+        left = bops.multiContraction(leftRows[0], leftRows[1], '3', '0')
+        for i in range(int(w / 2)):
+            left = bops.multiContraction(left, cUps[i], '5', '0', cleanOr1=True)
             left0 = applyOpTosite(B, ops[i * 8])
             left1 = applyOpTosite(A, ops[i * 8 + 1])
             left2 = applyOpTosite(B, ops[i * 8 + 2])
@@ -53,9 +67,9 @@ def applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h, o
             left = bops.multiContraction(left, left1, '36', '30', cleanOr1=True, cleanOr2=True)
             left = bops.multiContraction(left, left2, '26', '30', cleanOr1=True, cleanOr2=True)
             left = bops.multiContraction(left, left3, '16', '30', cleanOr1=True, cleanOr2=True)
-            left = bops.multiContraction(left, dDown, '06', '21', cleanOr1=True).reorder_axes([5, 4, 3, 2, 1, 0])
+            left = bops.multiContraction(left, dDowns[i], '06', '21', cleanOr1=True).reorder_axes([5, 4, 3, 2, 1, 0])
 
-            left = bops.multiContraction(left, dUp, '5', '0', cleanOr1=True)
+            left = bops.multiContraction(left, dUps[i], '5', '0', cleanOr1=True)
             right0 = applyOpTosite(A, ops[i * 8 + 4])
             right1 = applyOpTosite(B, ops[i * 8 + 5])
             right2 = applyOpTosite(A, ops[i * 8 + 6])
@@ -64,8 +78,8 @@ def applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h, o
             left = bops.multiContraction(left, right1, '36', '30', cleanOr1=True, cleanOr2=True)
             left = bops.multiContraction(left, right2, '26', '30', cleanOr1=True, cleanOr2=True)
             left = bops.multiContraction(left, right3, '16', '30', cleanOr1=True, cleanOr2=True)
-            left = bops.multiContraction(left, cDown, '06', '21', cleanOr1=True).reorder_axes([5, 4, 3, 2, 1, 0])
-        right = bops.multiContraction(rightRow, rightRow, '3', '0')
+            left = bops.multiContraction(left, cDowns[i], '06', '21', cleanOr1=True).reorder_axes([5, 4, 3, 2, 1, 0])
+        right = bops.multiContraction(rightRows[0], rightRows[1], '3', '0')
         res = bops.multiContraction(left, right, '012345', '543210').tensor * 1
         return res
 
