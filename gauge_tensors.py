@@ -295,6 +295,30 @@ def double_boundary(op):
     return
 
 
+def is_plus_plaquette(i):
+    i_str = bin(i).split('b')[1]
+    site_num = 6
+    i_str = ['0'] * (site_num - i_str) + i_str
+    return np.prod([int(c) * 2 - 1 for c in i_str[1:site_num - 1]]) == 1
+
+
+d = 4
+full_projector_plus = \
+    tn.Node(np.diag([1 if is_plus_plaquette(i) else 0 for i in range(2 ** 6)])
+            .reshape([d, d, d, d, d, d]).transpose([0, 3, 1, 4, 2, 5]))
+left_edge_projector_plus = tn.Node(np.diag([0, 0, 1, 1]))
+left_edge_projector_minus = tn.Node(np.diag([1, 1, 0, 0]))
+bottom_edge_projector_plus = tn.Node(np.diag([0, 1, 0, 1]))
+bottom_edge_projector_minus = tn.Node(np.diag([1, 0, 1, 0]))
+top_edge_projector_plus = bops.contract(full_projector_plus, np.diag([0, 1, 0, 1]), '01', '01')
+top_edge_projector_minus = bops.contract(full_projector_plus, np.diag([1, 0, 1, 0]), '01', '01')
+top_right_corner_projector_plus = bops.contract(full_projector_plus, np.diag([1, 0, 0, 1]), '01', '01')
+top_right_corner_projector_minus = bops.contract(full_projector_plus, np.diag([0, 1, 1, 0]), '01', '01')
+right_edge_projector_plus = \
+    bops.contract(full_projector_plus, np.diag([1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 1, 1]), '0215', '0123')
+right_edge_projector_minus = \
+    bops.contract(full_projector_plus, np.diag([0, 0, 1, 1, 0, 0, 1, 1, 1, 1, 0, 0]), '0215', '0123')
+
 def exact_purity(w, h, g, d=4):
     with open('results/toricBoundaries_gauge_' + str(np.round(g, 8)), 'rb') as f:
         [upRow, downRow, leftRow, rightRow, openA, openB, A, B] = pickle.load(f)
@@ -303,13 +327,49 @@ def exact_purity(w, h, g, d=4):
         norm = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h,
                                       [tn.Node(np.eye(4)) for i in range(w * h)])
         leftRow = bops.multNode(leftRow, 1 / norm ** (2 / w))
+    cUp = tn.Node(np.kron(cUp.tensor, cUp.tensor))
+    dUp = tn.Node(np.kron(dUp.tensor, dUp.tensor))
+    cDown = tn.Node(np.kron(cDown.tensor, cDown.tensor))
+    dDown = tn.Node(np.kron(dDown.tensor, dDown.tensor))
+    leftRow = tn.Node(np.kron(leftRow.tensor, leftRow.tensor))
+    rightRow = tn.Node(np.kron(rightRow.tensor, rightRow.tensor))
+    A = tn.Node(np.kron(A.tensor, A.tensor))
+    B = tn.Node(np.kron(B.tensor, B.tensor))
     single_swap = np.array([[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1]])
     double_swap = np.kron(single_swap, single_swap).reshape([2] * 8).transpose([3, 2, 1, 0, 4, 5, 6, 7]).reshape([2**4, 2**4])
-    return 
+    num_of_boundary_options = 2**(2 * (w + h -1))
+
+    full_purity = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, h, w,
+                                         [tn.Node(double_swap) for i in range(w*h)])
+
+    purities = np.zeros(num_of_boundary_options)
+    for boundary_i in range(num_of_boundary_options):
+        boundary_sectors = get_boundary_sectors(w, h, boundary_i)
+        list_of_sectors = get_list_of_sectors(w, h, boundary_i)
+        ops = [tn.Node(np.eye(d).reshape([d, 1, 1, 1, 1, d]))]
+        for hi in range(h):
+            ops[hi] = bops.contract(ops[hi], left_edge_projector_plus, '5', '0') \
+                if list_of_sectors[hi] == 1 else bops.contract(ops[hi], left_edge_projector_minus, '5', '0')
+        for wi in range(w - 1):
+            projector = top_edge_projector_plus if list_of_sectors[wi * h] == 1 else top_edge_projector_minus
+            [l, r, te] = bops.svdTruncation(bops.permute(bops.contract(bops.contract(
+                ops[wi * h], ops[(wi + 1) * h], '2', '1'), projector, '05', '01'),
+                [8, 0, 1, 2, 3, 9, 4, 5, 6, 7]), [0, 1, 2, 3, 4], [5, 6, 7, 8, 9], '>>')
+            ops[wi * h] = bops.permute(l, [0, 1, 5, 2, 3, 4])
+            ops[(wi + 1) * h] = bops.permute(r, [1, 2, 3, 4, 0, 5])
+            for hi in range(h - 1):
+                bops.permute(bops.contract(bops.contract(bops.contract(
+                    ops[wi * h + hi], ops[wi * h + hi + 1], '3', '1'),
+                    ops[(wi + 1) * h + hi + 1], '6', '3'), full_projector_plus, '059', '012'),
+                    [11, 0, 1, 2, 3, 12, 4, 5, 6, 13, 7, 8, 9, 10])
+
+        purities[boundary_i] = res
+    return full_purity, purities
+full_purity, purities = exact_purity(4, 4, 0.0)
+b = 1
 
 
-
-run_estimations = False
+run_estimations = True
 if run_estimations:
     w = 4
     h = 4

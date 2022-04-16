@@ -17,10 +17,20 @@ def toEnvOperator(op):
 
 
 def applyOpTosite(site, op):
-    if len(site.tensor.shape) == 6:
-        return bops.contract(site, op, '05', '10')
+    if len(site.tensor.shape) == 6: # site is in DM form
+        if len(op.tensor.shape) == 2: # local op
+            return bops.contract(site, op, '05', '10')
+        else:
+            return bops.unifyLegs(bops.unifyLegs(bops.unifyLegs(bops.permute(bops.contract(
+                site, op, '05', '05'), [0, 4, 1, 5, 2, 6, 3, 7]), [6, 7]), [4, 5]), [2, 3], [0, 1])
     else:
-        return toEnvOperator(bops.multiContraction(bops.multiContraction(site, op, '4', '1'), site, '4', '4*'))
+        if len(op.tensor.shape) == 2:
+            return toEnvOperator(bops.multiContraction(bops.multiContraction(site, op, '4', '1'), site, '4', '4*'))
+        else:
+            return bops.unifyLegs(bops.unifyLegs(bops.unifyLegs(bops.unifyLegs(bops.permute(
+                bops.contract(bops.contract(site, op, '4', '0'), site, '8', '4*')),
+                [0, 4, 8, 1, 5, 9, 2, 6, 10, 3, 7, 11]),
+                [9, 10, 11]), [6, 7, 8]), [3, 4, 5], [0, 1, 2])
 
 
 def applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, h, w, ops):
@@ -32,6 +42,7 @@ def applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, h, w, o
     rightRows = [rightRow for i in range(int(h/2))]
     return applyLocalOperators_detailedBoundary(
         cUps, dUps, cDowns, dDowns, leftRows, rightRows, A, B, h, w, ops)
+
 
 def applyLocalOperators_detailedBoundary(
         cUps, dUps, cDowns, dDowns, leftRows, rightRows, A, B, h, w, ops):
