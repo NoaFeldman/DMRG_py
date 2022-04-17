@@ -76,6 +76,51 @@ def get_initial_projectors(psi: List[tn.Node], H: List[tn.Node]):
     return res_left, res_right
 
 
+# dm site is
+#      2
+#      |
+#   0--O--3
+#      |
+#      1
+def vectorize_density_matrix(rho):
+    return [bops.unifyLegs(node, [1, 2]) for node in rho]
+
+
+def vectorized_lindbladian(H_terms: List[List[np.array]], d=2):
+    interaction_length = len(H_terms)
+    full_op_tensor = np.zeros((d**(2*(interaction_length)), d**(2*(interaction_length))))
+    full_op_tensor_left = np.zeros((d**(2*(interaction_length)), d**(2*(interaction_length))))
+    for n in range(len(H_terms)):
+        site_num = n + 1
+        for term in H_terms[n]:
+            term_id = np.kron(term.reshape([d] * 2 * site_num), np.eye(d**site_num).reshape([d] * 2 * site_num))\
+                .reshape([d**(2*site_num), d**(2*site_num)])
+            id_term = np.kron(np.eye(d**site_num).reshape([d] * 2 * site_num), term.reshape([d] * 2 * site_num))\
+                .reshape([d**(2*site_num), d**(2*site_num)])
+            full_op_tensor += np.kron(term_id, np.eye(interaction_length - n - 1))
+            full_op_tensor += np.kron(id_term, np.eye(interaction_length - n - 1))
+            for i in range(interaction_length - n):
+                full_op_tensor_left += np.kron(np.eye(d**(2 * i)),
+                                       np.kron(term_id, np.eye(d**(2*(interaction_length - i - site_num)))))
+    full_op = tn.Node(full_op_tensor.reshape([d**2] * interaction_length)
+        .transpose([2 * i for i in range(interaction_length)] + [2 * i + 1 for i in range(interaction_length)])
+                      .reshape([1] + [d**2] * interaction_length + [1]))
+    full_op_left = tn.Node(full_op_tensor_left.reshape([d**2] * interaction_length)
+        .transpose([2 * i for i in range(interaction_length)] + [2 * i + 1 for i in range(interaction_length)])
+                           .reshape([1] + [d**2] * interaction_length + [1]))
+    op_list = []
+    to_decompose = full_op
+    op_left_list = []
+    to_decompose_left = full_op_left
+    for i in range(interaction_length):
+        [op, to_decompose, te] = \
+            bops.svdTruncation(to_decompose, [0, 1, 2], list(range(3, len(to_decompose.tensor.shape))), '>>')
+        op_list.append(op)
+        [op_left, to_decompose_left, te] = \
+            bops.svdTruncation(to_decompose_left, [0, 1, 2], list(range(3, len(to_decompose_left.tensor.shape))), '>>')
+        op_left_list.append(op_left)
+    b = 1
+
 def get_XXZ_H(n, delta):
     d = 2
     tensor = np.zeros((d, d, 5, 5), dtype=complex)
