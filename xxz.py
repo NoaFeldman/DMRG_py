@@ -86,6 +86,15 @@ def get_kitaev_chain_dmrg_terms(params):
     return onsite_terms, neighbor_terms
 
 
+def get_fermion_tight_binding_dmrg_terms(mu):
+    onsite_terms = [np.array(np.diag([0, 1])) * mu for i in range(n)]
+    neighbor_terms = [np.array([[0, 0, 0, 0],
+                                [0, 0, 1, 0],
+                                [0, 1, 0, 0],
+                                [0, 0, 0, 0]]) for i in range(n - 1)]
+    return onsite_terms, neighbor_terms
+
+
 def filename(indir, model, param_name, param, n):
     if n == 16:
         return indir + '/magic/results/' + model + '/' + param_name + '_' + str(param)
@@ -150,8 +159,14 @@ elif model == 'xy_magic':
     h_func = get_xy_magic_dmrg_terms
 elif model == 'kitaev':
     param_name = 'mu_t'
-    params = [[np.round(mui * 0.1, 8), np.round(ti * 0.1, 8)] for mui in range(-40, 40, 2) for ti in range(-40, 40, 2)]
+    mu_range = list(range(0, 100, 2)) # list(range(-40, 40, 2))
+    t_range = list(range(0, 100, 2))
+    params = [[np.round(mui * 0.1, 8), np.round(ti * 0.1, 8)] for mui in mu_range for ti in t_range]
     h_func = get_kitaev_chain_dmrg_terms
+elif model == 'fermion_tight_binding':
+    param_name = 'mu'
+    params = [np.round(1.5 + 0.1 * i, 8) for i in range(11)]
+    h_func = get_fermion_tight_binding_dmrg_terms
 
 thetas = [t * np.pi for t in [0.0, 0.15, 0.25, 0.4]]
 phis = [p * np.pi for p in [0.0, 0.15, 0.25, 0.4]]
@@ -174,7 +189,7 @@ def run():
         except FileNotFoundError or EOFError:
             onsite_terms, neighbor_terms = h_func(param)
             psi_bond_dim = psi[int(n/2)].tensor.shape[0]
-            psi, E0, truncErrs = dmrg.DMRG(psi, onsite_terms, neighbor_terms, accuracy=1e-10)
+            psi, E0, truncErrs = dmrg.DMRG(psi, onsite_terms, neighbor_terms, accuracy=1e-12)
             psi_orig = psi
             if psi[int(n / 2)].tensor.shape[0] > 4:
                 psi = bops.relaxState(psi, 4)
@@ -183,7 +198,7 @@ def run():
             # m2_optimized, best_basis = magicRenyi.getSecondRenyi_optimizedBasis(psi, d)
             # m2_maximized, worst_basis = magicRenyi.getSecondRenyi_optimizedBasis(psi, d, opt='max')
             dm = get_half_system_dm(psi)
-            mhalf = magicRenyi.getHalfRenyiExact_dm(dm, d)
+            mhalf = 0 # magicRenyi.getHalfRenyiExact_dm(dm, d)
             # mhalf_optimized, mhalf_best_basis, mhalf_maximized, mhalf_worst_basis = \
             #     magicRenyi.getHalfRenyiExact_dm_optimized(dm, d)
             szs[pi] = sum([bops.getExpectationValue(psi, [tn.Node(np.eye(2)) for i in range(j)] + \
@@ -264,11 +279,15 @@ def get_color_gradient(color):
 
 
 def analyze_basis():
-    # f, axs = plt.subplots(3, 1, gridspec_kw={'wspace': 0, 'hspace': 0}, sharex='all')
+    f, axs = plt.subplots(3, 1, gridspec_kw={'wspace': 0, 'hspace': 0}, sharex='all')
 
-    with open(indir + '/magic/results/' + model + '/m2s', 'rb') as f:
+    # with open(indir + '/magic/results/' + model + '/m2s', 'rb') as f:
+    #     m2s = pickle.load(f)
+    # with open(indir + '/magic/results/' + model + '/mhalves', 'rb') as f:
+    #     mhalves = pickle.load(f)
+    with open(indir + '/magic/results/' + model + 'm2s_' + param_name + 's_' + str(params[0]) + '_' + str(params[-1]), 'rb') as f:
         m2s = pickle.load(f)
-    with open(indir + '/magic/results/' + model + '/mhalves', 'rb') as f:
+    with open(indir + '/magic/results/' + model + 'mhalves_' + param_name + 's_' + str(params[0]) + '_' + str(params[-1]), 'rb') as f:
         mhalves = pickle.load(f)
     for ti in range(len(thetas)):
         u_theta = ru.getUTheta(thetas[ti] / np.pi, d=2)
@@ -345,4 +364,45 @@ def analyze_basis():
     plt.xlabel(param_name)
     plt.ylabel('r$m_2$')
     plt.show()
+
+
+def analyze_kitaev():
+    ff, axs = plt.subplots(3, 1, gridspec_kw={'wspace': 0, 'hspace': 0}, sharex='all')
+    m2s = np.zeros((len(mu_range), len(t_range)), dtype=complex)
+    mhalves = np.zeros((len(mu_range), len(t_range)), dtype=complex)
+    p2s = np.zeros((len(mu_range), len(t_range)), dtype=complex)
+    for mui in range(len(mu_range)):
+        for ti in range(len(t_range)):
+            pi = mui * len(mu_range) + ti
+            param = params[pi]
+            mu = param[0]
+            t = param[1]
+            with open(filename(indir, model, param_name, param, n), 'rb') as f:
+                [psi, m2, mhalf] = pickle.load(f)
+                m2s[mui, ti] = m2
+                mhalves[mui, ti] = mhalf
+                p2s[mui, ti] = bops.getRenyiEntropy(psi, 2, int(len(psi) / 2))
+    pcm = axs[0].pcolormesh(mu_range, t_range, np.abs(p2s), shading='auto')
+    ff.colorbar(pcm, ax=axs[0])
+    pcm = axs[1].pcolormesh(mu_range, t_range, np.abs(m2s), shading='auto')
+    ff.colorbar(pcm, ax=axs[1])
+    pcm = axs[2].pcolormesh(mu_range, t_range, np.abs(mhalves), shading='auto')
+    ff.colorbar(pcm, ax=axs[2])
+    plt.show()
+
+
+def analyze_thin():
+    f, axs = plt.subplots(2, 1)
+    p2s = np.zeros(len(params))
+    m2s = np.zeros(len(params))
+    for pi in range(len(params)):
+        param = params[pi]
+        with open(filename(indir, model, param_name, param, n), 'rb') as f:
+            [psi, m2, mhalf] = pickle.load(f)
+        p2s[pi] = bops.getRenyiEntropy(psi, 2, int(len(psi) / 2))
+        m2s[pi] = m2
+    axs[0].plot(params, p2s)
+    axs[1].plot(params, m2s)
+    plt.show()
+# analyze_thin()
 run()
