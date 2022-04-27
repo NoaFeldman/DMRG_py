@@ -15,29 +15,45 @@ def tdvp_step(psi: List[tn.Node], H: List[tn.Node], k: int,
               projectors_left: List[tn.Node], projectors_right: List[tn.Node], dir: str, dt):
     M = bops.contract(psi[k], psi[k+1], '2', '0')
     # TODO add Krylov here at some point
-    H_effective = bops.permute(bops.contract(bops.contract(bops.contract(
-        projectors_left[k], H[k], '1', '2'), H[k+1], '4', '2'), projectors_right[k+1], '6', '1'),
-        [0, 2, 4, 6, 1, 3, 5, 7])
+    H_effective = bops.permute(bops.contract(
+        bops.contract(bops.contract(
+             projectors_left[k], tn.Node(np.eye(projectors_left[k].tensor.shape[2])), '23', '01'), H[k], '1', '2'),
+        bops.contract(bops.contract(
+             projectors_right[k+1], tn.Node(np.eye(projectors_right[k+1].tensor.shape[2])), '23', '01'), H[k+1], '1', '3'),
+        '4', '4'), [0, 2, 6, 4, 1, 3, 7, 5])
     H_eff_shape = H_effective.tensor.shape
     forward_evolver = tn.Node(
         linalg.expm(-1j * (dt / 2) * H_effective.tensor.reshape([np.prod(H_eff_shape[:4]), np.prod(H_eff_shape[4:])]))
             .reshape(list(H_eff_shape)))
     M = bops.contract(M, forward_evolver, '0123', '0123')
-    [A, C, B, te] = bops.svdTruncation(M, [0, 1], [2, 3], '>*<', maxBondDim=1024)
+    [A, C, B, te] = bops.svdTruncation(M, [0, 1], [2, 3], '>*<', maxBondDim=128)
+    if len(te) > 0: print(max(te))
     if dir == '>>':
-        projectors_left[k+1] = bops.contract(bops.contract(bops.contract(
-            projectors_left[k], A, '0', '0'), H[k], '02', '20'), A, '02', '01*')
+        projectors_left[k+1] = bops.contract(bops.contract(bops.contract(bops.contract(bops.contract(
+            projectors_left[k], A, '0', '0'), H[k], '04', '20'), A, '04', '01*'), A, '0', '0'), A, '04', '01*')
         M = bops.contract(C, B, '1', '0')
         psi[k] = A
         M_ind = k + 1
+        if k == len(psi) - 2:
+            psi[M_ind] = M
+            return te
     else:
-        projectors_right[k] = bops.contract(bops.contract(bops.contract(
-            B, projectors_right[k+1], '2', '0'), H[k+1], '12', '03'), B, '21', '12*')
+        projectors_right[k] = bops.contract(bops.contract(bops.contract(bops.contract(bops.contract(
+            B, projectors_right[k+1], '2', '0'), H[k+1], '12', '03'), B, '41', '12*'), B, '1', '2'), B, '51', '12*')
         M = bops.contract(A, C, '2', '0')
         psi[k+1] = B
         M_ind = k
-    H_effective = bops.permute(bops.contract(bops.contract(
-        projectors_left[M_ind], H[M_ind], '1', '2'), projectors_right[M_ind], '4', '1'), [0, 2, 4, 1, 3, 5])
+        if k == 0:
+            psi[M_ind] = M
+            return te
+    # H_effective = bops.permute(bops.contract(bops.contract(
+    #     projectors_left[M_ind], H[M_ind], '1', '2'), projectors_right[M_ind], '4', '1'), [0, 2, 4, 1, 3, 5])
+    H_effective = bops.permute(bops.contract(
+        bops.contract(bops.contract(
+            projectors_left[M_ind], tn.Node(np.eye(projectors_left[M_ind].tensor.shape[2])), '23', '01'), H[M_ind], '1', '2'),
+        bops.contract(
+            projectors_right[M_ind], tn.Node(np.eye(projectors_right[M_ind].tensor.shape[2])), '23', '01'),
+        '4', '1'), [0, 2, 4, 1, 3, 5])
     H_eff_shape = H_effective.tensor.shape
     backward_evolver = tn.Node(
         linalg.expm(1j * (dt/2) * H_effective.tensor.reshape([np.prod(H_eff_shape[:3]), np.prod(H_eff_shape[3:])]))\
@@ -62,16 +78,20 @@ def tdvp_sweep(psi: List[tn.Node], H: List[tn.Node],
 def get_initial_projectors(psi: List[tn.Node], H: List[tn.Node]):
     res_left = [None for i in range(len(psi))]
     res_right = [None for i in range(len(psi))]
-    res_right[-1] = tn.Node(np.eye(psi[-1].shape[2]).reshape([psi[-1].shape[2], 1, psi[-1].shape[2]]))
+    res_right[-1] = tn.Node(np.eye(psi[-1].shape[2]**2)
+                            .reshape([psi[-1].shape[2], 1, psi[-1].shape[2], psi[-1].shape[2], psi[-1].shape[2]]))
     for ri in range(len(psi) - 1, 0, -1):
-        res_right[ri-1] = bops.contract(bops.contract(bops.contract(
-            res_right[ri], psi[ri], '0', '2'), H[ri], '30', '03'), psi[ri], '20', '12*')
+        res_right[ri-1] = bops.contract(bops.contract(bops.contract(bops.contract(bops.contract(
+            res_right[ri], psi[ri], '0', '2'), H[ri], '50', '03'), psi[ri], '40', '12*'),
+            psi[ri], '0', '2'), psi[ri], '50', '12*')
         if ri > 0:
             psi = bops.shiftWorkingSite(psi, ri, '<<')
-    res_left[0] = tn.Node(np.eye(psi[0].shape[0]).reshape([psi[0].shape[0], 1, psi[0].shape[0]]))
+    res_left[0] = tn.Node(np.eye(psi[0].shape[0]**2)
+                          .reshape([psi[0].shape[0], 1, psi[0].shape[0], psi[0].shape[0], psi[0].shape[0]]))
     for ri in range(len(psi) - 1):
-        res_left[ri+1] = bops.contract(bops.contract(bops.contract(
-            res_left[ri], psi[ri], '0', '0'), H[ri], '02', '20'), psi[ri], '02', '01*')
+        res_left[ri+1] = bops.contract(bops.contract(bops.contract(bops.contract(bops.contract(
+            res_left[ri], psi[ri], '0', '0'), H[ri], '04', '20'), psi[ri], '04', '01*'),
+            psi[ri], '0', '0'), psi[ri], '04', '01*')
         psi = bops.shiftWorkingSite(psi, ri, '>>')
     return res_left, res_right
 
@@ -107,9 +127,12 @@ def H_op_transposition(site_num):
 
 # translational_invariant
 # TODO transpose by sites
-def vectorized_lindbladian(n, H_terms: List[np.array], d=2):
-    basic_ops_tensors = [np.kron(np.eye(d**(ti + 1)), H_terms[ti]) -
+def vectorized_lindbladian(n, H_terms: List[np.array], L_term: np.array, d=2):
+    basic_ops_tensors = [np.kron(np.eye(d ** (ti + 1)), H_terms[ti]) -
                          np.kron(H_terms[ti].transpose(), np.eye(d**(ti + 1))) for ti in range(len(H_terms))]
+    basic_ops_tensors[0] += np.kron(L_term.conj(), L_term) \
+                            - 0.5 * np.kron(np.eye(d), np.matmul(L_term.conj().T, L_term)) \
+                            - 0.5 * np.kron(np.matmul(L_term.conj().T, L_term).T, np.eye(d))
     basic_ops = [tn.Node(basic_ops_tensors[ti].reshape([d] * 4 * (ti + 1))
                          .transpose(H_op_transposition(ti + 1))
                          .reshape([1] + [d**2] * 2 * (ti+1) + [1]))
@@ -121,11 +144,11 @@ def vectorized_lindbladian(n, H_terms: List[np.array], d=2):
             [op, to_decompose, te] = \
                 bops.svdTruncation(to_decompose, [0, 1, 2], list(range(3, len(to_decompose.tensor.shape))), '<<')
             single_site_ops.append(bops.permute(op, [1, 2, 0, 3]))
-    dim = 1 + np.sum([op.tensor.shape[2] for op in single_site_ops]) - len(H_terms) + 1
+    dim = 2 + np.sum([op.tensor.shape[2] for op in single_site_ops]) - len(H_terms)
     left_tensor = np.zeros((d**2, d**2, 1, dim), dtype=complex)
     mid_tensor = np.zeros((d**2, d**2, dim, dim), dtype=complex)
     right_tensor = np.zeros((d**2, d**2, dim, 1), dtype=complex)
-    left_tensor[:, :, 0, -1] = single_site_ops[0].tensor.reshape([d**2, d**2])
+    left_tensor[:, :, 0, -1] = single_site_ops[0].tensor.reshape([d ** 2, d ** 2])
     left_tensor[:, :, 0, 0] = np.eye(d**2)
     curr_left_tensor_ind = 1
     curr_op_list_ind = 1
@@ -181,71 +204,108 @@ def get_XXZ_H(n, delta):
                                       np.kron(basic.pauli2X, basic.pauli2X) + np.kron(basic.pauli2Y, basic.pauli2Y) + \
                                       delta * np.kron(basic.pauli2Z, basic.pauli2Z)])
 
-n = 4
+pure_state = False
 delta = 1
-H = get_XXZ_H(n, delta)
-psi0 = bops.getStartupState(n, d=2)
-vec_rho0 = [tn.Node(np.kron(psi0[i].tensor, np.conj(psi0[i].tensor))) for i in range(len(psi0))]
-for k in range(n-1, 0, -1):
-    vec_rho0 = bops.shiftWorkingSite(vec_rho0, k, '<<')
-for k in range(n-1):
-    vec_rho0 = bops.shiftWorkingSite(vec_rho0, k, '>>')
-projectors_left, projectors_right = get_initial_projectors(vec_rho0, H)
-vec_rho = bops.copyState(vec_rho0)
-
-psi0_vec = bops.getExplicitVec(psi0, d=2)
-
-curr = H[0]
-for i in range(1, len(H)):
-    curr = bops.contract(curr, H[i], [2 * i + 1], '2')
-H_mat = np.round(bops.permute(curr, [2, 0, 3, 5, 7, 1, 4, 6, 8, 9]).tensor.reshape([2**8, 2**8]), 6)
-h = np.zeros((2**4, 2**4), dtype=complex)
-for i in range(n - 1):
-    h += np.kron(np.kron(np.eye(2**i), np.kron(basic.pauli2X, basic.pauli2X) + np.kron(basic.pauli2Y, basic.pauli2Y) + \
-                                      delta * np.kron(basic.pauli2Z, basic.pauli2Z)), np.eye(2**(n - i - 2)))
 dt = delta * 1e-2
-timesteps = 1000
+if not pure_state:
+    n = 4
+    H = vectorized_lindbladian(n, [basic.pauli2X, np.kron(basic.pauli2Z, basic.pauli2Z),
+                                   np.kron(basic.pauli2X, np.kron(basic.pauli2X, basic.pauli2X))])  # vget_XXZ_H(n, delta)
+    psi0 = [tn.Node(np.array([0, 1]).reshape([1, 2, 1]))] + [tn.Node(np.array([1, 0]).reshape([1, 2, 1]))] * 3
+    vec_rho0 = [tn.Node(np.kron(psi0[i].tensor, np.conj(psi0[i].tensor))) for i in range(len(psi0))]
+    for k in range(n-1, 0, -1):
+        vec_rho0 = bops.shiftWorkingSite(vec_rho0, k, '<<')
+    for k in range(n-1):
+        vec_rho0 = bops.shiftWorkingSite(vec_rho0, k, '>>')
+    projectors_left, projectors_right = get_initial_projectors(vec_rho0, H)
+    vec_rho = bops.copyState(vec_rho0)
+
+    curr = H[0]
+    for i in range(1, len(H)):
+        curr = bops.contract(curr, H[i], [2 * i + 1], '2')
+    H_mat = np.round(bops.permute(curr, [2, 0, 3, 5, 7, 1, 4, 6, 8, 9]).tensor.reshape([2**(2*n), 2**(2*n)]), 8)
+    h = np.zeros((2**n, 2**n), dtype=complex)
+    for i in range(n):
+        h += np.kron(np.eye(2**i), np.kron(basic.pauli2X, np.eye(2**(n - i - 1))))
+        if i < n - 1:
+            h += np.kron(np.eye(2**i), np.kron(np.kron(basic.pauli2Z, basic.pauli2Z), np.eye(2**(n - i - 2))))
+            if i < n - 2:
+                h += np.kron(np.eye(2**i),
+                   np.kron(np.kron(basic.pauli2X, np.kron(basic.pauli2X, basic.pauli2X)), np.eye(2**(n - i - 3))))
+    # for i in range(n - 1):
+    #     h += np.kron(np.kron(np.eye(2**i), np.kron(basic.pauli2X, basic.pauli2X) + np.kron(basic.pauli2Y, basic.pauli2Y) + \
+    #                                       delta * np.kron(basic.pauli2Z, basic.pauli2Z)), np.eye(2**(n - i - 2)))
+
+    def explicit_dm(vec_rho):
+        curr = vec_rho[0]
+        for i in range(1, len(vec_rho)):
+            curr = bops.contract(curr, vec_rho[i], [i + 1], '0')
+        dm = curr.tensor.reshape([2] * len(vec_rho) * 2).transpose([0, 2, 4, 6, 1, 3, 5, 7]).reshape([2 ** 4, 2 ** 4])
+        return dm
+
+    dm0 = explicit_dm(vec_rho)
+    evals, evecs = np.linalg.eigh(dm0)
+    tdvp_vec0 = evecs[:, -1]
+
+    time_evolver_vectorized = linalg.expm(H_mat * 1j * dt)
+    rho0_vec_explicit = bops.getExplicitVec(vec_rho0, d=4)
+    rho_vec_explicit = np.copy(rho0_vec_explicit)
+else:
+    n = 8
+    H = get_XXZ_H_pure(n, delta)
+    psi0 = bops.getStartupState(int(n/2), d=2)
+    [psi0, E, te] = dmrg.DMRG(psi0, [np.eye(2) for i in range(int(n/2))],
+                              [np.kron(basic.pauli2X, basic.pauli2X) + np.kron(basic.pauli2Y, basic.pauli2Y) + \
+                               delta * np.kron(basic.pauli2Z, basic.pauli2Z) for i in range(int(n/2) - 1)])
+    psi0 = psi0 + bops.copyState(psi0)
+    for k in range(n-1, 0, -1):
+        psi0 = bops.shiftWorkingSite(psi0, k, '<<')
+    for k in range(n-1):
+        psi0 = bops.shiftWorkingSite(psi0, k, '>>')
+    psi = bops.copyState(psi0)
+    projectors_left, projectors_right = get_initial_projectors(psi0, H)
+
+    curr = H[0]
+    for i in range(1, n):
+        curr = bops.contract(curr, H[i], [i * 2 + 1], '2')
+    h = bops.permute(curr, [2, 0, 3, 5, 7, 9, 11, 13, 15, 1, 4, 6, 8, 10, 12, 14, 16, 17]).tensor.reshape([2**8, 2**8])
+    # h = bops.permute(curr, [2, 0, 3, 5, 7, 1, 4, 6, 8, 9]).tensor.reshape([2**4, 2**4])
+
 
 time_evolver = linalg.expm(h * 1j * dt)
+psi0_vec = bops.getExplicitVec(psi0, d=2)
 psi_vec = np.copy(psi0_vec)
-Xs = np.eye(1)
-for i in range(2):
-    Xs = np.kron(Xs, basic.pauli2X)
-for i in range(2, n):
-    Xs = np.kron(Xs, np.eye(2))
-xs_ops = [tn.Node(basic.pauli2X) for i in range(2)] + [tn.Node(np.eye(2)) for i in range(2, n)]
 
-def explicit_dm(vec_rho):
-    curr = vec_rho[0]
-    for i in range(1, len(vec_rho)):
-        curr = bops.contract(curr, vec_rho[i], [i + 1], '0')
-    dm = curr.tensor.reshape([2] * len(vec_rho) * 2).transpose([0, 2, 4, 6, 1, 3, 5, 7]).reshape([2**4, 2**4])
-    return dm
-
+timesteps = 1000
 p2s_tdvp = np.zeros(timesteps, dtype=complex)
 p2s_exact = np.zeros(timesteps, dtype=complex)
 overlaps_tdvp = np.zeros(timesteps, dtype=complex)
 overlaps_exact = np.zeros(timesteps, dtype=complex)
 overlaps_test = np.zeros(timesteps, dtype=complex)
-dm0 = explicit_dm(vec_rho)
-evals, evecs = np.linalg.eigh(dm0)
-psi_test0 = evecs[:, -1]
+zs_tdvp = np.zeros(timesteps, dtype=complex)
+zs_exact = np.zeros(timesteps, dtype=complex)
 for ti in range(timesteps):
-    te = tdvp_sweep(vec_rho, H, projectors_left, projectors_right, dt)
-    print(ti, te)
     psi_vec = np.matmul(time_evolver, psi_vec)
-    overlaps_tdvp[ti] = bops.getOverlap(vec_rho0, vec_rho)
-    overlaps_exact[ti] = np.abs(np.matmul(np.conj(psi0_vec.T), psi_vec))**2
-    # dm = explicit_dm(vec_rho)
-    # evals, evecs = np.linalg.eigh(dm)
-    # overlaps_test[ti] = np.abs(np.matmul(np.conj(psi0_vec.T), evecs[:, -1]))**2
+    if not pure_state:
+        te = tdvp_sweep(vec_rho, H, projectors_left, projectors_right, dt)
+        dm = explicit_dm(vec_rho)
+        overlaps_tdvp[ti] = np.matmul(tdvp_vec0.T.conj(), np.matmul(dm, tdvp_vec0))
+        overlaps_exact[ti] = np.abs(np.matmul(np.conj(psi0_vec.T), psi_vec))**2
+        rho_vec_explicit = np.matmul(time_evolver_vectorized, rho_vec_explicit)
+        overlaps_test[ti] = np.abs(np.matmul(np.conj(rho0_vec_explicit.T), rho_vec_explicit))
+        zs_tdvp[ti] = bops.getOverlap(vec_rho, [tn.Node(np.array([[1, 0], [0, -1]]).reshape([1, 4, 1])) for i in range(n)])
+        p2s_tdvp[ti] = bops.getOverlap(vec_rho, vec_rho)
+    else:
+        te = tdvp_sweep(psi, H, projectors_left, projectors_right, dt)
+        overlaps_tdvp[ti] = bops.getOverlap(psi, psi0)
+        overlaps_exact[ti] = np.abs(np.matmul(np.conj(psi0_vec.T), psi_vec))
+    print(ti, te)
     p2s_tdvp[ti] = 0
     rho = np.outer(psi_vec, np.conj(psi_vec.T)).reshape([2**(int(n/2)), 2**(int(n/2)), 2**(int(n/2)), 2**(int(n/2))])
     rho_A = np.tensordot(rho, np.eye(2**(int(n/2))), [[1, 3], [0, 1]])
     p2s_exact[ti] = np.trace(np.matmul(rho_A, rho_A))
 plt.plot(np.array(range(timesteps)), np.abs(overlaps_tdvp), color='red')
-plt.plot(1.2 * np.array(range(timesteps)), np.abs(overlaps_exact), '--', color='black')
-# plt.plot(np.abs(p2s_tdvp), color='blue')
-# plt.plot(np.abs(p2s_exact), '--', color='orange')
+plt.plot(np.array(range(timesteps)), np.abs(overlaps_test), '--', color='orange')
+plt.plot(np.array(range(timesteps)), np.abs(overlaps_exact), ':', color='black')
 plt.show()
 b = 1
