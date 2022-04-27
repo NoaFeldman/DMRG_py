@@ -204,6 +204,17 @@ def get_XXZ_H(n, delta):
                                       np.kron(basic.pauli2X, basic.pauli2X) + np.kron(basic.pauli2Y, basic.pauli2Y) + \
                                       delta * np.kron(basic.pauli2Z, basic.pauli2Z)])
 
+
+def get_gnm(r, gamma, k, theta):
+    kr = k * r
+    g = -gamma * 3 / 4 * np.exp(1j * kr) / kr * (1 + (1j * kr - 1) / kr**2 + (-1 + 3 * (1 - 1j * kr) / kr**2) * np.cos(theta)**2)
+    return np.real(g), np.imag(g)
+
+
+def get_photon_green_L(n, gamma, k, theta):
+
+
+
 pure_state = False
 delta = 1
 dt = delta * 1e-2
