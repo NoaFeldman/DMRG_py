@@ -274,13 +274,14 @@ L = get_photon_green_L(N, Omega, Gamma, k, theta, 'NN', nn_num)
 psi = [tn.Node(np.array([1, 0, 0, 0]).reshape([1, d**2, 1])) for n in range(N)]
 projectors_left, projectors_right = get_initial_projectors(psi, L)
 dt = 1e-2
-timesteps = 1000
+timesteps = int(sys.argv[5])
 Zs = [tn.Node(np.array([1, 0, 0, -1]).reshape([1, d**2, 1])) for n in range(N)]
-z_expect = np.zeros(timesteps)
-bond_dims = np.zeros(timesteps)
+z_expect = np.zeros(timesteps, dtype=complex)
+bond_dims = np.zeros(timesteps, dtype=complex)
 for ti in range(timesteps):
+    print(ti)
     tdvp_sweep(psi, L, projectors_left, projectors_right, dt, 1024)
-    Zs[ti] = bops.getOverlap(psi, Zs)
+    z_expect[ti] = bops.getOverlap(psi, Zs)
     bond_dims[ti] = psi[int(len(psi)/2)].tensor.shape[0]
     if ti % 50 == 0:
         with open(outdir + '/tdvp_N_' + str(N) + '_Omega_' + str(Omega) + '_nn_' + str(nn_num), 'wb') as f:
