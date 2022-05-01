@@ -4,25 +4,31 @@ import DMRG as dmrg
 import tensornetwork as tn
 import pickle
 import basicDefs as basic
-import matplotlib.pyplot as plt
-import magicRenyi
 import sys
 from typing import List
 import scipy.linalg as linalg
 
+
+def applyHToM(HL, HR, H, M, k):
+    # return bops.contract(bops.contract(bops.contract(bops.contract(
+    #     HL[k], M, '0', '0'), H[k], '02', '20'), H[k + 1], '41', '20'), HR[k+1], '14', '01')
+    return bops.contract(bops.contract(bops.contract(bops.contract(
+        HL[k], M, '2', '0'), H[k], '12', '21'), H[k+1], '41', '21'), HR[k+1], '14', '21')
+
+
 # k is OC, pair is [k, k+1]
 def tdvp_step(psi: List[tn.Node], H: List[tn.Node], k: int,
               projectors_left: List[tn.Node], projectors_right: List[tn.Node], dir: str, dt, max_bond_dim):
-    M = bops.contract(psi[k], psi[k+1], '2', '0')
-    # TODO add Krylov here at some point
-    H_effective = bops.permute(bops.contract(bops.contract(bops.contract(
-        projectors_left[k], H[k], '1', '2'), H[k+1], '4', '2'), projectors_right[k+1], '6', '1'),
-        [0, 2, 4, 6, 1, 3, 5, 7])
-    H_eff_shape = H_effective.tensor.shape
-    forward_evolver = tn.Node(
-        linalg.expm(-1j * (dt / 2) * H_effective.tensor.reshape([np.prod(H_eff_shape[:4]), np.prod(H_eff_shape[4:])]))
-            .reshape(list(H_eff_shape)))
-    M = bops.contract(M, forward_evolver, '0123', '0123')
+    [M, E0] = dmrg.lanczos(projectors_left, projectors_right, H, k, psi, apply_function=applyHToM, opt='time_evolve', dt=dt)
+    # M = bops.contract(psi[k], psi[k+1], '2', '0')
+    # H_effective = bops.permute(bops.contract(bops.contract(bops.contract(
+    #     projectors_left[k], H[k], '1', '2'), H[k+1], '4', '2'), projectors_right[k+1], '6', '1'),
+    #     [0, 2, 4, 6, 1, 3, 5, 7])
+    # H_eff_shape = H_effective.tensor.shape
+    # forward_evolver = tn.Node(
+    #     linalg.expm(-1j * (dt / 2) * H_effective.tensor.reshape([np.prod(H_eff_shape[:4]), np.prod(H_eff_shape[4:])]))
+    #         .reshape(list(H_eff_shape)))
+    # M = bops.contract(M, forward_evolver, '0123', '0123')
     [A, C, B, te] = bops.svdTruncation(M, [0, 1], [2, 3], '>*<', maxBondDim=max_bond_dim)
     if len(te) > 0: print(max(te))
     if dir == '>>':
@@ -260,6 +266,43 @@ def get_photon_green_L(n, Omega, Gamma, k, theta, opt='NN', nearest_neighbors_nu
     expected_v = np.kron(S, I) + np.kron(I, S) + 0.5 * np.kron(A, B) - 0.5 * np.kron(C, D) \
                  + 0.5 * np.kron(B, A) + np.kron(C, A) -  0.5 * np.kron(D, C) + np.kron(A, C)
     return L
+
+
+test = True
+if test:
+    N = 6
+    d = 2
+    L = get_photon_green_L(N, 1, 1, 2 * np.pi / 10, 0, opt='NN', nearest_neighbors_num=2)
+    psi0 = [tn.Node(np.array([1, 0, 0, 0]).reshape([1, d**2, 1])) for n in range(N)]
+    psi = bops.copyState(psi0)
+    projectors_left, projectors_right = get_initial_projectors(psi, L)
+    rho_explicit_0 = np.zeros(d**(2*N), dtype=complex)
+    rho_explicit_0[0] = 1
+    rho_explicit = np.copy(rho_explicit_0)
+    curr = L[0]
+    for i in range(1, N):
+        curr = bops.contract(curr, L[i], [i * 2 + 1], '2')
+    L_explicit = curr.tensor\
+        .transpose([2, 0, 3, 5, 7, 9, 11, 1, 4, 6, 8, 10, 12, 13])\
+        .reshape([d**(2 * N), d**(2*N)])
+    dt = 1e-2
+    time_evolver_explicit = linalg.expm(-1j * dt * L_explicit)
+    timesteps = 10
+    overlaps_tdvp = np.zeros(timesteps)
+    overlaps_exact = np.zeros(timesteps)
+    overlaps_test = np.zeros(timesteps)
+    for ti in range(timesteps):
+        tdvp_sweep(psi, L, projectors_left, projectors_right, dt, max_bond_dim=128)
+        rho_explicit = np.matmul(time_evolver_explicit, rho_explicit)
+        overlaps_tdvp[ti] = np.abs(bops.getOverlap(psi0, psi))
+        overlaps_exact[ti] = np.abs(np.matmul(rho_explicit, rho_explicit_0))
+        overlaps_test[ti] = np.abs(np.matmul(rho_explicit, bops.getExplicitVec(psi, d=4)))
+        print(ti)
+    import matplotlib.pyplot as plt
+    plt.plot(overlaps_tdvp, color='black')
+    plt.plot(overlaps_exact, '--', color='orange')
+    plt.plot(overlaps_test)
+    plt.show()
 
 
 N = int(sys.argv[1])
