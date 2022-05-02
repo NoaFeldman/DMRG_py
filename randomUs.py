@@ -117,7 +117,7 @@ def renyiEntropy(n, w, h, M, estimateFunc, arguments, filename, d=2, excludeIndi
                  get_ops_func=None, get_ops_arguments=None):
     avg = 0
     N = w * h
-    for m in range(M * 2**N):
+    for m in range(M * 10):
         if get_ops_func is None:
             ops = getNonUnitaryRandomOps(d, n, N)
             for ind in excludeIndices:
@@ -133,7 +133,7 @@ def renyiEntropy(n, w, h, M, estimateFunc, arguments, filename, d=2, excludeIndi
         if m % M == M - 1:
             with open(filename + '_n_' + str(n) + '_w_' + str(w) + '_h_' + str(h) + '_M_' + str(M) + '_m_' + str(m), 'wb') as f:
                 pickle.dump(avg / M, f)
-                print(avg / M * 2**(7 * n))
+                print(avg / M / (2**(7*n)))
                 avg = 0
             gc.collect()
 

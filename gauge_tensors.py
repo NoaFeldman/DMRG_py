@@ -8,6 +8,7 @@ import randomUs as ru
 from typing import List
 import matplotlib.pyplot as plt
 import os
+import sys
 
 
 def toric_code(g=0.0):
@@ -164,7 +165,7 @@ def get_explicit_block(w, h, g, boundary_identifier=0):
     ops = [[None for i in range(block_size)] for j in range(block_size)]
     list_of_sectors = get_list_of_sectors(w, h, boundary_identifier)
     for i in range(block_size):
-        for j in range(block_size):
+        for j in range(i, block_size):
             choices_i = [int(c) * 2 - 1 for c in bin(i).split('b')[1]]
             choices_i = [-1] * (num_of_free_site_choices - len(choices_i)) + choices_i
             choices_j = [int(c) * 2 - 1 for c in bin(j).split('b')[1]]
@@ -181,11 +182,13 @@ def get_explicit_block(w, h, g, boundary_identifier=0):
 
     res = np.zeros((block_size, block_size), dtype=complex)
     for i in range(block_size):
-        for j in range(block_size):
+        for j in range(i, block_size):
             res[i, j] = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h,
                                   ops[i][j])
+            res[j, i] = np.conj(res[i, j])
     res /= 2**(2*w*h)
     return res
+
 
 def get_Z_plaquette_projector():
     #
@@ -317,11 +320,61 @@ top_right_corner_projector_minus = tn.Node(np.diag([0, 1, 1, 0]))
 right_edge_projector_plus = tn.Node(np.diag([0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1]).reshape([4, 4, 4, 4]))
 right_edge_projector_minus = tn.Node(np.diag([1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0]).reshape([4, 4, 4, 4]))
 
+def exact_probability(w, h, g, d=4):
+    with open('results/toricBoundaries_gauge_' + str(np.round(g, 8)), 'rb') as f:
+        [upRow, downRow, leftRow, rightRow, openA, openB, A, B] = pickle.load(f)
+    [cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>')
+    [cDown, dDown, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>')
+    norm = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h,
+                                  [tn.Node(np.eye(4)) for i in range(w * h)])
+    leftRow = bops.multNode(leftRow, 1 / norm ** (2 / w))
+    num_of_boundary_options = 2**(2 * (w + h -1))
+    results = np.zeros(num_of_boundary_options)
+    num_of_bulk_ints = 2**((w - 1) * (h - 1))
+    for boundary_i in range(num_of_boundary_options):
+        list_of_sectors = get_list_of_sectors(w, h, boundary_i)
+        p = 0
+        for bulk_i in range(num_of_bulk_ints):
+            bulk_ints = [int(c) * 2 - 1 for c in bin(bulk_i).split('b')[1]]
+            bulk_ints = [-1] * ((w - 1) * (h - 1) - len(bulk_ints)) + bulk_ints
+            ops = get_random_operators(w, h, 1, list_of_sectors, [bulk_ints])
+            p += \
+                pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, h, w, [op / 4 for op in ops[0]])
+        print([boundary_i, p])
+        try:
+            with open('results/gauge/toric_g_0.1/gauge_rep_3_g_0.1_b_' + str(boundary_i) + '_n_1_w_4_h_4_M_1000_m_999', 'rb') as f:
+                curr = pickle.load(f)
+                print([boundary_i, curr * 2**((w - 1) * (h - 1)) / 2**(2 * w * h)])
+        except FileNotFoundError:
+            pass
+        results[boundary_i] = p
+    return results
+# ps = exact_probability(4, 4, 0.1)
+# print(sum(ps))
+
+
+def shrink_boundaries(upRow, downRow, leftRow, rightRow, max_bond_dim):
+    M = bops.contract(upRow, rightRow, '3', '0')
+    [upRow, rightRow, te] = bops.svdTruncation(M, [0, 1, 2], [3, 4, 5], '>>', maxBondDim=max_bond_dim)
+    print(te)
+    M = bops.contract(rightRow, downRow, '3', '0')
+    [rightRow, downRow, te] = bops.svdTruncation(M, [0, 1, 2], [3, 4, 5], '>>', maxBondDim=max_bond_dim)
+    print(te)
+    M = bops.contract(downRow, leftRow, '3', '0')
+    [downRow, leftRow, te] = bops.svdTruncation(M, [0, 1, 2], [3, 4, 5], '>>', maxBondDim=max_bond_dim)
+    print(te)
+    M = bops.contract(leftRow, upRow, '3', '0')
+    [leftRow, upRow, te] = bops.svdTruncation(M, [0, 1, 2], [3, 4, 5], '>>', maxBondDim=max_bond_dim)
+    print(te)
+    return [upRow, downRow, leftRow, rightRow]
+
+
 def exact_purity(w, h, g, d=4):
     with open('results/toricBoundaries_gauge_' + str(np.round(g, 8)), 'rb') as f:
         [upRow, downRow, leftRow, rightRow, openA, openB, A, B] = pickle.load(f)
-        [cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>')
-        [cDown, dDown, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>')
+        [upRow, downRow, leftRow, rightRow] = shrink_boundaries(upRow, downRow, leftRow, rightRow, max_bond_dim=4)
+        [cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>', maxTrunc=5)
+        [cDown, dDown, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>', maxTrunc=5)
         norm = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h,
                                       [tn.Node(np.eye(4)) for i in range(w * h)])
         leftRow = bops.multNode(leftRow, 1 / norm ** (2 / w))
@@ -339,70 +392,21 @@ def exact_purity(w, h, g, d=4):
 
     full_purity = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, h, w,
                                          [tn.Node(double_swap) for i in range(w * h)])
-
-    purities = np.zeros(num_of_boundary_options)
-    for boundary_i in range(num_of_boundary_options):
-        list_of_sectors = get_list_of_sectors(w, h, boundary_i)
-        ops = [tn.Node(np.eye(d).reshape([d, 1, 1, 1, 1, d])) for si in range(w * h)]
-        for hi in range(h):
-            ops[hi] = bops.contract(left_edge_projector_plus, bops.contract(ops[hi], left_edge_projector_plus, '5', '0'), '1', '0') \
-                if list_of_sectors[0][hi] == 1 else \
-                bops.contract(left_edge_projector_minus, bops.contract(ops[hi], left_edge_projector_minus, '5', '0'), '1', '0')
-        for wi in range(w - 1):
-            projector = top_edge_projector_plus if list_of_sectors[wi + 1][0] == 1 else top_edge_projector_minus
-            projected = bops.permute(bops.contract(bops.contract(bops.contract(
-                ops[wi * h], ops[(wi + 1) * h], '2', '4'), projector, '05', '01'), projector, '37', '23'),
-                [6, 0, 1, 2, 8, 7, 3, 4, 5, 9])
-            [l, r, t] = bops.svdTruncation(projected, list(range(5)), list(range(5, 10)), '>>')
-            ops[wi * h] = bops.permute(l, [0, 1, 5, 2, 3, 4])
-            ops[(wi + 1) * h] = bops.permute(r, [1, 2, 3, 4, 0, 5])
-            for hi in range(h - 1):
-                projected = bops.permute(bops.contract(bops.contract(bops.contract(bops.contract(
-                    ops[wi * h + hi], ops[wi * h + hi + 1], '3', '1'), ops[(wi+1) * h + hi + 1], '6', '4'),
-                    full_projector_plus, [0, 5, 9], '012'), full_projector_plus, [3, 6, 10], '345'),
-                    [8, 0, 1, 2, 11, 9, 3, 4, 12, 10, 5, 6, 7, 13])
-                [l, r, te] = bops.svdTruncation(projected,
-                            list(range(5)), list(range(5, len(projected.tensor.shape))), '>>')
-                ops[wi * h + hi] = bops.permute(l, [0, 1, 2, 5, 3, 4])
-                [l, r, te] = bops.svdTruncation(r, list(range(5)), list(range(5, len(r.tensor.shape))), '>>')
-                ops[wi * h + hi + 1] = bops.permute(l, [1, 0, 5, 2, 3, 4])
-                ops[(wi+1) * h + hi + 1] = bops.permute(r, [1, 2, 3, 4, 0, 5])
-            projector = bottom_edge_projector_plus if list_of_sectors[wi + 1][-1] == 1 else bottom_edge_projector_minus
-            ops[(wi + 1) * h - 1] = \
-                bops.contract(projector, bops.contract(ops[(wi + 1) * h - 1], projector, '5', '0'), '1', '0')
-        projector = top_right_corner_projector_plus if list_of_sectors[w][0] == 1 else top_right_corner_projector_minus
-        ops[h * (w - 1)] = bops.contract(projector, bops.contract(ops[h * (w - 1)], projector, '5', '0'), '1', '0')
-        for hi in range(h - 1):
-            projector = right_edge_projector_plus if list_of_sectors[w][hi + 1] == 1 else right_edge_projector_minus
-            projected = bops.permute(bops.contract(bops.contract(bops.contract(
-                ops[(w-1) * h + hi], ops[(w-1) * h + hi + 1], '3', '1'),
-                projector, '05', '01'), projector, '37', '23'),
-                [6, 0, 1, 2, 8, 7, 3, 4, 5, 9])
-            [l, r, te] = bops.svdTruncation(projected, list(range(5)), list(range(5, 10)))
-            ops[(w - 1) * h + hi] = bops.permute(l, [0, 1, 2, 5, 3, 4])
-            ops[(w - 1) * h + hi + 1] = bops.permute(r, [1, 0, 2, 3, 4, 5])
-        projector = bottom_edge_projector_plus if list_of_sectors[-1][-1] == 1 else bottom_edge_projector_minus
-        ops[-1] = bops.contract(projector, bops.contract(ops[-1], projector, '5', '0'), '1', '0')
-
-        res = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, h, w, ops)
-        purities[boundary_i] = res
-    return full_purity, purities
-full_purity, purities = exact_purity(4, 4, 0.0)
-b = 1
+    return full_purity
 
 
-run_estimations = True
+run_estimations = True 
 if run_estimations:
     w = 4
     h = 4
-    n = 2
+    n = 2 
     M = 1000
     d = 4
-    gs = [0.1 * G for G in range(11)]
+    gs = [float(sys.argv[1])] # [0.1 * G for G in range(11)]
     num_of_boundary_options = 24 # 2**(2 * (w + h -1))
     colors = ['#0000FF', '#9D02D7', '#EA5F94', '#FA8775', '#FFB14E', '#FFD700', '#ff6f3c', '#FFD700', '#2f0056', '#930043']
     estimate_func = pe.applyLocalOperators
-    for gi in range(1, len(gs)):
+    for gi in range(len(gs)):
         g = gs[gi]
         dirname = 'results/gauge/toric_g_' + str(g)
         try:
@@ -417,9 +421,38 @@ if run_estimations:
                                       [tn.Node(np.eye(4)) for i in range(w * h)])
         leftRow = bops.multNode(leftRow, 1 / norm ** (2 / w))
 
-        for bi in range(num_of_boundary_options):
+        for bi in [int(sys.argv[2])]:
             list_of_sectors = get_list_of_sectors(w, h, bi)
             ru.renyiEntropy(n, w, h, M, estimate_func, [cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h],
-                              dirname + '/gauge_rep_' + str(1) + '_g_' + str(g) + '_b_' + str(bi),
+                              dirname + '/gauge_rep_' + sys.argv[3] + '_g_' + str(g) + '_b_' + str(bi),
                               get_ops_func=get_random_operators,
                               get_ops_arguments=[w, h, n, list_of_sectors])
+
+plot_results = False
+if plot_results:
+    bs = [108837, 0, 5, 8, 23, 255]
+    gs = [np.round(0.1 * G, 8) for G in range(3, 11)]
+    w = 4
+    h = 4
+    n = 2
+    for bi in range(len(bs)):
+        b = bs[bi]
+        p2s = np.zeros(len(gs))
+        vars = np.zeros(len(gs))
+        for gi in range(len(gs)):
+            g = gs[gi]
+            with open('results/gauge/organized_toric_g_' + str(g) + '_b_' + str(b) + '_2_32', 'rb') as f:
+                curr = np.array(pickle.load(f))
+                curr = curr * (2**((w - 1) * (h - 1)) / 2**(2 * w * h))**n
+                p2s[gi] = np.average(curr)
+                vars[gi] = np.sum([np.abs(curr[i] - p2s[gi])**2 for i in range(len(curr))]) / (len(curr) - 1)
+        plt.plot(gs, p2s)
+    full_p2s = np.zeros(len(gs))
+    # for gi in range(len(gs)):
+    #     g = gs[gi]
+    #     f = exact_purity(w, h, g)
+    #     full_p2s[gi] = f
+    #     print(g)
+    plt.plot(gs, full_p2s)
+    plt.legend([str(b) for b in bs] + ['full'])
+    plt.show()
