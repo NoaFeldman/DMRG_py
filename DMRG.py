@@ -162,19 +162,6 @@ def getHLR(psi, l, H, dir, HLRold):
             return HExpValMid(opSum1, openOp)
 
 
-# k is the working site
-def lanczos(HL, HR, H, k, psi, psiCompare):
-    [T, base] = getTridiagonal(HL, HR, H, k, psi, psiCompare)
-    [Es, Vs] = np.linalg.eigh(T)
-    minIndex = np.argmin(Es)
-    E0 = Es[minIndex]
-    M = None
-    for i in range(len(Es)):
-        M = bops.addNodes(M, bops.multNode(base[i], Vs[i][minIndex]))
-
-    M = bops.multNode(M, 1/bops.getNodeNorm(M))
-    return [M, E0]
-
 def getIdentity(psi, k, dir):
     psil = bops.copyState([psi[k]])[0]
     psilCopy = bops.copyState([psi[k]], conj=True)[0]
@@ -186,63 +173,6 @@ def getIdentity(psi, k, dir):
         for j in range(len(result[0])):
             result[i][j] = round(result[i][j], 2)
     return result
-
-
-def getTridiagonal(HL, HR, H, k, psi, psiCompare=None):
-    accuracy = 1e-17 # 1e-12
-
-    v = bops.multiContraction(psi[k], psi[k + 1], '2', '0')
-    # Small innaccuracies ruin everything!
-    v.set_tensor(v.get_tensor() / bops.getNodeNorm(v))
-
-    psiCopy = bops.copyState(psi)
-
-    basis = []
-    basis.append(bops.copyState([v])[0])
-    Hv = applyHToM(HL, HR, H, v, k)
-    alpha = bops.multiContraction(v, Hv, '0123', '0123*').get_tensor()
-
-    if psiCompare is not None:
-        copyV = bops.copyState([v])[0]
-        psiCopy = bops.assignNewSiteTensors(psiCopy, k, copyV, '>>')[0]
-    w = bops.addNodes(Hv, bops.multNode(v, -alpha))
-    beta = bops.getNodeNorm(w)
-    # Start with T as an array and turn into tridiagonal matrix at the end.
-    Tarr = [[0, 0, 0]]
-    Tarr[0][1] = alpha
-    counter = 0
-    formBeta = 2 * beta # This is just some value to init formBeta > beta.
-    while (beta > accuracy) and (counter <= 50) and (beta < formBeta):
-        Tarr[counter][2] = beta
-        Tarr.append([0, 0, 0])
-        Tarr[counter + 1][0] = beta
-        counter += 1
-
-        v = bops.multNode(w, 1 / beta)
-        basis.append(bops.copyState([v])[0])
-
-        if psiCompare is not None:
-            copyV = bops.copyState([v])[0]
-            psiCopy = bops.assignNewSiteTensors(psiCopy, k, copyV, '>>')[0]
-        Hv = applyHToM(HL, HR, H, v, k)
-
-        alpha = bops.multiContraction(v, Hv, '0123', '0123*').get_tensor()
-        Tarr[counter][1] = alpha
-        w = bops.addNodes(bops.addNodes(Hv, bops.multNode(v, -alpha)), \
-                          bops.multNode(bops.copyState([basis[counter - 1]])[0], -beta), cleanOr2=True)
-        formBeta = beta
-        beta = bops.getNodeNorm(w)
-    T = np.zeros((len(Tarr), len(Tarr)), dtype=complex)
-    T[0][0] = Tarr[0][1]
-    if len(Tarr) > 1:
-        T[0][1] = Tarr[0][2]
-    for i in range(1, len(Tarr)-1):
-        T[i][i-1] = Tarr[i][0]
-        T[i][i] = Tarr[i][1]
-        T[i][i+1] = Tarr[i][2]
-    T[len(Tarr)-1][len(Tarr)-2] = Tarr[len(Tarr)-1][0]
-    T[len(Tarr) - 1][len(Tarr) - 1] = Tarr[len(Tarr) - 1][1]
-    return [T, basis]
 
 
 def applyHToM(HL, HR, H, M, k):
@@ -276,6 +206,96 @@ def applyHToM(HL, HR, H, M, k):
     Hv = bops.addNodes(Hv, HK1K2)
 
     return Hv
+
+
+# k is the working site
+def lanczos(HL, HR, H, k, psi, psiCompare=None, apply_function=applyHToM, opt='ground_state', dt=1e-2):
+    [T, base] = getTridiagonal(HL, HR, H, k, psi, psiCompare, apply_function=apply_function)
+    [Es, Vs] = np.linalg.eigh(T)
+    M = None
+
+    h = bops.permute(
+        bops.contract(bops.contract(bops.contract(HL[k], H[k], '1', '2'), H[k + 1], '4', '2'), HR[k + 1], '6', '1'),
+        [0, 2, 4, 6, 1, 3, 5, 7]).tensor.reshape([16, 16])
+    v = bops.contract(psi[k], psi[k+1], '2', '0').tensor.reshape(16)
+    hv = np.matmul(h, v)
+    for ei in range(len(Es)):
+        for vi in range(len(base)):
+            M = bops.addNodes(M, bops.multNode(base[vi], Vs[vi, ei] * Es[ei]))
+    b = 1
+
+
+    if opt == 'ground_state':
+        minIndex = np.argmin(Es)
+        E0 = Es[minIndex]
+        for i in range(len(Es)):
+            M = bops.addNodes(M, bops.multNode(base[i], Vs[i][minIndex]))
+    elif opt == 'time_evolve':
+        E0 = min(Es)
+        for vi in range(len(base)):
+            curr_M = None
+            for ei in range(len(Es)):
+                curr_M = bops.addNodes(curr_M, bops.multNode(base[ei], Vs[ei][vi]))
+            M = bops.addNodes(M, bops.multNode(curr_M, np.exp(-1j * dt * Es[vi])))
+    M = bops.multNode(M, 1/bops.getNodeNorm(M))
+    return [M, E0]
+
+
+def getTridiagonal(HL, HR, H, k, psi, psiCompare=None, apply_function=applyHToM):
+    accuracy = 1e-12 # 1e-17
+
+    v = bops.multiContraction(psi[k], psi[k + 1], '2', '0')
+    # Small innaccuracies ruin everything!
+    v.set_tensor(v.get_tensor() / bops.getNodeNorm(v))
+
+    psiCopy = bops.copyState(psi)
+
+    basis = []
+    basis.append(bops.copyState([v])[0])
+    Hv = apply_function(HL, HR, H, v, k)
+    alpha = bops.multiContraction(v, Hv, '0123', '0123*').get_tensor()
+
+    if psiCompare is not None:
+        copyV = bops.copyState([v])[0]
+        psiCopy = bops.assignNewSiteTensors(psiCopy, k, copyV, '>>')[0]
+    w = bops.addNodes(Hv, bops.multNode(v, -alpha))
+    beta = bops.getNodeNorm(w)
+    # Start with T as an array and turn into tridiagonal matrix at the end.
+    Tarr = [[0, 0, 0]]
+    Tarr[0][1] = alpha
+    counter = 0
+    formBeta = 2 * beta # This is just some value to init formBeta > beta.
+    while (beta > accuracy) and (counter <= 50) and (beta < formBeta):
+        Tarr[counter][2] = beta
+        Tarr.append([0, 0, 0])
+        Tarr[counter + 1][0] = beta
+        counter += 1
+
+        v = bops.multNode(w, 1 / beta)
+        basis.append(bops.copyState([v])[0])
+
+        if psiCompare is not None:
+            copyV = bops.copyState([v])[0]
+            psiCopy = bops.assignNewSiteTensors(psiCopy, k, copyV, '>>')[0]
+        Hv = apply_function(HL, HR, H, v, k)
+
+        alpha = bops.multiContraction(v, Hv, '0123', '0123*').get_tensor()
+        Tarr[counter][1] = alpha
+        w = bops.addNodes(bops.addNodes(Hv, bops.multNode(v, -alpha)), \
+                          bops.multNode(bops.copyState([basis[counter - 1]])[0], -beta), cleanOr2=True)
+        formBeta = beta
+        beta = bops.getNodeNorm(w)
+    T = np.zeros((len(Tarr), len(Tarr)), dtype=complex)
+    T[0][0] = Tarr[0][1]
+    if len(Tarr) > 1:
+        T[0][1] = Tarr[0][2]
+    for i in range(1, len(Tarr)-1):
+        T[i][i-1] = Tarr[i][0]
+        T[i][i] = Tarr[i][1]
+        T[i][i+1] = Tarr[i][2]
+    T[len(Tarr)-1][len(Tarr)-2] = Tarr[len(Tarr)-1][0]
+    T[len(Tarr) - 1][len(Tarr) - 1] = Tarr[len(Tarr) - 1][1]
+    return [T, basis]
 
 
 def dmrgStep(HL, HR, H, psi, k, dir, psiCompare=None, opts=None, maxBondDim=128):
