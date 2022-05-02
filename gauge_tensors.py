@@ -408,12 +408,12 @@ if run_estimations:
     estimate_func = pe.applyLocalOperators
     for gi in range(len(gs)):
         g = gs[gi]
-        dirname = 'results/gauge/toric_g_' + str(g)
+        dirname = sys.argv[4] + '/gauge/toric_g_' + str(g)
         try:
             os.mkdir(dirname)
         except FileExistsError:
             pass
-        with open('results/toricBoundaries_gauge_' + str(np.round(g, 8)), 'rb') as f:
+        with open(sys.argv[4] + '/toricBoundaries_gauge_' + str(np.round(g, 8)), 'rb') as f:
             [upRow, downRow, leftRow, rightRow, openA, openB, A, B] = pickle.load(f)
         [cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>')
         [cDown, dDown, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>')
