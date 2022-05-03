@@ -487,17 +487,13 @@ if plot_2_by_2:
 plot_4_by_4 = True
 if plot_4_by_4:
     import matplotlib.pyplot as plt
+
+    gs = [np.round(0.1 * G, 8) for G in range(11)]
     fig, axs = plt.subplots(1, 5)
     w = 4
     h = 4
-    full_p2s = np.zeros(len(gs))
-    # for gi in range(len(gs)):
-    #     g = gs[gi]
-    #     f = exact_purity(w, h, g)
-    #     full_p2s[gi] = f
-    #     print(g)
-    # with open('results/gauge/full_p2s', 'wb') as f:
-    #     pickle.dump(full_p2s, f)
+    with open('results/gauge/full_p2s_4_by_4', 'rb') as f:
+        full_p2s = pickle.load(f)
     axs[0].plot(gs, full_p2s)
     axs[0].set_ylabel(r'$p_2$')
     boundary_sections = 2 * (w + h - 1)
@@ -505,7 +501,6 @@ if plot_4_by_4:
     bs_single_plus = [2**boundary_sections - 1 - b for b in bs_single_minus]
     bs_all_plus = [2**boundary_sections - 1]
     bs_halves = [5547, 10837, 255]
-    gs = [np.round(0.1 * G, 8) for G in range(11)]
     n = 2
     all_bs = [bs_single_minus, bs_single_plus, bs_all_plus, bs_halves]
     for bsi in range(len(all_bs)):
@@ -531,7 +526,26 @@ if plot_4_by_4:
         axs[bsi + 1].set_ylabel(r'$p_2(q)/p_2$')
     plt.show()
 
+w = 4
+h = 4
 gs = [np.round(0.1 * G, 8) for G in range(3, 11)]
+boundary_sections = 2 * (w + h - 1)
+bs_single_minus = [0, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192]
+bs_single_plus = [2 ** boundary_sections - 1 - b for b in bs_single_minus]
+bs_all_plus = [2 ** boundary_sections - 1]
+bs_halves = [5547, 10837, 255]
+all_bs = [bs_single_minus, bs_single_plus, bs_all_plus, bs_halves]
+for bsi in range(len(all_bs)):
+    bs = all_bs[bsi]
+    for bi in range(len(bs)):
+        b = bs[bi]
+        p1s = np.zeros(len(gs))
+        for gi in range(len(gs)):
+            g = gs[gi]
+            p1s[gi] = exact_probability(w, h, g, bi)
+    with open('results/gauge/four_by_four_p1_b_' + str(bi), 'wb') as f:
+        pickle.dump(p1s, f)
+
 for gi in range(len(gs)):
     g = gs[gi]
     f = exact_purity(w, h, g)
