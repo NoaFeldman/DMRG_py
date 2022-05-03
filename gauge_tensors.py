@@ -418,7 +418,7 @@ if run_estimations:
 
 
 colors = [ 'black', '#0000FF', '#9D02D7', '#EA5F94', '#FA8775', '#FFB14E', '#FFD700',
-           '#ff6f3c', '#2f0056', '#930043', '#026645', '#23C26F', '#77C4A8', '#004753']
+           '#ff6f3c', '#2f0056', '#930043', '#026645', '#23C26F', '#77C4A8', '#004753', 'green']
 gs = [np.round(0.1 * G, 8) for G in range(11)]
 plot_2_by_2 = True
 
@@ -426,7 +426,7 @@ def boundary_binary_string(i, N):
     curr = bin(i).split('b')[1]
     curr = '0' * (N - len(curr)) + curr
     last = np.prod([int(c) * 2 - 1 for c in curr])
-    curr += str(int(last + 1 / 2))
+    curr = str(int(last + 1 / 2)) + curr
     return curr
 
 if plot_2_by_2:
@@ -452,7 +452,7 @@ if plot_2_by_2:
     fulls = [sum([p2s_all[bi][gi] for bi in range(len(bs))]) for gi in range(len(gs))]
     axs[0].plot(gs, fulls)
     axs[0].set_ylabel(r'$p_2$')
-    singles = [0] + [2**i for i in range(6)]
+    singles = [2**i for i in range(6)] + [0]
     for si in range(len(singles)):
         # axs[1].plot(gs, p2s_all[singles[si]])
         axs[1].plot(gs, p1s_all[singles[si]], color=colors[si])
@@ -517,9 +517,8 @@ if plot_4_by_4:
                     curr = curr * (2**((w - 1) * (h - 1)) / 2**(2 * w * h))**n
                     p2s[gi] = np.average(curr)
                     vars[gi] = np.sum([np.abs(curr[i] - p2s[gi])**2 for i in range(len(curr))]) / (len(curr) - 1)
-                    p1s[gi] = exact_probability(w, h, g, bi)
-            axs[bsi + 1].plot(gs, p2s / full_p2s, '--', color=colors[bi], label='_nolegend_')
-            axs[bsi + 1].plot(gs, p1s, color=colors[bi])
+            axs[bsi + 1].plot(gs, p2s / full_p2s, '--', color=colors[bi])
+            # axs[bsi + 1].plot(gs, p1s, color=colors[bi], label='_nolegend_')
             with open('results/gauge/four_by_four_p1_b_' + str(bi), 'wb') as f:
                 pickle.dump(p1s, f)
         axs[bsi + 1].legend([boundary_binary_string(b, boundary_sections) for b in bs])
