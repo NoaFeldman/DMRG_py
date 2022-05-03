@@ -76,6 +76,10 @@ def toric_code(g=0.0):
     mat = np.round(np.real(M.tensor.transpose([0, 2, 4, 6, 1, 3, 5, 7]). reshape([4**4, 4**4]) / 0.03125), 10)
     b = 1
 
+large_gs = [2.0, 3.0, 4.0]
+for g in large_gs:
+    toric_code(g)
+
 # w and h are the dimensions of the system *tensor-wise* and not site-wise (when each tensor is two sites).
 # list_of_sectors is a list of lists, from left to write and top to bottom.
 # For a w*h system, the first w lists are of length 1+h (including edges).
@@ -189,6 +193,63 @@ def get_explicit_block(w, h, g, boundary_identifier=0):
     res /= 2**(2*w*h)
     return res
 
+
+colors = ['#0000FF', '#9D02D7', '#EA5F94', '#FA8775', '#FFB14E', '#FFD700']
+gs = [np.round(0.1 * G, 8) for G in range(11)]
+plot_2_by_2 = False
+def binary_string(i, N):
+    curr = bin(i).split('b')[1]
+    return '0' * (N - len(curr)) + curr
+if plot_2_by_2:
+    bs = np.array(range(2**6))
+    import matplotlib.pyplot as plt
+    p2s_all = []
+    p1s_all = []
+    for b in bs:
+        p2s = np.zeros(len(gs))
+        p1s = np.zeros(len(gs))
+        for gi in range(len(gs)):
+            block = get_explicit_block(2, 2, gs[gi], boundary_identifier=b)
+            p2s[gi] = np.trace(np.matmul(block, block))
+            p1s[gi] = np.trace(block)
+        p2s_all.append(p2s)
+        p1s_all.append(p1s)
+    fig, axs = plt.subplots(5, 1)
+    fulls = [sum([p2s_all[bi][gi] for bi in range(len(bs))]) for gi in range(len(gs))]
+    axs[0].plot(gs, fulls)
+    axs[0].set_ylabel(r'$p_2$')
+    singles = [2**i for i in range(6)]
+    for si in range(len(singles)):
+        # axs[1].plot(gs, p2s_all[singles[si]])
+        axs[1].plot(gs, p1s_all[singles[si]], color=colors[si])
+        axs[1].plot(gs, p2s_all[singles[si]] / fulls, '--', color=colors[si], label='_nolegend_')
+    axs[1].set_ylabel(r'$p_2(q)/p_2$')
+    axs[1].legend([binary_string(singles[si], 6) for si in range(len(singles))])
+    singles = [(63 ^ 2**i) for i in range(6)]
+    for si in range(len(singles)):
+        axs[2].plot(gs, p1s_all[singles[si]], color=colors[si])
+        axs[2].plot(gs, p2s_all[singles[si]] / fulls, '--', color=colors[si], label='_nolegend_')
+        # axs[2].plot(gs, p2s_all[singles[si]])
+    axs[2].set_ylabel(r'$p_2(q)/p_2$')
+    axs[2].legend([binary_string(singles[si], 6) for si in range(len(singles))])
+    alls = [0, 2**6 - 1]
+    for ai in range(len(alls)):
+        axs[3].plot(gs, p1s_all[singles[ai]], color=colors[ai])
+        axs[3].plot(gs, p2s_all[singles[ai]] / fulls, '--', color=colors[ai], label='_nolegend_')
+        # axs[3].plot(gs, p2s_all[alls[ai]])
+    axs[3].set_ylabel(r'$p_2(q)/p_2$')
+    axs[3].legend([binary_string(alls[ai], 6) for ai in range(len(alls))])
+    halves = [21, 42, 1+2+4]
+    for hi in range(len(halves)):
+        axs[4].plot(gs, p1s_all[singles[hi]], color=colors[hi])
+        axs[4].plot(gs, p2s_all[singles[hi]] / fulls, '--', color=colors[hi], label='_nolegend_')
+        # axs[4].plot(gs, p2s_all[halves[hi]])
+    axs[4].set_ylabel(r'$p_2(q)/p_2$')
+    axs[4].legend([binary_string(halves[hi], 6) for hi in range(len(halves))])
+    plt.xlabel('g')
+    plt.show()
+
+b = 1
 
 def get_Z_plaquette_projector():
     #
@@ -340,7 +401,6 @@ def exact_probability(w, h, g, d=4):
             ops = get_random_operators(w, h, 1, list_of_sectors, [bulk_ints])
             p += \
                 pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, h, w, [op / 4 for op in ops[0]])
-        print([boundary_i, p])
         try:
             with open('results/gauge/toric_g_0.1/gauge_rep_3_g_0.1_b_' + str(boundary_i) + '_n_1_w_4_h_4_M_1000_m_999', 'rb') as f:
                 curr = pickle.load(f)
@@ -349,9 +409,12 @@ def exact_probability(w, h, g, d=4):
             pass
         results[boundary_i] = p
     return results
-# ps = exact_probability(4, 4, 0.1)
-# print(sum(ps))
-
+ps = np.zeros((2**14, len(gs)))
+for gi in range(len(gs)):
+    ps[:, gi] = exact_probability(4, 4, gs[gi])
+    print('sum(ps) = ' + str(sum(ps[:, gi])))
+with open('results/gauge/toric_ps', 'wb') as f:
+    pickle.dump(ps, f)
 
 def shrink_boundaries(upRow, downRow, leftRow, rightRow, max_bond_dim):
     M = bops.contract(upRow, rightRow, '3', '0')
@@ -395,7 +458,7 @@ def exact_purity(w, h, g, d=4):
     return full_purity
 
 
-run_estimations = True 
+run_estimations = False
 if run_estimations:
     w = 4
     h = 4
@@ -428,9 +491,10 @@ if run_estimations:
                               get_ops_func=get_random_operators,
                               get_ops_arguments=[w, h, n, list_of_sectors])
 
-plot_results = False
+plot_results = True
 if plot_results:
-    bs = [108837, 0, 5, 8, 23, 255]
+    fig, axs = plt.subplots(1, 2)
+    bs = [10837, 16383, 0, 2, 4, 4096, 255]
     gs = [np.round(0.1 * G, 8) for G in range(3, 11)]
     w = 4
     h = 4
@@ -446,13 +510,13 @@ if plot_results:
                 curr = curr * (2**((w - 1) * (h - 1)) / 2**(2 * w * h))**n
                 p2s[gi] = np.average(curr)
                 vars[gi] = np.sum([np.abs(curr[i] - p2s[gi])**2 for i in range(len(curr))]) / (len(curr) - 1)
-        plt.plot(gs, p2s)
+        axs[0].plot(gs, p2s)
     full_p2s = np.zeros(len(gs))
-    # for gi in range(len(gs)):
-    #     g = gs[gi]
-    #     f = exact_purity(w, h, g)
-    #     full_p2s[gi] = f
-    #     print(g)
-    plt.plot(gs, full_p2s)
+    for gi in range(len(gs)):
+        g = gs[gi]
+        f = exact_purity(w, h, g)
+        full_p2s[gi] = f
+        print(g)
+    axs[1].plot(gs, full_p2s)
     plt.legend([str(b) for b in bs] + ['full'])
     plt.show()
