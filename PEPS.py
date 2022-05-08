@@ -1,7 +1,6 @@
 import numpy as np
 import basicOperations as bops
 import tensornetwork as tn
-import matplotlib.pyplot as plt
 import pepsExpect as pe
 
 
