@@ -9,6 +9,27 @@ from typing import List
 import scipy.linalg as linalg
 
 
+def arnoldi(HL, HR, H, psi, k, max_h_size=100):
+    max_size = HL[k].tensor.shape[0] * H[k].tensor.shape[0] * H[k + 1].tensor.shape[0] * HR[k+1].tensor.shape[0]
+    if max_size < max_h_size:
+        max_h_size = max_size
+    accuracy = 1e-12
+    result = np.zeros((max_h_size, max_h_size), dtype=complex)
+    v = bops.contract(psi[k], psi[k+1], '2', '0')
+    basis = [bops.copyState([v])[0]]
+    size = max_h_size
+    for j in range(max_h_size - 1):
+        v = applyHToM(HL, HR, H, v, k)
+        for ri in range(j + 1):
+            result[ri, j] = bops.contract(basis[ri], v, '0123*', '0123').tensor * 1
+            v.set_tensor(v.tensor - result[ri, j] * basis[ri].tensor)
+        result[j + 1, j] = bops.getNodeNorm(v)
+        basis.append(bops.multNode(bops.copyState([v])[0], 1 / result[j + 1, j]))
+        if result[j + 1, j] < accuracy:
+            size = j + 2
+            break
+    return result[:size, :size], basis
+
 def applyHToM(HL, HR, H, M, k):
     # return bops.contract(bops.contract(bops.contract(bops.contract(
     #     HL[k], M, '0', '0'), H[k], '02', '20'), H[k + 1], '41', '20'), HR[k+1], '14', '01')
@@ -19,7 +40,7 @@ def applyHToM(HL, HR, H, M, k):
 # k is OC, pair is [k, k+1]
 def tdvp_step(psi: List[tn.Node], H: List[tn.Node], k: int,
               projectors_left: List[tn.Node], projectors_right: List[tn.Node], dir: str, dt, max_bond_dim):
-    [M, E0] = dmrg.lanczos(projectors_left, projectors_right, H, k, psi, apply_function=applyHToM, opt='time_evolve', dt=dt)
+    T, basis = arnoldi(projectors_left, projectors_right, H, psi, k)
     # M = bops.contract(psi[k], psi[k+1], '2', '0')
     # H_effective = bops.permute(bops.contract(bops.contract(bops.contract(
     #     projectors_left[k], H[k], '1', '2'), H[k+1], '4', '2'), projectors_right[k+1], '6', '1'),
