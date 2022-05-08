@@ -13,21 +13,21 @@ def arnoldi(HL, HR, H, psi, k, max_h_size=100):
     max_size = HL[k].tensor.shape[0] * H[k].tensor.shape[0] * H[k + 1].tensor.shape[0] * HR[k+1].tensor.shape[0]
     if max_size < max_h_size:
         max_h_size = max_size
-    accuracy = 1e-12
+    accuracy = 1e-9
     result = np.zeros((max_h_size, max_h_size), dtype=complex)
     v = bops.contract(psi[k], psi[k+1], '2', '0')
     basis = [bops.copyState([v])[0]]
     size = max_h_size
     for j in range(max_h_size - 1):
-        v = applyHToM(HL, HR, H, v, k)
+        v = applyHToM(HL, HR, H, basis[j], k)
         for ri in range(j + 1):
             result[ri, j] = bops.contract(basis[ri], v, '0123*', '0123').tensor * 1
             v.set_tensor(v.tensor - result[ri, j] * basis[ri].tensor)
         result[j + 1, j] = bops.getNodeNorm(v)
-        basis.append(bops.multNode(bops.copyState([v])[0], 1 / result[j + 1, j]))
         if result[j + 1, j] < accuracy:
-            size = j + 2
+            size = j + 1
             break
+        basis.append(bops.multNode(bops.copyState([v])[0], 1 / result[j + 1, j]))
     return result[:size, :size], basis
 
 def applyHToM(HL, HR, H, M, k):
@@ -37,24 +37,51 @@ def applyHToM(HL, HR, H, M, k):
         HL[k], M, '2', '0'), H[k], '12', '21'), H[k+1], '41', '21'), HR[k+1], '14', '21')
 
 
+def apply_time_evolver(arnoldi_T: np.array, arnoldi_basis: List[tn.Node], M: tn.Node, dt):
+    time_evolver = linalg.expm(-1j * dt * arnoldi_T)
+    result = np.zeros(M.tensor.shape, dtype=complex)
+    for ci in range(len(time_evolver)):
+        m_overlap = bops.contract(arnoldi_basis[ci], M, '0123*', '0123').tensor
+        for ri in range(len(time_evolver)):
+            result += time_evolver[ri, ci] * m_overlap * arnoldi_basis[ri].tensor
+    return tn.Node(result)
+
+
 # k is OC, pair is [k, k+1]
 def tdvp_step(psi: List[tn.Node], H: List[tn.Node], k: int,
-              projectors_left: List[tn.Node], projectors_right: List[tn.Node], dir: str, dt, max_bond_dim):
-    T, basis = arnoldi(projectors_left, projectors_right, H, psi, k)
-    # M = bops.contract(psi[k], psi[k+1], '2', '0')
-    # H_effective = bops.permute(bops.contract(bops.contract(bops.contract(
-    #     projectors_left[k], H[k], '1', '2'), H[k+1], '4', '2'), projectors_right[k+1], '6', '1'),
-    #     [0, 2, 4, 6, 1, 3, 5, 7])
-    # H_eff_shape = H_effective.tensor.shape
-    # forward_evolver = tn.Node(
-    #     linalg.expm(-1j * (dt / 2) * H_effective.tensor.reshape([np.prod(H_eff_shape[:4]), np.prod(H_eff_shape[4:])]))
-    #         .reshape(list(H_eff_shape)))
-    # M = bops.contract(M, forward_evolver, '0123', '0123')
+              HL: List[tn.Node], HR: List[tn.Node], dir: str, dt, max_bond_dim):
+    T, basis = arnoldi(HL, HR, H, psi, k)
+    M = bops.contract(psi[k], psi[k+1], '2', '0')
+
+    H_effective = bops.permute(bops.contract(bops.contract(bops.contract(
+        HL[k], H[k], '1', '2'), H[k+1], '4', '2'), HR[k+1], '6', '1'),
+        [0, 2, 4, 6, 1, 3, 5, 7])
+    H_eff_shape = H_effective.tensor.shape
+    forward_evolver = tn.Node(
+        linalg.expm(-1j * (dt / 2) * H_effective.tensor.reshape([np.prod(H_eff_shape[:4]), np.prod(H_eff_shape[4:])]))
+            .reshape(list(H_eff_shape)))
+    m = bops.contract(bops.contract(psi[k], psi[k+1], '2', '0'), forward_evolver, '0123', '0123')
+
+    test_t = np.zeros(T.shape, dtype=complex)
+    for i in range(len(basis)):
+        for j in range(len(basis)):
+            test_t[i, j] = bops.contract(basis[i],
+                                         bops.contract(basis[j], H_effective, '0123', '0123*'),
+                                         '0123*', '0123').tensor
+
+    t_exp_test = np.zeros(T.shape, dtype=complex)
+    time_evolver = linalg.expm(-1j * dt / 2 * T.conj())
+    for i in range(len(basis)):
+        for j in range(len(basis)):
+            t_exp_test[i, j] = bops.contract(basis[j], bops.contract(basis[i], forward_evolver,
+                                                                     '0123*', '0123'), '0123', '0123').tensor
+
+    M = apply_time_evolver(T, basis, M, dt / 2)
     [A, C, B, te] = bops.svdTruncation(M, [0, 1], [2, 3], '>*<', maxBondDim=max_bond_dim)
     if len(te) > 0: print(max(te))
     if dir == '>>':
         projectors_left[k+1] = bops.contract(bops.contract(bops.contract(
-            projectors_left[k], A, '0', '0'), H[k], '02', '20'), A, '02', '01*')
+            HL[k], A, '0', '0'), H[k], '02', '20'), A, '02', '01*')
         M = bops.contract(C, B, '1', '0')
         psi[k] = A
         M_ind = k + 1
@@ -63,7 +90,7 @@ def tdvp_step(psi: List[tn.Node], H: List[tn.Node], k: int,
             return te
     else:
         projectors_right[k] = bops.contract(bops.contract(bops.contract(
-            B, projectors_right[k+1], '2', '0'), H[k+1], '12', '03'), B, '21', '12*')
+            B, HR[k+1], '2', '0'), H[k+1], '12', '03'), B, '21', '12*')
         M = bops.contract(A, C, '2', '0')
         psi[k+1] = B
         M_ind = k
@@ -71,7 +98,7 @@ def tdvp_step(psi: List[tn.Node], H: List[tn.Node], k: int,
             psi[M_ind] = M
             return te
     H_effective = bops.permute(bops.contract(bops.contract(
-        projectors_left[M_ind], H[M_ind], '1', '2'), projectors_right[M_ind], '4', '1'), [0, 2, 4, 1, 3, 5])
+        HL[M_ind], H[M_ind], '1', '2'), HR[M_ind], '4', '1'), [0, 2, 4, 1, 3, 5])
     H_eff_shape = H_effective.tensor.shape
     backward_evolver = tn.Node(
         linalg.expm(1j * (dt/2) * H_effective.tensor.reshape([np.prod(H_eff_shape[:3]), np.prod(H_eff_shape[3:])]))\
@@ -350,4 +377,3 @@ for ti in range(timesteps):
     if ti % 50 == 0:
         with open(outdir + '/tdvp_N_' + str(N) + '_Omega_' + str(Omega) + '_nn_' + str(nn_num), 'wb') as f:
             pickle.dump([Zs, bond_dims], f)
-
