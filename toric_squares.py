@@ -58,11 +58,15 @@ def get_random_ops(n, N):
              for Ni in range(N)] for ni in range(n)]
 
 
-w = sys.argv[1]
-h = sys.argv[2]
-n = sys.argv[3]
+w = int(sys.argv[1])
+h = int(sys.argv[2])
+n = int(sys.argv[3])
 rep = sys.argv[4]
 indir = sys.argv[5]
+if len(sys.argv) > 6:
+    exclude_indicies = [int(arg) for arg in sys.argv[6:]]
+else:
+    exclude_indicies = []
 N = w * h
 with open(indir + '/toricBoundaries_squares_' + str(0.0), 'rb') as f:
     [upRow, downRow, leftRow, rightRow, openA, openB, A, B] = pickle.load(f)
@@ -72,7 +76,8 @@ norm = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w
                               [tn.Node(np.eye(16)) for i in range(w * h)])
 leftRow = bops.multNode(leftRow, 1 / norm ** (2 / w))
 
+
 M = 1000
 ru.renyiEntropy(n, w, h, M, pe.applyLocalOperators, [cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h],
-                      indir + '/toric_checkerboard/rep_' + str(rep), excludeIndices=[1, 2, 3],
+                      indir + '/toric_checkerboard/rep_' + str(rep), excludeIndices=exclude_indicies,
                 get_ops_func=get_random_ops, get_ops_arguments=[n, N])
