@@ -76,8 +76,13 @@ norm = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w
                               [tn.Node(np.eye(16)) for i in range(w * h)])
 leftRow = bops.multNode(leftRow, 1 / norm ** (2 / w))
 
+newdir = indir + '/toric_checkerboard/w_' + str(w) + '_h_' + str(h) + '_n_' + str(n) + '_excluded_' + str(exclude_indicies)
+try:
+    os.mkdir(newdir)
+except FileExistsError:
+    pass
 
 M = 1000
 ru.renyiEntropy(n, w, h, M, pe.applyLocalOperators, [cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h],
-                      indir + '/toric_checkerboard/rep_' + str(rep), excludeIndices=exclude_indicies,
+                      newdir + '/rep_' + str(rep), excludeIndices=exclude_indicies,
                 get_ops_func=get_random_ops, get_ops_arguments=[n, N])
