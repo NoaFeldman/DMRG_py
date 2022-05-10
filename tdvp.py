@@ -9,7 +9,7 @@ from typing import List
 import scipy.linalg as linalg
 
 
-def arnoldi(HL, HR, H, psi, k, max_h_size=100):
+def arnoldi(HL, HR, H, psi, k, max_h_size=1000):
     max_size = HL[k].tensor.shape[0] * H[k].tensor.shape[0] * H[k + 1].tensor.shape[0] * HR[k+1].tensor.shape[0]
     if max_size < max_h_size:
         max_h_size = max_size
@@ -23,6 +23,7 @@ def arnoldi(HL, HR, H, psi, k, max_h_size=100):
         for ri in range(j + 1):
             result[ri, j] = bops.contract(basis[ri], v, '0123*', '0123').tensor * 1
             v.set_tensor(v.tensor - result[ri, j] * basis[ri].tensor)
+            b = 1
         result[j + 1, j] = bops.getNodeNorm(v)
         if result[j + 1, j] < accuracy:
             size = j + 1
@@ -40,11 +41,11 @@ def applyHToM(HL, HR, H, M, k):
 def apply_time_evolver(arnoldi_T: np.array, arnoldi_basis: List[tn.Node], M: tn.Node, dt):
     time_evolver = linalg.expm(-1j * dt * arnoldi_T)
     result = np.zeros(M.tensor.shape, dtype=complex)
-    for ci in range(len(time_evolver)):
-        m_overlap = bops.contract(arnoldi_basis[ci], M, '0123*', '0123').tensor
-        for ri in range(len(time_evolver)):
-            result += time_evolver[ri, ci] * m_overlap * arnoldi_basis[ri].tensor
-    return tn.Node(result)
+    for ri in range(len(time_evolver)):
+        m_overlap = bops.contract(arnoldi_basis[ri], M, '0123*', '0123').tensor
+        for ci in range(len(time_evolver)):
+            result += time_evolver[ri, ci].conj() * m_overlap * arnoldi_basis[ci].tensor
+    return tn.Node(result.conj())
 
 
 # k is OC, pair is [k, k+1]
@@ -57,26 +58,43 @@ def tdvp_step(psi: List[tn.Node], H: List[tn.Node], k: int,
         HL[k], H[k], '1', '2'), H[k+1], '4', '2'), HR[k+1], '6', '1'),
         [0, 2, 4, 6, 1, 3, 5, 7])
     H_eff_shape = H_effective.tensor.shape
+    h = H_effective.tensor.reshape([np.prod(H_eff_shape[:4]), np.prod(H_eff_shape[4:])])
     forward_evolver = tn.Node(
         linalg.expm(-1j * (dt / 2) * H_effective.tensor.reshape([np.prod(H_eff_shape[:4]), np.prod(H_eff_shape[4:])]))
             .reshape(list(H_eff_shape)))
+    fe = forward_evolver.tensor.reshape([np.prod(H_eff_shape[:4]), np.prod(H_eff_shape[4:])])
+    v = M.tensor.reshape(np.prod(H_eff_shape[:4]))
+    hv = applyHToM(HL, HR, H, M, k).tensor.reshape(np.prod(H_eff_shape[:4]))
     m = bops.contract(bops.contract(psi[k], psi[k+1], '2', '0'), forward_evolver, '0123', '0123')
 
     test_t = np.zeros(T.shape, dtype=complex)
     for i in range(len(basis)):
         for j in range(len(basis)):
-            test_t[i, j] = bops.contract(basis[i],
-                                         bops.contract(basis[j], H_effective, '0123', '0123*'),
-                                         '0123*', '0123').tensor
+            test_t[i, j] = bops.contract(basis[j], bops.contract(basis[i], H_effective, '0123*', '0123'),
+                                             '0123', '0123').tensor
 
     t_exp_test = np.zeros(T.shape, dtype=complex)
     time_evolver = linalg.expm(-1j * dt / 2 * T.conj())
     for i in range(len(basis)):
         for j in range(len(basis)):
-            t_exp_test[i, j] = bops.contract(basis[j], bops.contract(basis[i], forward_evolver,
-                                                                     '0123*', '0123'), '0123', '0123').tensor
+            t_exp_test[i, j] = bops.contract(basis[j], bops.contract(basis[i], forward_evolver, '0123*', '0123'),
+                                             '0123', '0123').tensor
+    M_basis = np.zeros(len(basis), dtype=complex)
+    m_basis = np.zeros(len(basis), dtype=complex)
+    for bi in range(len(basis)):
+        M_basis[bi] = bops.contract(basis[bi], M, '0123*', '0123').tensor
+        m_basis[bi] = bops.contract(basis[bi], m, '0123*', '0123').tensor
+
+    result = np.zeros(M.tensor.shape, dtype=complex)
+    for ri in range(len(time_evolver)):
+        m_overlap = bops.contract(basis[ri], M, '0123*', '0123').tensor
+        for ci in range(len(time_evolver)):
+            result += time_evolver[ri, ci].conj() * m_overlap * basis[ci].tensor
 
     M = apply_time_evolver(T, basis, M, dt / 2)
+    print(k, dir)
+    print(np.sum(np.abs(m_basis**2)), bops.contract(m, m, '0123', '0123*').tensor)
+    print(np.sum(np.abs(M_basis**2)), bops.contract(M, M, '0123', '0123*').tensor, bops.contract(M, m, '0123', '0123*').tensor)
     [A, C, B, te] = bops.svdTruncation(M, [0, 1], [2, 3], '>*<', maxBondDim=max_bond_dim)
     if len(te) > 0: print(max(te))
     if dir == '>>':
