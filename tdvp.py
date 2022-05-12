@@ -385,9 +385,11 @@ for ti in range(timesteps):
     tdvp_sweep(psi, L, projectors_left, projectors_right, dt, 1024)
     z_expect[ti] = bops.getOverlap(psi, Zs)
     bond_dims[ti] = psi[int(len(psi)/2)].tensor.shape[0]
-    if ti % 50 == 0:
+    if ti % 10 == 0:
         with open(outdir + '/tdvp_N_' + str(N) + '_Omega_' + str(Omega) + '_nn_' + str(nn_num), 'wb') as f:
             pickle.dump([z_expect, bond_dims], f)
+        with open(outdir + '/mid_state_N_' + str(N) + '_Omega_' + str(Omega) + '_nn_' + str(nn_num), 'wb') as f:
+            pickle.dump([ti, psi])
 if outdir == 'results':
     import matplotlib.pyplot as plt
     fig, axs = plt.subplots(2, 1)
