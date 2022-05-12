@@ -389,7 +389,7 @@ for ti in range(timesteps):
         with open(outdir + '/tdvp_N_' + str(N) + '_Omega_' + str(Omega) + '_nn_' + str(nn_num), 'wb') as f:
             pickle.dump([z_expect, bond_dims], f)
         with open(outdir + '/mid_state_N_' + str(N) + '_Omega_' + str(Omega) + '_nn_' + str(nn_num), 'wb') as f:
-            pickle.dump([ti, psi])
+            pickle.dump([ti, psi], f)
 if outdir == 'results':
     import matplotlib.pyplot as plt
     fig, axs = plt.subplots(2, 1)
