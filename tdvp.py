@@ -377,13 +377,16 @@ psi = [tn.Node(np.array([1, 0, 0, 0]).reshape([1, d**2, 1])) for n in range(N)]
 projectors_left, projectors_right = get_initial_projectors(psi, L)
 dt = 1e-2
 timesteps = int(sys.argv[5])
-Zs = [tn.Node(np.array([1, 0, 0, -1]).reshape([1, d**2, 1])) for n in range(N)]
+Z = np.array([1, 0, 0, -1]).reshape([1, d**2, 1])
+I = np.eye(2).reshape([1, d**2, 1])
 z_expect = np.zeros(timesteps, dtype=complex)
 bond_dims = np.zeros(timesteps, dtype=complex)
 for ti in range(timesteps):
     print(ti)
     tdvp_sweep(psi, L, projectors_left, projectors_right, dt, 1024)
-    z_expect[ti] = bops.getOverlap(psi, Zs)
+    for si in range(N):
+        z_expect[ti] += bops.getOverlap(psi,
+                            [tn.Node(I) for i in range(si)] + [tn.Node(Z)] + [tn.Node(I) for i in range(si + 1, N)])
     bond_dims[ti] = psi[int(len(psi)/2)].tensor.shape[0]
     if ti % 10 == 0:
         with open(outdir + '/tdvp_N_' + str(N) + '_Omega_' + str(Omega) + '_nn_' + str(nn_num), 'wb') as f:
