@@ -80,7 +80,9 @@ norm = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w
 leftRow = bops.multNode(leftRow, 1 / norm ** (2 / w))
 
 newdir = indir + '/toric_checkerboard/w_' + str(w) + '_h_' + str(h) + '_n_' + str(n) \
-         + '_excluded_' + str(exclude_indicies)
+         + '_excluded_'
+for ind in exclude_indicies:
+    newdir += '_' + str(ind)
 try:
     os.mkdir(newdir)
 except FileExistsError:
