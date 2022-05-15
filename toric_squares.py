@@ -51,10 +51,13 @@ def get_boundaries(g=0.0):
     b = 1
 
 
-def get_random_ops(n, N):
-    single_site_ops = ru.getNonUnitaryRandomOps(2, n, N * 2)
-    return [[tn.Node(np.kron(single_site_ops[ni][Ni * 2].tensor, np.kron(np.eye(2),
-                    np.kron(single_site_ops[ni][Ni * 2 + 1].tensor, np.eye(2)))))
+def get_random_ops(n, N, theta=0, phi=0, random_option='full'):
+    rotating_op = np.matmul(ru.getUPhi(phi), ru.getUTheta(theta))
+    single_site_ops = ru.getNonUnitaryRandomOps(2, n, N * 2, random_option=random_option)
+    return [[tn.Node(np.kron(np.matmul(np.matmul(rotating_op, single_site_ops[ni][Ni * 2].tensor), rotating_op.T.conj()),
+                             np.kron(np.eye(2),
+                    np.kron(np.matmul(np.matmul(rotating_op, single_site_ops[ni][Ni * 2 + 1].tensor), rotating_op.T.conj()),
+                            np.eye(2)))))
              for Ni in range(N)] for ni in range(n)]
 
 
@@ -76,7 +79,8 @@ norm = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w
                               [tn.Node(np.eye(16)) for i in range(w * h)])
 leftRow = bops.multNode(leftRow, 1 / norm ** (2 / w))
 
-newdir = indir + '/toric_checkerboard/w_' + str(w) + '_h_' + str(h) + '_n_' + str(n) + '_excluded_' + str(exclude_indicies)
+newdir = indir + '/toric_checkerboard/w_' + str(w) + '_h_' + str(h) + '_n_' + str(n) \
+         + '_excluded_' + str(exclude_indicies)
 try:
     os.mkdir(newdir)
 except FileExistsError:
@@ -84,5 +88,5 @@ except FileExistsError:
 
 M = 1000
 ru.renyiEntropy(n, w, h, M, pe.applyLocalOperators, [cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h],
-                      newdir + '/rep_' + str(rep), excludeIndices=exclude_indicies,
-                get_ops_func=get_random_ops, get_ops_arguments=[n, N])
+                      newdir + '/rep_' + str(rep), d=2**4, excludeIndices=exclude_indicies,
+                get_ops_func=get_random_ops, get_ops_arguments=[n, N, 0, 0, 'full'])

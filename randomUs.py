@@ -72,7 +72,7 @@ def getP(d, s, us, estimateFunc, arguments):
     return result
 
 
-def getUTheta(theta, d):
+def getUTheta(theta, d=2):
     if d == 2:
         u = np.zeros((d, d))
         u[0, 0] = np.cos(theta)
@@ -81,7 +81,7 @@ def getUTheta(theta, d):
         u[1, 1] = np.cos(theta)
         return u
 
-def getUPhi(phi, d):
+def getUPhi(phi, d=2):
     if d == 2:
         u = np.zeros((d, d), dtype=complex)
         u[0, 0] = np.cos(phi)
@@ -91,7 +91,7 @@ def getUPhi(phi, d):
         return u
 
 
-def getUEta(eta, d):
+def getUEta(eta, d=2):
     if d == 2:
         u = np.array([[np.exp(1j * eta), 0], [0, np.exp(-1j * eta)]])
         return u
@@ -106,8 +106,8 @@ def getVecsPool(d=2, random_option='full'):
     return vecsPool
 
 
-def getNonUnitaryRandomOps(d, n, N, direction=0):
-    vecsPool = getVecsPool()
+def getNonUnitaryRandomOps(d, n, N, direction=0, random_option='full'):
+    vecsPool = getVecsPool(random_option=random_option)
     vecs = [[vecsPool[np.random.randint(len(vecsPool))] for i in range(N)] for j in range(n)]
     res = [[tn.Node(np.outer(vecs[j][i], np.conj(vecs[(j+1) % n][i]))) for i in range(N)] for j in range(n)]
     return res
@@ -120,11 +120,11 @@ def renyiEntropy(n, w, h, M, estimateFunc, arguments, filename, d=2, excludeIndi
     for m in range(M * 2**(n * N)):
         if get_ops_func is None:
             ops = getNonUnitaryRandomOps(d, n, N)
-            for ind in excludeIndices:
-                for copy in range(len(ops)):
-                    ops[copy][ind] = tn.Node(np.eye(d, dtype=complex))
         else:
             ops = wrapper(get_ops_func, get_ops_arguments)
+        for ind in excludeIndices:
+            for copy in range(len(ops)):
+                ops[copy][ind] = tn.Node(np.eye(d, dtype=complex))
         estimation = 1
         for i in range(n):
             expectation = wrapper(estimateFunc, arguments + [ops[i]])
