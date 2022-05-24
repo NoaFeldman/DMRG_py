@@ -362,6 +362,15 @@ d = 2
 outdir = sys.argv[4]
 L = get_photon_green_L(N, Omega, Gamma, k, theta, 'NN', nn_num)
 psi = [tn.Node(np.array([0, 0, 0, 1]).reshape([1, d**2, 1])) for n in range(N)]
+if N <= 6:
+    explicit_L = bops.contract(L[0], L[1], '3', '2')
+    for ni in range(2, N):
+        explicit_L = bops.contract(explicit_L, L[ni], [2 * ni + 1], '2')
+    L_mat = explicit_L.tensor.transpose(
+        [2, 0] + [3 + 2 * i for i in range(N - 1)] +
+        [1] + [4 + 2 * i for i in range(N - 1)] +
+        [2 * N + 1]).reshape([d ** (2 * N), d ** (2 * N)])
+    psi_vec = bops.getExplicitVec(psi, d**2)
 projectors_left, projectors_right = get_initial_projectors(psi, L)
 dt = 1e-2
 timesteps = int(sys.argv[5])
