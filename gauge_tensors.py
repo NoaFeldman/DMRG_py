@@ -56,7 +56,7 @@ def toric_code(g=0.0):
     B = bops.permute(bops.contract(bops.contract(bops.contract(
         base_site, op_top, '1', '1'), op_right, '1', '1'), op_bottom_left, '024', '234'), [0, 1, 3, 2, 4, 5, 6])
 
-    single_site_tension = tn.Node(np.diag([1, 1+g]))
+    single_site_tension = tn.Node(np.diag([1+g, 1]))
     A = bops.contract(bops.contract(A, single_site_tension, '5', '0'), single_site_tension, '5', '0')
     B = bops.contract(bops.contract(B, single_site_tension, '5', '0'), single_site_tension, '5', '0')
 
@@ -419,8 +419,8 @@ if run_estimations:
 
 colors = [ 'black', '#0000FF', '#9D02D7', '#EA5F94', '#FA8775', '#FFB14E', '#FFD700',
            '#ff6f3c', '#2f0056', '#930043', '#026645', '#23C26F', '#77C4A8', '#004753', 'green']
-gs = [np.round(0.1 * G, 8) for G in range(11)]
-plot_2_by_2 = True
+gs = [np.round(0.1 * G, 8) for G in range(11)] + [2.0, 3.0, 5.0, 10.0, 20.0]
+plot_2_by_2 = False
 
 def boundary_binary_string(i, N):
     curr = bin(i).split('b')[1]
@@ -429,8 +429,14 @@ def boundary_binary_string(i, N):
     curr = str(int(last + 1 / 2)) + curr
     return curr
 
+
+boundary_identifier = int(sys.argv[1])
+outdir = sys.argv[2]
+block = get_explicit_block(4, 4, 0.6, boundary_identifier=boundary_identifier)
+with open(outdir + '/gauge/full_block_4_by_4_b_0', 'wb') as f:
+    pickle.dump(block)
+
 if plot_2_by_2:
-    gs = gs + [2.0, 3.0, 4.0, 5.0, 10.0, 20.0]
     bs = np.array(range(2**6))
     import matplotlib.pyplot as plt
     # p2s_all = []
@@ -448,43 +454,44 @@ if plot_2_by_2:
     #     pickle.dump([p1s_all, p2s_all], f)
     with open('results/gauge/two_by_two', 'rb') as f:
         [p1s_all, p2s_all] = pickle.load(f)
-    fig, axs = plt.subplots(5, 1)
+    # fig, axs = plt.subplots(5, 1)
+    fig, axs = plt.subplots(2, 1)
     fulls = [sum([p2s_all[bi][gi] for bi in range(len(bs))]) for gi in range(len(gs))]
     axs[0].plot(gs, fulls)
     axs[0].set_ylabel(r'$p_2$')
-    singles = [2**i for i in range(6)] + [0]
-    for si in range(len(singles)):
-        # axs[1].plot(gs, p2s_all[singles[si]])
-        axs[1].plot(gs, p1s_all[singles[si]], color=colors[si])
-        axs[1].plot(gs, p2s_all[singles[si]] / fulls, '--', color=colors[si], label='_nolegend_')
-    axs[1].set_ylabel(r'$p_2(q)/p_2$')
-    axs[1].legend([boundary_binary_string(singles[si], 6) for si in range(len(singles))])
-    singles = [(63 ^ 2**i) for i in range(6)]
-    for si in range(len(singles)):
-        axs[2].plot(gs, p1s_all[singles[si]], color=colors[si])
-        axs[2].plot(gs, p2s_all[singles[si]] / fulls, '--', color=colors[si], label='_nolegend_')
-        # axs[2].plot(gs, p2s_all[singles[si]])
-    axs[2].set_ylabel(r'$p_2(q)/p_2$')
-    axs[2].legend([boundary_binary_string(singles[si], 6) for si in range(len(singles))])
-    alls = [2**6 - 1]
+    alls = bs # [2**6 - 1]
     for ai in range(len(alls)):
-        axs[3].plot(gs, p1s_all[singles[ai]], color=colors[ai])
-        axs[3].plot(gs, p2s_all[singles[ai]] / fulls, '--', color=colors[ai], label='_nolegend_')
+        # axs[1].plot(gs, p1s_all[alls[ai]], color=colors[ai % len(colors)])
+        axs[1].plot(gs, p2s_all[alls[ai]] / p1s_all[alls[ai]]**2, color=colors[ai % len(colors)], label='_nolegend_')
         # axs[3].plot(gs, p2s_all[alls[ai]])
-    axs[3].set_ylabel(r'$p_2(q)/p_2$')
-    axs[3].legend([boundary_binary_string(alls[ai], 6) for ai in range(len(alls))])
-    halves = [21, 42, 1+2+4]
-    for hi in range(len(halves)):
-        axs[4].plot(gs, p1s_all[singles[hi]], color=colors[hi])
-        axs[4].plot(gs, p2s_all[singles[hi]] / fulls, '--', color=colors[hi], label='_nolegend_')
-        # axs[4].plot(gs, p2s_all[halves[hi]])
-    axs[4].set_ylabel(r'$p_2(q)/p_2$')
-    axs[4].legend([boundary_binary_string(halves[hi], 6) for hi in range(len(halves))])
+    axs[1].set_ylabel(r'$p_2(q)/p_2$')
+    axs[1].legend([boundary_binary_string(alls[ai], 6) for ai in range(len(alls))])
+    # singles = [2**i for i in range(6)] + [0]
+    # for si in range(len(singles)):
+    #     # axs[1].plot(gs, p2s_all[singles[si]])
+    #     axs[1].plot(gs, p1s_all[singles[si]], color=colors[si])
+    #     axs[1].plot(gs, p2s_all[singles[si]] / fulls, '--', color=colors[si], label='_nolegend_')
+    # axs[1].set_ylabel(r'$p_2(q)/p_2$')
+    # axs[1].legend([boundary_binary_string(singles[si], 6) for si in range(len(singles))])
+    # singles = [(63 ^ 2**i) for i in range(6)]
+    # for si in range(len(singles)):
+    #     axs[2].plot(gs, p1s_all[singles[si]], color=colors[si])
+    #     axs[2].plot(gs, p2s_all[singles[si]] / fulls, '--', color=colors[si], label='_nolegend_')
+    #     # axs[2].plot(gs, p2s_all[singles[si]])
+    # axs[2].set_ylabel(r'$p_2(q)/p_2$')
+    # axs[2].legend([boundary_binary_string(singles[si], 6) for si in range(len(singles))])
+    # halves = [21, 42, 1+2+4]
+    # for hi in range(len(halves)):
+    #     axs[4].plot(gs, p1s_all[halves[hi]], color=colors[hi])
+    #     axs[4].plot(gs, p2s_all[halves[hi]] / fulls, '--', color=colors[hi], label='_nolegend_')
+    #     # axs[4].plot(gs, p2s_all[halves[hi]])
+    # axs[4].set_ylabel(r'$p_2(q)/p_2$')
+    # axs[4].legend([boundary_binary_string(halves[hi], 6) for hi in range(len(halves))])
     plt.xlabel('g')
     plt.show()
 
 
-plot_4_by_4 = True
+plot_4_by_4 = False
 if plot_4_by_4:
     import matplotlib.pyplot as plt
 
@@ -492,6 +499,11 @@ if plot_4_by_4:
     fig, axs = plt.subplots(1, 5)
     w = 4
     h = 4
+    full_p2s = np.zeros(len(gs))
+    for gi in range(len(gs)):
+        full_p2s[gi] = exact_purity(4, 4, gs[gi])
+    with open('results/gauge/full_p2s_4_by_4', 'wb') as f:
+        pickle.dump(full_p2s, f)
     with open('results/gauge/full_p2s_4_by_4', 'rb') as f:
         full_p2s = pickle.load(f)
     axs[0].plot(gs, full_p2s)
@@ -524,31 +536,3 @@ if plot_4_by_4:
         axs[bsi + 1].legend([boundary_binary_string(b, boundary_sections) for b in bs])
         axs[bsi + 1].set_ylabel(r'$p_2(q)/p_2$')
     plt.show()
-
-w = 4
-h = 4
-gs = [np.round(0.1 * G, 8) for G in range(3, 11)]
-boundary_sections = 2 * (w + h - 1)
-bs_single_minus = [0, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192]
-bs_single_plus = [2 ** boundary_sections - 1 - b for b in bs_single_minus]
-bs_all_plus = [2 ** boundary_sections - 1]
-bs_halves = [5547, 10837, 255]
-all_bs = [bs_single_minus, bs_single_plus, bs_all_plus, bs_halves]
-for bsi in range(len(all_bs)):
-    bs = all_bs[bsi]
-    for bi in range(len(bs)):
-        b = bs[bi]
-        p1s = np.zeros(len(gs))
-        for gi in range(len(gs)):
-            g = gs[gi]
-            p1s[gi] = exact_probability(w, h, g, bi)
-    with open('results/gauge/four_by_four_p1_b_' + str(bi), 'wb') as f:
-        pickle.dump(p1s, f)
-
-for gi in range(len(gs)):
-    g = gs[gi]
-    f = exact_purity(w, h, g)
-    full_p2s[gi] = f
-    print(g)
-with open('results/gauge/full_p2s', 'wb') as f:
-    pickle.dump(full_p2s, f)
