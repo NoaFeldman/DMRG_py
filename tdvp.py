@@ -52,7 +52,8 @@ def applyHToM(HL, HR, H, M, k, num_of_sites):
 
 
 def apply_time_evolver(arnoldi_T: np.array, arnoldi_basis: List[tn.Node], M: tn.Node, dt, num_of_sites=2):
-    time_evolver = linalg.expm(-1j * dt * arnoldi_T)
+    # time_evolver = linalg.expm(-1j * dt * arnoldi_T)
+    time_evolver = linalg.expm(dt * arnoldi_T)
     result = np.zeros(M.tensor.shape, dtype=complex)
     for ri in range(len(time_evolver)):
         if num_of_sites == 2:
@@ -71,9 +72,7 @@ def tdvp_step(psi: List[tn.Node], H: List[tn.Node], k: int,
 
     M = apply_time_evolver(T, basis, M, dt / 2)
     [A, C, B, te] = bops.svdTruncation(M, [0, 1], [2, 3], '>*<', maxBondDim=max_bond_dim)
-    print(C.tensor.shape)
-    if C.tensor.shape[0] == 128:
-        b = 1
+    # print(C.tensor.shape)
     if len(te) > 0: print(max(te))
     if dir == '>>':
         projectors_left[k+1] = bops.contract(bops.contract(bops.contract(
@@ -268,10 +267,10 @@ def get_photon_green_L(n, Omega, Gamma, k, theta, opt='NN', nearest_neighbors_nu
         Delta, gamma = get_gnm(ni + 1, Gamma, k, theta)
         Deltas[ni] = Delta
         gammas[ni] = gamma
-    pairs = [[[(-1j * Deltas[i] - gammas[i] / 2) * A, B],
-              [(1j * Deltas[i] - gammas[i] / 2) * C, D],
-              [(-1j * Deltas[i] - gammas[i] / 2) * B + gammas[i] * C, A],
-              [(1j * Deltas[i] - gammas[i] / 2) * D + gammas[i] * A, C]] for i in range(nearest_neighbors_num)]
+    pairs = [[[(-1j * Deltas[i] - gammas[i] / 2) * A + gammas[i] * D, B],
+              [(1j * Deltas[i] - gammas[i] / 2) * C + gammas[i] * B, D],
+              [(-1j * Deltas[i] - gammas[i] / 2) * B, A],
+              [(1j * Deltas[i] - gammas[i] / 2) * D, C]] for i in range(nearest_neighbors_num)]
     if opt == 'NN':
         left_tensor = np.zeros((d**2, d**2, 1, 2 + nearest_neighbors_num * 4), dtype=complex)
         left_tensor[:, :, 0, 0] = S
@@ -323,7 +322,7 @@ if test:
     N = 6
     d = 2
     L = get_photon_green_L(N, 1, 1, 2 * np.pi / 10, 0, opt='NN', nearest_neighbors_num=2)
-    psi0 = [tn.Node(np.array([1, 0, 0, 0]).reshape([1, d**2, 1])) for n in range(N)]
+    psi0 = [tn.Node(np.array([0, 0, 0, 1]).reshape([1, d**2, 1])) for n in range(N)]
     psi = bops.copyState(psi0)
     projectors_left, projectors_right = get_initial_projectors(psi, L)
     rho_explicit_0 = np.zeros(d**(2*N), dtype=complex)
@@ -360,20 +359,61 @@ Gamma = 1
 Omega = float(sys.argv[3]) / Gamma 
 d = 2
 outdir = sys.argv[4]
-L = get_photon_green_L(N, Omega, Gamma, k, theta, 'NN', nn_num)
-psi = [tn.Node(np.array([0, 0, 0, 1]).reshape([1, d**2, 1])) for n in range(N)]
-if N <= 6:
-    explicit_L = bops.contract(L[0], L[1], '3', '2')
-    for ni in range(2, N):
-        explicit_L = bops.contract(explicit_L, L[ni], [2 * ni + 1], '2')
-    L_mat = explicit_L.tensor.transpose(
-        [2, 0] + [3 + 2 * i for i in range(N - 1)] +
-        [1] + [4 + 2 * i for i in range(N - 1)] +
-        [2 * N + 1]).reshape([d ** (2 * N), d ** (2 * N)])
-    psi_vec = bops.getExplicitVec(psi, d**2)
-projectors_left, projectors_right = get_initial_projectors(psi, L)
 dt = 1e-2
 timesteps = int(sys.argv[5])
+L = get_photon_green_L(N, Omega, Gamma, k, theta, 'NN', nn_num)
+psi = [tn.Node(np.array([1, 0, 0, 0]).reshape([1, d**2, 1])) for n in range(N)]
+if N <= 6:
+    Deltas = np.zeros(nn_num)
+    gammas = np.zeros(nn_num)
+    for ni in range(nn_num):
+        Delta, gamma = get_gnm(ni + 1, Gamma, k, theta)
+        Deltas[ni] = Delta
+        gammas[ni] = gamma
+    L_exact = np.zeros((d**(2*N), d**(2*N)), dtype=complex)
+    sigmas = []
+    for i in range(N):
+        sigmas.append(np.kron(np.eye(d**(i)), np.kron(np.array([[0, 0], [1, 0]]), np.eye(d**(N - i - 1)))))
+    for n in range(N):
+        for m in range(N):
+            if np.abs(m - n) <= nn_num and n != m:
+                L_exact += (-1j * Deltas[np.abs(m - n) - 1] - 0.5 * gammas[np.abs(m - n) - 1]) * \
+                           np.kron(np.eye(d**N), np.matmul(sigmas[n].T, sigmas[m]))
+                L_exact += (1j * Deltas[np.abs(m - n) - 1] - 0.5 * gammas[np.abs(m - n) - 1]) * \
+                           np.kron(np.matmul(sigmas[n].T, sigmas[m]), np.eye(d**N))
+                L_exact += gammas[np.abs(m - n) - 1] * np.kron(sigmas[n], sigmas[m])
+    explicit_L = bops.contract(L[0], L[1], '3', '2')
+    explicit_rho = bops.contract(psi[0], psi[1], '2', '0')
+    for ni in range(2, N):
+        explicit_L = bops.contract(explicit_L, L[ni], [2 * ni + 1], '2')
+        explicit_rho = bops.contract(explicit_rho, psi[ni], [ni + 1], '0')
+    # L_mat = explicit_L.tensor.reshape([d] * 4 * N).transpose(
+    #     [i * 4 for i in range(N)] + [i * 4 + 1 for i in range(N)] +
+    #     [i * 4  + 2 for i in range(N)] + [i * 4 + 3 for i in range(N)]
+    # ).reshape([d**(2 * N), d**(2 * N)])
+    L_mat = explicit_L.tensor.transpose(
+        [2] + [1] + [4 + 2 * i for i in range(N - 1)] +
+        [0] + [3 + 2 * i for i in range(N - 1)] +
+        [2 * N + 1]).reshape([d ** (2 * N), d ** (2 * N)])
+    rho_vec = bops.getExplicitVec(psi, d**2)
+    evolver = linalg.expm(-L_exact * dt)
+    # evolver = np.eye(len(L_exact)) + dt * L_exact
+    zs_expect = np.zeros(timesteps)
+    z_inds = [[i + d**N * i,
+               2 * bin(i).split('b')[1].count('1') - N]
+              for i in range(d**N)]
+    # z_inds = [[sum([int(2**j & i > 0) * (2**(2 * j) + 2**(2 * j + 1)) for j in range(N)]),
+    #            2 * bin(i).split('b')[1].count('1') - N]
+    #           for i in range(d**N)]
+    for ti in range(timesteps):
+        rho_vec = np.matmul(evolver, rho_vec)
+        print(min([rho_vec[z_inds[i][0]] for i in range(len(z_inds))]))
+        zs_expect[ti] = sum([rho_vec[z_inds[i][0]] * z_inds[i][1] for i in range(len(z_inds))])
+    import matplotlib.pyplot as plt
+    plt.plot(zs_expect)
+    plt.show()
+
+projectors_left, projectors_right = get_initial_projectors(psi, L)
 Z = np.array([1, 0, 0, -1]).reshape([1, d**2, 1])
 I = np.eye(2).reshape([1, d**2, 1])
 z_expect = np.zeros(timesteps, dtype=complex)
@@ -390,7 +430,7 @@ for ti in range(timesteps):
             pickle.dump([z_expect, bond_dims], f)
         with open(outdir + '/mid_state_N_' + str(N) + '_Omega_' + str(Omega) + '_nn_' + str(nn_num), 'wb') as f:
             pickle.dump([ti, psi], f)
-if outdir == 'results':
+if outdir[:7] == 'results':
     import matplotlib.pyplot as plt
     fig, axs = plt.subplots(2, 1)
     axs[0].plot(list(range(timesteps)), z_expect)
