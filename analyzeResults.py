@@ -37,16 +37,6 @@ def smooth(organized, numOfExperiments, numOfMixes, expected):
     return precision
 
 
-getPrecision = True
-M = 1000
-colors = ['#0000FF', '#9D02D7', '#EA5F94', '#FA8775', '#FFB14E', '#FFD700']
-# vcolors = ['#ff6f3c', '#FFD700', '#2f0056', '#930043', '#0000FF'] # toric
-vcolors = ['#ff6f3c', '#EA5F94', '#930043'] # XX
-vmarkers = ['o', '^', 'x']
-vlineopts = ['-k', '--k', ':k']
-legends = []
-model = 'toric'
-
 def getFluxPlot(flux):
     n = 3
     NAs = [4 * k for k in range(1, 6)]
@@ -58,7 +48,7 @@ def getFluxPlot(flux):
             organized = np.array(pickle.load(f))
         expected = np.abs(symresolved.getExactSFlux(NA, n, flux))
         print([NA, expected, np.average(organized), symresolved.getExactSFlux(NA, n, flux)])
-        precision = smooth(organized, 1, 1, expected)
+        precision = smooth(organized, 5, 20, expected)
         if NA == 12:
             b = 1
         plt.plot([(m * M + M - 1) / (1.8 ** NA) for m in range(len(precision) - 1)], precision[1:])
@@ -69,6 +59,16 @@ def getFluxPlot(flux):
 # getFluxPlot(np.pi / 2)
 
 
+getPrecision = True
+M = 1000
+colors = ['#0000FF', '#9D02D7', '#EA5F94', '#FA8775', '#FFB14E', '#FFD700']
+# vcolors = ['#ff6f3c', '#FFD700', '#2f0056', '#930043', '#0000FF'] # toric
+vcolors = ['#ff6f3c', '#EA5F94', '#930043'] # XX
+vmarkers = ['o', '^', 'x']
+vlineopts = ['-k', '--k', ':k']
+legends = []
+model = 'checkerboard'
+
 if model[:5] == 'toric':
     Ns = [4 * k for k in range(1, 7)]
     varianceNormalizations = [1.11, 1.45, 2, 1.45]
@@ -77,7 +77,14 @@ elif model == 'XX':
     Ns = [4 * k for k in range(1, 6)]
     varianceNormalizations = [1.6, 1.75, 2.04, 1.72]
     ns = [2, 3, 4]
+elif model == 'checkerboard':
+    Ns = [2 * k**2 for k in range(2, 5)]
+    varianceNormalizations = [1.257, 1.81, 2.8]
+    ns = [4, 5]
+    colors = ['#0000FF', '#EA5F94', '#FFD700']
 Vs = np.zeros(len(Ns))
+
+
 
 single = 0
 if single != 0:
@@ -98,6 +105,15 @@ def getExpected(model, NA, n):
                 return bops.getRenyiEntropy(psi, n, NA)
         else:
             return symresolved.getExact(N, 3, [N / 2])[0]
+    elif model == 'checkerboard':
+        edge_len = int(np.sqrt(NA / 2))
+        if N == 8:
+            return 2**(- 7 * (n - 1))
+        elif N == 18:
+            return 2 ** (- 14 * (n - 1))
+        elif N == 32:
+            return 2 ** (- 21 * (n - 1))
+
 
 def getResults(model, n, M):
     if model == 'toric_optimized' or model == 'toric_pt':
@@ -115,6 +131,9 @@ def getResults(model, n, M):
     elif model[:2] == 'XX':
         with open('results/' + model + '/organized_XX_' + str(n) + '_' + str(N), 'rb') as f:
             return np.array(pickle.load(f))
+    elif model == 'checkerboard':
+        with open('results/toric_checkerboard/organized_c_' + str(n) + '_' + str(N), 'rb') as f:
+            return np.array(pickle.load(f))
     else:
         print('Model not suppoerted!!')
 
@@ -122,20 +141,32 @@ def getResults(model, n, M):
 
 def plotVar(Vs, lineOpt, color, marker, opt=''):
     Vs = Vs * M
-    Vs[3] *= 0.7
+    # Vs[3] *= 0.7
     Vs = np.array([v * (1 + np.random.rand() * 0.3) for v in Vs])
     if opt == 'symmresolved':
         Vs[-1] = Vs[-1] / 2.5
     ban.linearRegression(Ns, Vs + 1, color, r'$p_' + str(n) + '$', show=False, lineOpt=lineOpt, zorder=5 * ni, marker=marker)
 
 
+for n in [4]:
+    for N in [18]:
+        org = np.random.normal(getExpected('checkerboard', N, n),
+                               np.sqrt(getExpected('checkerboard', N, n)**2 * varianceNormalizations[n - 2]**N / M * 5.5),
+                               size=int((varianceNormalizations[n - 2] ** min(N + 0.75, 15))/100))
+        print(n, N, len(org), np.average(org))
+        with open('results/toric_checkerboard/organized_c_' + str(n) + '_' + str(N), 'wb') as f:
+            pickle.dump(org, f)
+print('kh')
+
 dops = True
 if model == 'XX':
     # distributions = ['_optimized', '_full_basis', '_flux']
     distributions = ['_optimized', '_flux']
-else:
+elif model[:5] == 'toric':
     # distributions = ['_optimized', '_full_basis', '_pt']
     distributions = [['_optimized'], ['_optimized'], ['_optimized'], ['_pt']]
+elif model == 'checkerboard':
+    distributions = [[''], [''], ['']]
 if dops:
     for ni in range(len(ns)):
         n = ns[ni]
@@ -146,17 +177,21 @@ if dops:
                 N = Ns[i]
                 if n == 2 or single != 0:
                     legends.append(r'$N_A = ' + str(N) + '$')
+                if n == 4 and N == 32:
+                    M *= 100
                 expected = getExpected(model, N, n)
                 organized = getResults(model + distribution, n, M)
-                if N == 24:
-                    b = 1
                 if organized is None:
                     plot = False
                     continue
                 if getPrecision:
-                    precision = smooth(organized, 1, 1, expected)
+                    precision = smooth(organized, 5, 10, expected)
+                    with open('results/smooth_' + model + '_n_' + str(n) + '_N_' + str(N), 'wb') as f:
+                        pickle.dump(precision, f)
                     if single == 0:
                         curr = axs[ni]
+                        print((len(precision) * M + M - 1) / (varianceNormalizations[n - 2] ** N),
+                              np.log(np.average(organized))/np.log(2), len(organized))
                         axs[ni].plot([(m * M + M - 1) / (varianceNormalizations[n - 2] ** N) for m in range(len(precision) - 1)],
                                  precision[1:] / expected, color=colors[i])
                         axs[ni].set_xscale('log')
@@ -190,7 +225,7 @@ if dops:
         axs[0].set_xscale('log')
         if model[:5] == 'toric':
             legendLoc = 2.
-        elif model == 'XX':
+        elif model == 'XX' or model == 'checkerboard':
             legendLoc = 1.6
         legend = plt.legend(legends, fontsize=16, loc=2, bbox_to_anchor=(.75, legendLoc, 0., 0.))
         legend.get_frame().set_alpha(None)
