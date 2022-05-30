@@ -2,14 +2,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # Linear regression, based on https://stackoverflow.com/questions/6148207/linear-regression-with-matplotlib-numpy
-def linearRegression(Ns, Vs, color='blue', label='', show=True, lineOpt='-k', zorder=0, marker='o'):
+def linearRegression(axs, Ns, Vs, color='blue', label='', show=True, lineOpt='-k', zorder=0, marker='o'):
     coef = np.polyfit(Ns, np.log2(Vs), 1)
     print(coef)
     poly1d_fn = np.poly1d(coef)
-    plt.plot(Ns, 2 ** poly1d_fn(Ns), lineOpt, color=color, zorder=zorder)
-    plt.scatter(Ns, Vs, color=color, label=label, zorder=zorder, marker=marker)
-    plt.yscale('log')
-    plt.xticks(Ns)
+    axs.plot(Ns, 2 ** poly1d_fn(Ns), lineOpt, color=color, zorder=zorder)
+    axs.scatter(Ns, Vs, color=color, label=label, zorder=zorder, marker=marker)
+    axs.set_yscale('log')
+    axs.set_xticks(Ns)
     if show:
         plt.show()
     return coef[0]
