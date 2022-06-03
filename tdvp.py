@@ -370,10 +370,14 @@ if N <= 6:
         Delta, gamma = get_gnm(ni + 1, Gamma, k, theta)
         Deltas[ni] = Delta
         gammas[ni] = gamma
+    dt = dt * min(gammas)
     L_exact = np.zeros((d**(2*N), d**(2*N)), dtype=complex)
     sigmas = []
     for i in range(N):
         sigmas.append(np.kron(np.eye(d**(i)), np.kron(np.array([[0, 0], [1, 0]]), np.eye(d**(N - i - 1)))))
+    H_eff = np.zeros((d**N, d**N), dtype=complex)
+    gammas_matrix = np.zeros((N, N))
+    channels = []
     for n in range(N):
         for m in range(N):
             if np.abs(m - n) <= nn_num and n != m:
@@ -382,6 +386,19 @@ if N <= 6:
                 L_exact += (1j * Deltas[np.abs(m - n) - 1] - 0.5 * gammas[np.abs(m - n) - 1]) * \
                            np.kron(np.matmul(sigmas[n].T, sigmas[m]), np.eye(d**N))
                 L_exact += gammas[np.abs(m - n) - 1] * np.kron(sigmas[n], sigmas[m])
+                H_eff += (Deltas[np.abs(m - n) - 1] - 1j * 0.5 * gammas[np.abs(m - n) - 1]) * \
+                         np.matmul(sigmas[n].T, sigmas[m])
+                gammas_matrix[n, m] = gammas[np.abs(m - n) - 1]
+    channels.append(np.eye(d**N) - 1j * H_eff)
+    gevals, gevecs = np.linalg.eigh(gammas_matrix)
+    for i in range(len(gevals)):
+        curr = np.zeros((d**N, d**N), dtype=complex)
+        for n in range(N):
+            curr += gevecs[n, i] * sigmas[n]
+        channels.append(np.sqrt(gevals[i]) * curr)
+    rho_mat = np.zeros((d**N, d**N), dtype=complex)
+    rho_mat[-1, -1] = 1
+
     explicit_L = bops.contract(L[0], L[1], '3', '2')
     explicit_rho = bops.contract(psi[0], psi[1], '2', '0')
     for ni in range(2, N):
@@ -406,9 +423,15 @@ if N <= 6:
     #            2 * bin(i).split('b')[1].count('1') - N]
     #           for i in range(d**N)]
     for ti in range(timesteps):
+        print('---')
         rho_vec = np.matmul(evolver, rho_vec)
         print(min([rho_vec[z_inds[i][0]] for i in range(len(z_inds))]))
         zs_expect[ti] = sum([rho_vec[z_inds[i][0]] * z_inds[i][1] for i in range(len(z_inds))])
+        new_rho_mat = np.zeros(rho_mat.shape, dtype=complex)
+        for c in channels:
+            new_rho_mat += np.matmul(c, np.matmul(rho_mat, c.conj().T))
+        rho_mat = new_rho_mat
+        print(min(np.diag(rho_mat)))
     import matplotlib.pyplot as plt
     plt.plot(zs_expect)
     plt.show()
