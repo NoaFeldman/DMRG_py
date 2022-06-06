@@ -250,7 +250,7 @@ def get_XXZ_H(n, delta):
 def get_gnm(r, gamma, k, theta):
     kr = k * r
     g = -gamma * 3 / 4 * np.exp(1j * kr) / kr * (1 + (1j * kr - 1) / kr**2 + (-1 + 3 * (1 - 1j * kr) / kr**2) * np.cos(theta)**2)
-    return np.real(g), np.imag(g)
+    return np.real(g), -2 * np.imag(g)
 
 
 def get_photon_green_L(n, Omega, Gamma, k, theta, opt='NN', nearest_neighbors_num=1, exp_coeffs=[0]):
@@ -260,7 +260,9 @@ def get_photon_green_L(n, Omega, Gamma, k, theta, opt='NN', nearest_neighbors_nu
     B = np.kron(np.eye(d), sigma)
     C = np.kron(sigma.T, np.eye(d))
     D = np.kron(sigma, np.eye(d))
-    S = -1j * Omega * (np.kron(np.eye(d), sigma + sigma.T) - np.kron(sigma + sigma.T, np.eye(d)))
+    S = -1j * Omega * (np.kron(np.eye(d), sigma + sigma.T) - np.kron(sigma + sigma.T, np.eye(d))) \
+        + Gamma * (np.kron(sigma, sigma)
+            - 0.5 * (np.kron(np.matmul(sigma.T, sigma), np.eye(d)) + np.kron(np.eye(d), np.matmul(sigma.T, sigma))))
     Deltas = np.zeros(nearest_neighbors_num)
     gammas = np.zeros(nearest_neighbors_num)
     for ni in range(nearest_neighbors_num):
@@ -317,6 +319,37 @@ def get_photon_green_L(n, Omega, Gamma, k, theta, opt='NN', nearest_neighbors_nu
     return L
 
 
+def get_gamma_matrix(N, Gamma, nn_num, k, theta):
+    result = np.diag(np.ones(N) * Gamma)
+    for ni in range(1, nn_num + 1):
+        Delta, gamma = get_gnm(ni + 1, Gamma, k, theta)
+        for i in range(N - ni):
+            result[i, i + ni] = gamma
+            result[i + ni, i] = gamma
+    return result
+
+
+gammas_test = False
+if gammas_test:
+    Ns = [10 * i for i in range(1, 6)]
+    k = 2 * np.pi * 0.1
+    theta = 0
+    Gamma = 1
+    evals_min = np.zeros(len(Ns))
+    for Ni in range(len(Ns)):
+        N = Ns[Ni]
+        gammas = get_gamma_matrix(N, Gamma, N, k, theta)
+        evals = np.linalg.eigvalsh(gammas)
+        evals_min[Ni] = min(evals)
+    import matplotlib.pyplot as plt
+    plt.plot(Ns, evals_min)
+    plt.xlabel('N')
+    plt.ylabel('minimal eigenvalue')
+    plt.plot(Ns, np.zeros(len(Ns)), '--k')
+    plt.title(r'interaction length = N, $\theta = 0$, $ka=2\pi/10$')
+    plt.show()
+
+
 test = False
 if test:
     N = 6
@@ -364,12 +397,13 @@ timesteps = int(sys.argv[5])
 L = get_photon_green_L(N, Omega, Gamma, k, theta, 'NN', nn_num)
 psi = [tn.Node(np.array([1, 0, 0, 0]).reshape([1, d**2, 1])) for n in range(N)]
 if N <= 6:
-    Deltas = np.zeros(nn_num)
-    gammas = np.zeros(nn_num)
+    Deltas = np.zeros(nn_num + 1)
+    gammas = np.zeros(nn_num + 1)
+    gammas[0] = Gamma
     for ni in range(nn_num):
         Delta, gamma = get_gnm(ni + 1, Gamma, k, theta)
         Deltas[ni] = Delta
-        gammas[ni] = gamma
+        gammas[ni + 1] = gamma
     dt = dt * min(gammas)
     L_exact = np.zeros((d**(2*N), d**(2*N)), dtype=complex)
     sigmas = []
@@ -380,22 +414,22 @@ if N <= 6:
     channels = []
     for n in range(N):
         for m in range(N):
-            if np.abs(m - n) <= nn_num and n != m:
-                L_exact += (-1j * Deltas[np.abs(m - n) - 1] - 0.5 * gammas[np.abs(m - n) - 1]) * \
+            if np.abs(m - n) <= nn_num:
+                L_exact += (-1j * Deltas[np.abs(m - n)] - 0.5 * gammas[np.abs(m - n)]) * \
                            np.kron(np.eye(d**N), np.matmul(sigmas[n].T, sigmas[m]))
-                L_exact += (1j * Deltas[np.abs(m - n) - 1] - 0.5 * gammas[np.abs(m - n) - 1]) * \
+                L_exact += (1j * Deltas[np.abs(m - n)] - 0.5 * gammas[np.abs(m - n)]) * \
                            np.kron(np.matmul(sigmas[n].T, sigmas[m]), np.eye(d**N))
-                L_exact += gammas[np.abs(m - n) - 1] * np.kron(sigmas[n], sigmas[m])
-                H_eff += (Deltas[np.abs(m - n) - 1] - 1j * 0.5 * gammas[np.abs(m - n) - 1]) * \
-                         np.matmul(sigmas[n].T, sigmas[m])
-                gammas_matrix[n, m] = gammas[np.abs(m - n) - 1]
-    channels.append(np.eye(d**N) - 1j * H_eff)
+                L_exact += gammas[np.abs(m - n)] * np.kron(sigmas[n], sigmas[m])
+                H_eff += (Deltas[np.abs(m - n)]) * np.matmul(sigmas[n].T, sigmas[m])
+                gammas_matrix[n, m] = gammas[np.abs(m - n)]
+    channels.append((np.eye(d**N) - 2 * dt * 1j * H_eff) / np.sqrt(2))
     gevals, gevecs = np.linalg.eigh(gammas_matrix)
     for i in range(len(gevals)):
         curr = np.zeros((d**N, d**N), dtype=complex)
         for n in range(N):
             curr += gevecs[n, i] * sigmas[n]
-        channels.append(np.sqrt(gevals[i]) * curr)
+        channels.append(np.sqrt(gevals[i] * dt) * curr)
+        channels.append((np.eye(d**N) - N * gevals[i] * dt * np.matmul(sigmas[n].T, sigmas[n])) / np.sqrt(2 * N))
     rho_mat = np.zeros((d**N, d**N), dtype=complex)
     rho_mat[-1, -1] = 1
 
@@ -413,15 +447,12 @@ if N <= 6:
         [0] + [3 + 2 * i for i in range(N - 1)] +
         [2 * N + 1]).reshape([d ** (2 * N), d ** (2 * N)])
     rho_vec = bops.getExplicitVec(psi, d**2)
-    evolver = linalg.expm(-L_exact * dt)
+    evolver = linalg.expm(L_mat * dt)
     # evolver = np.eye(len(L_exact)) + dt * L_exact
     zs_expect = np.zeros(timesteps)
     z_inds = [[i + d**N * i,
                2 * bin(i).split('b')[1].count('1') - N]
               for i in range(d**N)]
-    # z_inds = [[sum([int(2**j & i > 0) * (2**(2 * j) + 2**(2 * j + 1)) for j in range(N)]),
-    #            2 * bin(i).split('b')[1].count('1') - N]
-    #           for i in range(d**N)]
     for ti in range(timesteps):
         print('---')
         rho_vec = np.matmul(evolver, rho_vec)
@@ -455,8 +486,6 @@ for ti in range(timesteps):
             pickle.dump([ti, psi], f)
 if outdir[:7] == 'results':
     import matplotlib.pyplot as plt
-    fig, axs = plt.subplots(2, 1)
-    axs[0].plot(list(range(timesteps)), z_expect)
-    axs[1].plot(bond_dims)
+    plt.plot(list(range(timesteps)), z_expect)
     plt.show()
 
