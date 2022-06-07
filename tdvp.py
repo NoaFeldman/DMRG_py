@@ -255,46 +255,49 @@ def get_gnm(r, gamma, k, theta):
 
 def get_photon_green_L(n, Omega, Gamma, k, theta, opt='NN', nearest_neighbors_num=1, exp_coeffs=[0]):
     d = 2
-    sigma = np.array([[0, 1], [0, 0]])
+    sigma = np.array([[0, 0], [1, 0]])
     A = np.kron(np.eye(d), sigma.T)
     B = np.kron(np.eye(d), sigma)
     C = np.kron(sigma.T, np.eye(d))
     D = np.kron(sigma, np.eye(d))
     S = -1j * Omega * (np.kron(np.eye(d), sigma + sigma.T) - np.kron(sigma + sigma.T, np.eye(d))) \
         + Gamma * (np.kron(sigma, sigma)
-            - 0.5 * (np.kron(np.matmul(sigma.T, sigma), np.eye(d)) + np.kron(np.eye(d), np.matmul(sigma.T, sigma))))
+                   - 0.5 * (np.kron(np.matmul(sigma.T, sigma), np.eye(d)) + np.kron(np.eye(d), np.matmul(sigma.T, sigma))))
     Deltas = np.zeros(nearest_neighbors_num)
     gammas = np.zeros(nearest_neighbors_num)
     for ni in range(nearest_neighbors_num):
         Delta, gamma = get_gnm(ni + 1, Gamma, k, theta)
         Deltas[ni] = Delta
         gammas[ni] = gamma
-    pairs = [[[(-1j * Deltas[i] - gammas[i] / 2) * A + gammas[i] * D, B],
-              [(1j * Deltas[i] - gammas[i] / 2) * C + gammas[i] * B, D],
-              [(-1j * Deltas[i] - gammas[i] / 2) * B, A],
-              [(1j * Deltas[i] - gammas[i] / 2) * D, C]] for i in range(nearest_neighbors_num)]
+        pairs = [[[(-1j * Deltas[i] - gammas[i] / 2) * A + gammas[i] * D for i in range(nearest_neighbors_num)], B],
+                 [[(1j * Deltas[i] - gammas[i] / 2) * C + gammas[i] * B for i in range(nearest_neighbors_num)], D],
+                 [[(-1j * Deltas[i] - gammas[i] / 2) * B for i in range(nearest_neighbors_num)], A],
+                 [[(1j * Deltas[i] - gammas[i] / 2) * D for i in range(nearest_neighbors_num)], C]]
+    operators_len = 2 + 4 * nearest_neighbors_num
     if opt == 'NN':
-        left_tensor = np.zeros((d**2, d**2, 1, 2 + nearest_neighbors_num * 4), dtype=complex)
+        left_tensor = np.zeros((d**2, d**2, 1, operators_len), dtype=complex)
         left_tensor[:, :, 0, 0] = S
         curr_ind = 1
-        for term_i in range(len(pairs[0])):
-            for ri in range(nearest_neighbors_num):
-                left_tensor[:, :, 0, curr_ind] = pairs[ri][term_i][0]
+        for pi in range(len(pairs)):
+            for ri in range(len(pairs[pi][0])):
+                left_tensor[:, :, 0, curr_ind] = pairs[pi][0][ri]
                 curr_ind += 1
-        left_tensor[:, :, 0, curr_ind] = np.eye(d**2)
+        nothing_yet_ind = curr_ind
+        left_tensor[:, :, 0, nothing_yet_ind] = np.eye(d**2)
 
-        mid_tensor = np.zeros((d**2, d**2, 2 + nearest_neighbors_num * 4, 2 + nearest_neighbors_num * 4), dtype=complex)
+        mid_tensor = np.zeros((d**2, d**2, operators_len, operators_len), dtype=complex)
         mid_tensor[:, :, 0, 0] = np.eye(d**2)
-        curr_row_ind = 1
-        for term_i in range(len(pairs[0])):
-            mid_tensor[:, :, curr_row_ind, 0] = pairs[0][term_i][1]
-            curr_row_ind += 1
-            for ni in range(1, nearest_neighbors_num):
-                mid_tensor[:, :, curr_row_ind, curr_row_ind - 1] = np.eye(d**2)
-                curr_row_ind += 1
-        mid_tensor[:, :, -1, :] = left_tensor[:, :, 0, :]
+        mid_tensor[:, :, nothing_yet_ind, 0] = S
+        curr_ind = 1
+        for pi in range(len(pairs)):
+            mid_tensor[:, :, curr_ind, 0] = pairs[pi][1]
+            for ri in range(len(pairs[pi][0])):
+                mid_tensor[:, :, nothing_yet_ind, curr_ind] = pairs[pi][0][ri]
+                if ri > 0:
+                    mid_tensor[:, :, curr_ind, curr_ind - 1] = np.eye(d**2)
+                curr_ind += 1
 
-        right_tensor = np.zeros((d**2, d**2, 2 + nearest_neighbors_num * 4, 1), dtype=complex)
+        right_tensor = np.zeros((d**2, d**2, operators_len, 1), dtype=complex)
         right_tensor[:, :, :, 0] = mid_tensor[:, :, :, 0]
     elif opt == 'exp':
         pairs = pairs[0]
@@ -329,24 +332,24 @@ def get_gamma_matrix(N, Gamma, nn_num, k, theta):
     return result
 
 
-gammas_test = False
+gammas_test = True
 if gammas_test:
-    Ns = [10 * i for i in range(1, 6)]
-    k = 2 * np.pi * 0.1
-    theta = 0
+    N = 50
+    ks = np.array([2 * np.pi * 0.01 * i for i in range(1, 300)])
+    theta = np.pi / 2
     Gamma = 1
-    evals_min = np.zeros(len(Ns))
-    for Ni in range(len(Ns)):
-        N = Ns[Ni]
+    evals_min = np.zeros(len(ks))
+    for ki in range(len(ks)):
+        k = ks[ki]
         gammas = get_gamma_matrix(N, Gamma, N, k, theta)
         evals = np.linalg.eigvalsh(gammas)
-        evals_min[Ni] = min(evals)
+        evals_min[ki] = min(evals)
     import matplotlib.pyplot as plt
-    plt.plot(Ns, evals_min)
-    plt.xlabel('N')
+    plt.plot(ks / (2 * np.pi), evals_min)
+    plt.xlabel(r'$ka / 2 \pi$')
     plt.ylabel('minimal eigenvalue')
-    plt.plot(Ns, np.zeros(len(Ns)), '--k')
-    plt.title(r'interaction length = N, $\theta = 0$, $ka=2\pi/10$')
+    plt.plot(ks / (2 * np.pi), np.zeros(len(ks)), '--k')
+    plt.title(r'interaction length = N, $\theta = \pi/2$, $N = 50$')
     plt.show()
 
 
@@ -404,11 +407,10 @@ if N <= 6:
         Delta, gamma = get_gnm(ni + 1, Gamma, k, theta)
         Deltas[ni] = Delta
         gammas[ni + 1] = gamma
-    dt = dt * min(gammas)
     L_exact = np.zeros((d**(2*N), d**(2*N)), dtype=complex)
     sigmas = []
     for i in range(N):
-        sigmas.append(np.kron(np.eye(d**(i)), np.kron(np.array([[0, 0], [1, 0]]), np.eye(d**(N - i - 1)))))
+        sigmas.append(np.kron(np.eye(d**(i)), np.kron(np.array([[0, 1], [0, 0]]), np.eye(d**(N - i - 1)))))
     H_eff = np.zeros((d**N, d**N), dtype=complex)
     gammas_matrix = np.zeros((N, N))
     channels = []
@@ -438,16 +440,13 @@ if N <= 6:
     for ni in range(2, N):
         explicit_L = bops.contract(explicit_L, L[ni], [2 * ni + 1], '2')
         explicit_rho = bops.contract(explicit_rho, psi[ni], [ni + 1], '0')
-    # L_mat = explicit_L.tensor.reshape([d] * 4 * N).transpose(
-    #     [i * 4 for i in range(N)] + [i * 4 + 1 for i in range(N)] +
-    #     [i * 4  + 2 for i in range(N)] + [i * 4 + 3 for i in range(N)]
-    # ).reshape([d**(2 * N), d**(2 * N)])
-    L_mat = explicit_L.tensor.transpose(
-        [2] + [1] + [4 + 2 * i for i in range(N - 1)] +
-        [0] + [3 + 2 * i for i in range(N - 1)] +
-        [2 * N + 1]).reshape([d ** (2 * N), d ** (2 * N)])
+    L_mat = explicit_L.tensor.reshape([d] * 4 * N).transpose([4 * i for i in range(N)]
+                                                             + [1 + 4 * i for i in range(N)]
+                                                             + [2 + 4 * i for i in range(N)]
+                                                             + [3 + 4 * i for i in range(N)])\
+        .reshape([d**(2 * N), d**(2 * N)])
     rho_vec = bops.getExplicitVec(psi, d**2)
-    evolver = linalg.expm(L_mat * dt)
+    evolver = np.eye(d**(2 * N)) + dt * L_mat # linalg.expm(L_exact * dt)
     # evolver = np.eye(len(L_exact)) + dt * L_exact
     zs_expect = np.zeros(timesteps)
     z_inds = [[i + d**N * i,
