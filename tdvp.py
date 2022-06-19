@@ -26,7 +26,10 @@ def arnoldi(HL, HR, H, psi, k, num_of_sites=2, max_h_size=50):
         v = bops.contract(psi[k], psi[k+1], '2', '0')
     else:
         v = psi[k]
-    v.set_tensor(v.get_tensor() / bops.getNodeNorm(v))
+        # h = bops.contract(bops.contract(HL[k], H[k], '1', '2'), HR[k], '4', '1').tensor\
+        #     .transpose([1, 3, 5, 0, 2, 4]).reshape(
+        #     [HL[k].tensor.shape[0] * 4 * HR[k].tensor.shape[0], HL[k].tensor.shape[0] * 4 * HR[k].tensor.shape[0]])
+    v.set_tensor(v.get_tensor() / np.sqrt(tensor_overlap(v, v, num_of_sites=num_of_sites)))
     basis = [bops.copyState([v])[0]]
     size = max_h_size
     for j in range(max_h_size - 1):
@@ -34,9 +37,10 @@ def arnoldi(HL, HR, H, psi, k, num_of_sites=2, max_h_size=50):
         for ri in range(j + 1):
             result[ri, j] = tensor_overlap(basis[ri], v, num_of_sites)
             v.set_tensor(v.tensor - result[ri, j] * basis[ri].tensor)
-        result[j + 1, j] = bops.getNodeNorm(v)
+        result[j + 1, j] = np.sqrt(tensor_overlap(v, v, num_of_sites=num_of_sites))
         if result[j + 1, j] < accuracy or \
-                np.any([int(np.abs(tensor_overlap(basis[bi], v, num_of_sites) / bops.getNodeNorm(v)**2) > accuracy)
+                np.any([int(np.abs(tensor_overlap(basis[bi], v, num_of_sites) /
+                                   tensor_overlap(v, v, num_of_sites=num_of_sites)) > accuracy)
                         for bi in range(len(basis))]):
             size = j + 1
             break
@@ -76,52 +80,46 @@ def tdvp_step(psi: List[tn.Node], H: List[tn.Node], k: int,
     m_vec = M.tensor.reshape([np.prod(M.tensor.shape)])
     hv = bops.contract(H_effective, M, '0246', '0123').tensor.reshape([np.prod(M.tensor.shape)])
     hv_exact = np.matmul(H_effective_mat, m_vec)
-    # print(np.log(max(np.abs(hv - hv_exact))) / np.log(10))
     h_evolved = np.matmul(linalg.expm(dt * H_effective_mat / 2), m_vec)
-    M = apply_time_evolver(T, basis, M, dt / 2)
+    M = apply_time_evolver(T, basis, M, dt)
     m_evolved = M.tensor.reshape([np.prod(M.tensor.shape)])
-    # print(int(np.log(max(np.abs(m_evolved - h_evolved))) / np.log(10)))
-    if max(m_evolved - h_evolved) > 1e-9:
-        b = 1
-        T, basis = arnoldi(HL, HR, H, psi, k)
+
     [A, C, B, te] = bops.svdTruncation(M, [0, 1], [2, 3], '>*<', maxBondDim=max_bond_dim)
     # print(C.tensor.shape)
     if len(te) > 0: print(max(te))
     if dir == '>>':
-        projectors_left[k+1] = bops.contract(bops.contract(bops.contract(
-            HL[k], A, '0', '0'), H[k], '02', '20'), A, '02', '01*')
         M = bops.contract(C, B, '1', '0')
         psi[k] = A
         M_ind = k + 1
         if k == len(psi) - 2:
             psi[M_ind] = M
             return te
+        HL[k + 1] = bops.contract(bops.contract(bops.contract(
+            HL[k], A, '0', '0'), H[k], '02', '20'), A, '02', '01*')
     else:
-        projectors_right[k] = bops.contract(bops.contract(bops.contract(
-            B, HR[k+1], '2', '0'), H[k+1], '12', '03'), B, '21', '12*')
         M = bops.contract(A, C, '2', '0')
         psi[k+1] = B
         M_ind = k
         if k == 0:
             psi[M_ind] = M
             return te
+        HR[k] = bops.contract(bops.contract(bops.contract(
+            B, HR[k + 1], '2', '0'), H[k + 1], '12', '03'), B, '21', '12*')
 
     psi[M_ind] = bops.copyState([M])[0]
     T, basis = arnoldi(HL, HR, H, psi, M_ind, num_of_sites=1)
 
-    H_effective = bops.permute(bops.contract(bops.contract(
-        HL[M_ind], H[M_ind], '1', '2'), HR[M_ind], '4', '1'), [0, 2, 4, 1, 3, 5])
-    H_eff_shape = H_effective.tensor.shape
-    H_effective_mat = H_effective.tensor.\
-        reshape([int(np.sqrt(np.prod(H_effective.tensor.shape))), int(np.sqrt(np.prod(H_effective.tensor.shape)))])
-    m_vec = M.tensor.reshape([np.prod(M.tensor.shape)])
-    hv = bops.contract(H_effective, M, '012', '012').tensor.reshape([np.prod(M.tensor.shape)])
-    hv_exact = np.matmul(H_effective_mat, m_vec)
-    print(np.log(max(np.abs(hv - hv_exact))) / np.log(10))
-    h_evolved = np.matmul(linalg.expm(-dt * H_effective_mat / 2), m_vec)
-    M = apply_time_evolver(T, basis, M, - dt / 2, num_of_sites=1)
-    m_evolved = M.tensor.reshape([np.prod(M.tensor.shape)])
-    # print(int(np.log(max(np.abs(m_evolved - h_evolved))) / np.log(10)))
+    # H_effective = bops.permute(bops.contract(bops.contract(
+    #     HL[M_ind], H[M_ind], '1', '2'), HR[M_ind], '4', '1'), [1, 3, 5, 0, 2, 4])
+    # H_effective_mat = H_effective.tensor.\
+    #     reshape([int(np.sqrt(np.prod(H_effective.tensor.shape))), int(np.sqrt(np.prod(H_effective.tensor.shape)))])
+    # m_vec = M.tensor.reshape([np.prod(M.tensor.shape)])
+    # hv = bops.contract(H_effective, M, '345', '012').tensor.reshape([np.prod(M.tensor.shape)])
+    # hv_exact = np.matmul(H_effective_mat, m_vec)
+    # h_evolved = np.matmul(linalg.expm(-dt * H_effective_mat / 2), m_vec)
+    M = apply_time_evolver(T, basis, M, - dt, num_of_sites=1)
+    # m_evolved = M.tensor.reshape([np.prod(M.tensor.shape)])
+    # # print(int(np.log(max(np.abs(m_evolved - h_evolved))) / np.log(10)))
 
     psi[M_ind] = M
     return te
@@ -204,6 +202,7 @@ def vectorized_lindbladian(n, H_terms: List[np.array], L_term: np.array, d=2):
         for si in range(ti + 1):
             [op, to_decompose, te] = \
                 bops.svdTruncation(to_decompose, [0, 1, 2], list(range(3, len(to_decompose.tensor.shape))), '<<')
+            if len(te) > 0: print(max(te))
             single_site_ops.append(bops.permute(op, [1, 2, 0, 3]))
     dim = 2 + np.sum([op.tensor.shape[2] for op in single_site_ops]) - len(H_terms)
     left_tensor = np.zeros((d**2, d**2, 1, dim), dtype=complex)
@@ -272,7 +271,7 @@ def get_gnm(r, gamma, k, theta):
     return np.real(g), -2 * np.imag(g)
 
 
-def get_photon_green_L(n, Omega, Gamma, k, theta, sigma, opt='NN', nearest_neighbors_num=1, exp_coeffs=[0]):
+def get_photon_green_L(n, Omega, Gamma, k, theta, sigma, opt='NN', case='kernel', nearest_neighbors_num=1, exp_coeffs=[0]):
     d = 2
     A = np.kron(np.eye(d), sigma.T)
     B = np.kron(np.eye(d), sigma)
@@ -287,10 +286,12 @@ def get_photon_green_L(n, Omega, Gamma, k, theta, sigma, opt='NN', nearest_neigh
     gammas = np.zeros(nearest_neighbors_num)
     for ni in range(nearest_neighbors_num):
         Delta, gamma = get_gnm(ni + 1, Gamma, k, theta)
-        Deltas[ni] = 1
-        gammas[ni] = 1
-        # Deltas[ni] = Delta
-        # gammas[ni] = gamma
+        if case == 'kernel':
+            Deltas[ni] = Delta
+            gammas[ni] = gamma
+        elif case == 'dicke':
+            Deltas[ni] = 1
+            gammas[ni] = 1
     pairs = [[[(-1j * Deltas[i] - gammas[i] / 2) * A + gammas[i] * D for i in range(nearest_neighbors_num)], B],
                  [[(1j * Deltas[i] - gammas[i] / 2) * C + gammas[i] * B for i in range(nearest_neighbors_num)], D],
                  [[(-1j * Deltas[i] - gammas[i] / 2) * B for i in range(nearest_neighbors_num)], A],
@@ -355,60 +356,9 @@ def get_gamma_matrix(N, Gamma, nn_num, k, theta):
     return result
 
 
-gammas_test = False
-if gammas_test:
-    N = 50
-    ks = np.array([2 * np.pi * 0.01 * i for i in range(1, 300)])
-    theta = np.pi / 2
-    Gamma = 1
-    evals_min = np.zeros(len(ks))
-    for ki in range(len(ks)):
-        k = ks[ki]
-        gammas = get_gamma_matrix(N, Gamma, N, k, theta)
-        evals = np.linalg.eigvalsh(gammas)
-        evals_min[ki] = min(evals)
-    import matplotlib.pyplot as plt
-    plt.plot(ks / (2 * np.pi), evals_min)
-    plt.xlabel(r'$ka / 2 \pi$')
-    plt.ylabel('minimal eigenvalue')
-    plt.plot(ks / (2 * np.pi), np.zeros(len(ks)), '--k')
-    plt.title(r'interaction length = N, $\theta = \pi/2$, $N = 50$')
-    plt.show()
-
-
-test = False
-if test:
-    N = 6
-    d = 2
-    sigma = np.array([[0, 0], [1, 0]])
-    L = get_photon_green_L(N, 1, 1, 2 * np.pi / 10, sigma, 0, opt='NN', nearest_neighbors_num=2)
-    psi0 = [tn.Node(np.array([0, 0, 0, 1]).reshape([1, d**2, 1])) for n in range(N)]
-    psi = bops.copyState(psi0)
-    projectors_left, projectors_right = get_initial_projectors(psi, L)
-    rho_explicit_0 = np.zeros(d**(2*N), dtype=complex)
-    rho_explicit_0[0] = 1
-    rho_explicit = np.copy(rho_explicit_0)
-    curr = L[0]
-    for i in range(1, N):
-        curr = bops.contract(curr, L[i], [i * 2 + 1], '2')
-    L_explicit = curr.tensor\
-        .transpose([2, 0, 3, 5, 7, 9, 11, 1, 4, 6, 8, 10, 12, 13])\
-        .reshape([d**(2 * N), d**(2*N)])
-    dt = 1e-2
-    time_evolver_explicit = linalg.expm(-1j * dt * L_explicit)
-    timesteps = 10
-    overlaps_tdvp = np.zeros(timesteps)
-    overlaps_exact = np.zeros(timesteps)
-    for ti in range(timesteps):
-        tdvp_sweep(psi, L, projectors_left, projectors_right, dt, max_bond_dim=128)
-        rho_explicit = np.matmul(time_evolver_explicit, rho_explicit)
-        overlaps_tdvp[ti] = np.abs(bops.getOverlap(psi0, psi))
-        overlaps_exact[ti] = np.abs(np.matmul(rho_explicit, rho_explicit_0))
-        print(ti)
-    import matplotlib.pyplot as plt
-    plt.plot(overlaps_tdvp, color='black')
-    plt.plot(overlaps_exact, '--', color='orange')
-    plt.show()
+def tn_dm_to_matrix(rho):
+    return bops.getExplicitVec(rho, d**2).reshape([d] * 2 * len(rho)).\
+        transpose([i * 2 for i in range(len(rho))] + [i * 2 + 1 for i in range(len(rho))]).reshape([d**N, d**N])
 
 
 N = int(sys.argv[1])
@@ -416,15 +366,20 @@ k = 2 * np.pi / 10
 theta = 0
 nn_num = int(sys.argv[2])
 Gamma = 1
-Omega = float(sys.argv[3]) / Gamma 
+Omega = float(sys.argv[3]) / Gamma
+case = sys.argv[4]
 d = 2
-outdir = sys.argv[4]
+outdir = sys.argv[5]
 dt = 1e-3
 sigma = np.array([[0, 0], [1, 0]])
-timesteps = int(sys.argv[5])
-L = get_photon_green_L(N, Omega, Gamma, k, theta, sigma, 'NN', nn_num)
+timesteps = int(sys.argv[6])
+results_to = sys.argv[7]
+if results_to == 'plot':
+    import matplotlib.pyplot as plt
+L = get_photon_green_L(N, Omega, Gamma, k, theta, sigma, case=case, nearest_neighbors_num=nn_num)
 psi = [tn.Node(np.array([1, 0, 0, 0]).reshape([1, d**2, 1])) for n in range(N)]
-if N <= 6:
+if N <= 10:
+    I = np.eye(2).reshape([1, d ** 2, 1])
     Deltas = np.ones(nn_num + 1)
     gammas = np.zeros(nn_num + 1)
     gammas[0] = Gamma
@@ -457,8 +412,7 @@ if N <= 6:
                                                              + [3 + 4 * i for i in range(N)])\
         .reshape([d**(2 * N), d**(2 * N)])
     rho_vec = bops.getExplicitVec(psi, d**2)
-    evolver = linalg.expm(L_mat.T * dt) # np.eye(d**(2 * N)) + dt * L_mat.T #
-    # evolver = np.eye(len(L_exact)) + dt * L_exact
+    evolver = linalg.expm(L_mat.T * dt)
     J_expect = np.zeros(timesteps)
     z_inds = [[i + d**N * i,
                2 * bin(i).split('b')[1].count('1') - N]
@@ -468,13 +422,14 @@ if N <= 6:
         J += sigmas[i]
     JdJ = np.matmul(J.conj().T, J)
     for ti in range(timesteps):
-        J_expect[ti] = np.trace(np.matmul(JdJ, rho_vec.reshape([d**N, d**N])))
-        print('---')
+        J_expect[ti] = np.abs(np.trace(np.matmul(JdJ, rho_vec.reshape([d**N, d**N]))))
         rho_vec = np.matmul(evolver, rho_vec)
-        print(min([rho_vec[z_inds[i][0]] for i in range(len(z_inds))]))
-    import matplotlib.pyplot as plt
-    plt.plot(J_expect)
-    plt.show()
+    if results_to == 'plot':
+        plt.plot(J_expect)
+        # plt.show()
+    else:
+        with open(outdir + '/explicit_J_expect', 'wb') as f:
+            pickle.dump(J_expect, f)
 
 projectors_left, projectors_right = get_initial_projectors(psi, L)
 I = np.eye(2).reshape([1, d**2, 1])
@@ -487,20 +442,24 @@ for ti in range(timesteps):
         J_expect[ti] += bops.getOverlap(psi,
                             [tn.Node(I) for i in range(si)] + [tn.Node(np.matmul(sigma.T, sigma).reshape([1, d**2, 1]))]
                                         + [tn.Node(I) for i in range(si + 1, N)])
-        for sj in range(si + 1, N):
-            J_expect[ti] += bops.getOverlap(psi,
-                            [tn.Node(I) for i in range(si)] + [tn.Node(sigma.T.reshape([1, d**2, 1]))]
-                                            + [tn.Node(I) for i in range(si + 1, sj)] + [tn.Node(sigma.reshape([1, d**2, 1]))]
-                                            + [tn.Node(I) for i in range(sj +1, N)])
+        for sj in range(N):
+            if si != sj:
+                J_expect[ti] += bops.getOverlap(psi,
+                                [tn.Node(I) for i in range(si)] + [tn.Node(sigma.T.reshape([1, d**2, 1]))]
+                                                + [tn.Node(I) for i in range(si + 1, sj)] + [tn.Node(sigma.reshape([1, d**2, 1]))]
+                                                + [tn.Node(I) for i in range(sj +1, N)])
+    # TODO look at entanglement
     bond_dims[ti] = psi[int(len(psi)/2)].tensor.shape[0]
+    rho_explicit = tn_dm_to_matrix(psi)
+    print(np.trace(rho_explicit))
+    print(min(np.diag(rho_explicit)))
+    print(np.amax(np.abs(rho_explicit - rho_explicit.T.conj())))
     tdvp_sweep(psi, L, projectors_left, projectors_right, dt, max_bond_dim=128)
     if True: # ti % 10 == 0:
         with open(outdir + '/tdvp_N_' + str(N) + '_Omega_' + str(Omega) + '_nn_' + str(nn_num), 'wb') as f:
             pickle.dump([J_expect, bond_dims], f)
         with open(outdir + '/mid_state_N_' + str(N) + '_Omega_' + str(Omega) + '_nn_' + str(nn_num) + '_ti_' + str(ti), 'wb') as f:
             pickle.dump([ti, psi], f)
-if outdir[:7] == 'results':
-    import matplotlib.pyplot as plt
-    plt.plot(list(range(timesteps)), J_expect)
+if results_to == 'plot':
+    plt.plot(list(range(timesteps)), np.abs(J_expect))
     plt.show()
-
