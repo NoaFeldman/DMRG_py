@@ -438,28 +438,31 @@ bond_dims = np.zeros(timesteps, dtype=complex)
 for ti in range(timesteps):
     print('---')
     print(ti)
-    for si in range(N):
-        J_expect[ti] += bops.getOverlap(psi,
-                            [tn.Node(I) for i in range(si)] + [tn.Node(np.matmul(sigma.T, sigma).reshape([1, d**2, 1]))]
-                                        + [tn.Node(I) for i in range(si + 1, N)])
-        for sj in range(N):
-            if si != sj:
-                J_expect[ti] += bops.getOverlap(psi,
-                                [tn.Node(I) for i in range(si)] + [tn.Node(sigma.T.reshape([1, d**2, 1]))]
-                                                + [tn.Node(I) for i in range(si + 1, sj)] + [tn.Node(sigma.reshape([1, d**2, 1]))]
-                                                + [tn.Node(I) for i in range(sj +1, N)])
-    # TODO look at entanglement
-    bond_dims[ti] = psi[int(len(psi)/2)].tensor.shape[0]
-    rho_explicit = tn_dm_to_matrix(psi)
-    print(np.trace(rho_explicit))
-    print(min(np.diag(rho_explicit)))
-    print(np.amax(np.abs(rho_explicit - rho_explicit.T.conj())))
-    tdvp_sweep(psi, L, projectors_left, projectors_right, dt, max_bond_dim=128)
-    if True: # ti % 10 == 0:
-        with open(outdir + '/tdvp_N_' + str(N) + '_Omega_' + str(Omega) + '_nn_' + str(nn_num), 'wb') as f:
-            pickle.dump([J_expect, bond_dims], f)
-        with open(outdir + '/mid_state_N_' + str(N) + '_Omega_' + str(Omega) + '_nn_' + str(nn_num) + '_ti_' + str(ti), 'wb') as f:
-            pickle.dump([ti, psi], f)
+    try:
+        with open(outdir + '/mid_state_' + case + '_N_' + str(N)
+                  + '_Omega_' + str(Omega) + '_nn_' + str(nn_num) + '_ti_' + str(ti), 'rb') as f:
+            [ti, psi] = pickle.load(f)
+        with open(outdir + '/tdvp_' + case + '_N_' + str(N)
+                  + '_Omega_' + str(Omega) + '_nn_' + str(nn_num), 'rb') as f:
+            [J_expect, bond_dims] = pickle.load(f)
+    except FileNotFoundError:
+        for si in range(N):
+            J_expect[ti] += bops.getOverlap(psi,
+                                [tn.Node(I) for i in range(si)] + [tn.Node(np.matmul(sigma.T, sigma).reshape([1, d**2, 1]))]
+                                            + [tn.Node(I) for i in range(si + 1, N)])
+            for sj in range(N):
+                if si != sj:
+                    J_expect[ti] += bops.getOverlap(psi,
+                                    [tn.Node(I) for i in range(si)] + [tn.Node(sigma.T.reshape([1, d**2, 1]))]
+                                                    + [tn.Node(I) for i in range(si + 1, sj)] + [tn.Node(sigma.reshape([1, d**2, 1]))]
+                                                    + [tn.Node(I) for i in range(sj +1, N)])
+        bond_dims[ti] = psi[int(len(psi)/2)].tensor.shape[0]
+        tdvp_sweep(psi, L, projectors_left, projectors_right, dt, max_bond_dim=128)
+        if True: # ti % 10 == 0:
+            with open(outdir + '/tdvp_' + case + '_N_' + str(N) + '_Omega_' + str(Omega) + '_nn_' + str(nn_num), 'wb') as f:
+                pickle.dump([J_expect, bond_dims], f)
+            with open(outdir + '/mid_state_' + case + '_N_' + str(N) + '_Omega_' + str(Omega) + '_nn_' + str(nn_num) + '_ti_' + str(ti), 'wb') as f:
+                pickle.dump([ti, psi], f)
 if results_to == 'plot':
     plt.plot(list(range(timesteps)), np.abs(J_expect))
     plt.show()
