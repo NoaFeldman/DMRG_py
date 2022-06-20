@@ -441,7 +441,7 @@ for ti in range(timesteps):
     try:
         with open(outdir + '/mid_state_' + case + '_N_' + str(N)
                   + '_Omega_' + str(Omega) + '_nn_' + str(nn_num) + '_ti_' + str(ti), 'rb') as f:
-            [ti, psi] = pickle.load(f)
+            [ti, psi, projectors_left, projectors_right] = pickle.load(f)
         with open(outdir + '/tdvp_' + case + '_N_' + str(N)
                   + '_Omega_' + str(Omega) + '_nn_' + str(nn_num), 'rb') as f:
             [J_expect, bond_dims] = pickle.load(f)
@@ -462,7 +462,7 @@ for ti in range(timesteps):
             with open(outdir + '/tdvp_' + case + '_N_' + str(N) + '_Omega_' + str(Omega) + '_nn_' + str(nn_num), 'wb') as f:
                 pickle.dump([J_expect, bond_dims], f)
             with open(outdir + '/mid_state_' + case + '_N_' + str(N) + '_Omega_' + str(Omega) + '_nn_' + str(nn_num) + '_ti_' + str(ti), 'wb') as f:
-                pickle.dump([ti, psi], f)
+                pickle.dump([ti, psi, projectors_left, projectors_right], f)
 if results_to == 'plot':
     plt.plot(list(range(timesteps)), np.abs(J_expect))
     plt.show()
