@@ -10,6 +10,7 @@ import os
 import sys
 
 
+X = np.array([[0, 1], [1, 0]])
 def toric_code(g=0.0):
     #
     #    O
@@ -344,17 +345,28 @@ def exact_probability(w, h, g, boundary_i, d=4):
 def shrink_boundaries(upRow, downRow, leftRow, rightRow, max_bond_dim):
     M = bops.contract(upRow, rightRow, '3', '0')
     [upRow, rightRow, te] = bops.svdTruncation(M, [0, 1, 2], [3, 4, 5], '>>', maxBondDim=max_bond_dim)
-    print(te)
+    # print(te)
     M = bops.contract(rightRow, downRow, '3', '0')
     [rightRow, downRow, te] = bops.svdTruncation(M, [0, 1, 2], [3, 4, 5], '>>', maxBondDim=max_bond_dim)
-    print(te)
+    # print(te)
     M = bops.contract(downRow, leftRow, '3', '0')
     [downRow, leftRow, te] = bops.svdTruncation(M, [0, 1, 2], [3, 4, 5], '>>', maxBondDim=max_bond_dim)
-    print(te)
+    # print(te)
     M = bops.contract(leftRow, upRow, '3', '0')
     [leftRow, upRow, te] = bops.svdTruncation(M, [0, 1, 2], [3, 4, 5], '>>', maxBondDim=max_bond_dim)
-    print(te)
+    # print(te)
     return [upRow, downRow, leftRow, rightRow]
+
+def get_boundaries_from_file(g, w, h):
+    with open('results/toricBoundaries_gauge_' + str(np.round(g, 8)), 'rb') as f:
+        [upRow, downRow, leftRow, rightRow, openA, openB, A, B] = pickle.load(f)
+        [upRow, downRow, leftRow, rightRow] = shrink_boundaries(upRow, downRow, leftRow, rightRow, max_bond_dim=4)
+        [cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>', maxTrunc=5)
+        [cDown, dDown, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>', maxTrunc=5)
+        norm = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, h, w,
+                                      [tn.Node(np.eye(4)) for i in range(w * h)])
+        leftRow = bops.multNode(leftRow, 1 / norm**(2 / h))
+    return [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, A, B]
 
 
 def exact_purity(w, h, g, d=4):
@@ -430,109 +442,40 @@ def boundary_binary_string(i, N):
     return curr
 
 
-boundary_identifier = int(sys.argv[1])
-outdir = sys.argv[2]
-block = get_explicit_block(4, 4, 0.6, boundary_identifier=boundary_identifier)
-with open(outdir + '/gauge/full_block_4_by_4_b_0', 'wb') as f:
-    pickle.dump(block)
-
-if plot_2_by_2:
-    bs = np.array(range(2**6))
-    import matplotlib.pyplot as plt
-    # p2s_all = []
-    # p1s_all = []
-    # for b in bs:
-    #     p2s = np.zeros(len(gs))
-    #     p1s = np.zeros(len(gs))
-    #     for gi in range(len(gs)):
-    #         block = get_explicit_block(2, 2, gs[gi], boundary_identifier=b)
-    #         p2s[gi] = np.trace(np.matmul(block, block))
-    #         p1s[gi] = np.trace(block)
-    #     p2s_all.append(p2s)
-    #     p1s_all.append(p1s)
-    # with open('results/gauge/two_by_two', 'wb') as f:
-    #     pickle.dump([p1s_all, p2s_all], f)
-    with open('results/gauge/two_by_two', 'rb') as f:
-        [p1s_all, p2s_all] = pickle.load(f)
-    # fig, axs = plt.subplots(5, 1)
-    fig, axs = plt.subplots(2, 1)
-    fulls = [sum([p2s_all[bi][gi] for bi in range(len(bs))]) for gi in range(len(gs))]
-    axs[0].plot(gs, fulls)
-    axs[0].set_ylabel(r'$p_2$')
-    alls = bs # [2**6 - 1]
-    for ai in range(len(alls)):
-        # axs[1].plot(gs, p1s_all[alls[ai]], color=colors[ai % len(colors)])
-        axs[1].plot(gs, p2s_all[alls[ai]] / p1s_all[alls[ai]]**2, color=colors[ai % len(colors)], label='_nolegend_')
-        # axs[3].plot(gs, p2s_all[alls[ai]])
-    axs[1].set_ylabel(r'$p_2(q)/p_2$')
-    axs[1].legend([boundary_binary_string(alls[ai], 6) for ai in range(len(alls))])
-    # singles = [2**i for i in range(6)] + [0]
-    # for si in range(len(singles)):
-    #     # axs[1].plot(gs, p2s_all[singles[si]])
-    #     axs[1].plot(gs, p1s_all[singles[si]], color=colors[si])
-    #     axs[1].plot(gs, p2s_all[singles[si]] / fulls, '--', color=colors[si], label='_nolegend_')
-    # axs[1].set_ylabel(r'$p_2(q)/p_2$')
-    # axs[1].legend([boundary_binary_string(singles[si], 6) for si in range(len(singles))])
-    # singles = [(63 ^ 2**i) for i in range(6)]
-    # for si in range(len(singles)):
-    #     axs[2].plot(gs, p1s_all[singles[si]], color=colors[si])
-    #     axs[2].plot(gs, p2s_all[singles[si]] / fulls, '--', color=colors[si], label='_nolegend_')
-    #     # axs[2].plot(gs, p2s_all[singles[si]])
-    # axs[2].set_ylabel(r'$p_2(q)/p_2$')
-    # axs[2].legend([boundary_binary_string(singles[si], 6) for si in range(len(singles))])
-    # halves = [21, 42, 1+2+4]
-    # for hi in range(len(halves)):
-    #     axs[4].plot(gs, p1s_all[halves[hi]], color=colors[hi])
-    #     axs[4].plot(gs, p2s_all[halves[hi]] / fulls, '--', color=colors[hi], label='_nolegend_')
-    #     # axs[4].plot(gs, p2s_all[halves[hi]])
-    # axs[4].set_ylabel(r'$p_2(q)/p_2$')
-    # axs[4].legend([boundary_binary_string(halves[hi], 6) for hi in range(len(halves))])
-    plt.xlabel('g')
-    plt.show()
+def square_wilson_loop_expectation_value(g, L):
+    w = int(np.ceil(L/2)) * 2
+    h = w
+    [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, A, B] = get_boundaries_from_file(g, w, h)
+    print(L, w, pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, h, w,
+                                      [tn.Node(np.eye(4)) for i in range(w * h)]))
+    if L == 2:
+        ops = [tn.Node(np.kron(np.eye(2), X)), tn.Node(np.eye(2**2)),
+               tn.Node(np.kron(X, X)), tn.Node(np.kron(X, np.eye(2)))]
+    elif L == 3:
+        ops = [tn.Node(np.kron(np.eye(2), X))] * 2 + [tn.Node(np.eye(2**2))] * 2 + \
+            [tn.Node(np.kron(X, np.eye(2))), tn.Node(np.eye(2**2)), tn.Node(np.kron(X, np.eye(2))), tn.Node(np.eye(2**2))] + \
+            [tn.Node(np.kron(X, X)), tn.Node(np.kron(np.eye(2), X)), tn.Node(np.kron(X, np.eye(2))), tn.Node(np.eye(2**2))] + \
+            [tn.Node(np.eye(2**2))] * 4
+    elif L == 4:
+        ops = [tn.Node(np.kron(np.eye(2), X))] * 3 + [tn.Node(np.eye(2**2))] + \
+            [tn.Node(np.kron(X, np.eye(2)))] + [tn.Node(np.eye(2**2))] * 2 + [tn.Node(np.kron(X, np.eye(2)))] + \
+            [tn.Node(np.kron(X, np.eye(2)))] + [tn.Node(np.eye(2 ** 2))] * 2 + [tn.Node(np.kron(X, np.eye(2)))] + \
+            [tn.Node(np.kron(X, X))] + [tn.Node(np.kron(np.eye(2), X))] * 2 + [tn.Node(np.kron(X, np.eye(2)))]
+    result = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, h, w, ops)
+    return result
 
 
-plot_4_by_4 = False
-if plot_4_by_4:
-    import matplotlib.pyplot as plt
-
-    gs = [np.round(0.1 * G, 8) for G in range(11)]
-    fig, axs = plt.subplots(1, 5)
-    w = 4
-    h = 4
-    full_p2s = np.zeros(len(gs))
-    for gi in range(len(gs)):
-        full_p2s[gi] = exact_purity(4, 4, gs[gi])
-    with open('results/gauge/full_p2s_4_by_4', 'wb') as f:
-        pickle.dump(full_p2s, f)
-    with open('results/gauge/full_p2s_4_by_4', 'rb') as f:
-        full_p2s = pickle.load(f)
-    axs[0].plot(gs, full_p2s)
-    axs[0].set_ylabel(r'$p_2$')
-    boundary_sections = 2 * (w + h - 1)
-    bs_single_minus = [0, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192]
-    bs_single_plus = [2**boundary_sections - 1 - b for b in bs_single_minus]
-    bs_all_plus = [2**boundary_sections - 1]
-    bs_halves = [5547, 10837, 255]
-    n = 2
-    all_bs = [bs_single_minus, bs_single_plus, bs_all_plus, bs_halves]
-    for bsi in range(len(all_bs)):
-        bs = all_bs[bsi]
-        for bi in range(len(bs)):
-            b = bs[bi]
-            p2s = np.zeros(len(gs))
-            p1s = np.zeros(len(gs))
-            vars = np.zeros(len(gs))
-            for gi in range(len(gs)):
-                g = gs[gi]
-                with open('results/gauge/organized_toric_g_' + str(g) + '_b_' + str(b) + '_2_32', 'rb') as f:
-                    curr = np.array(pickle.load(f))
-                    curr = curr * (2**((w - 1) * (h - 1)) / 2**(2 * w * h))**n
-                    p2s[gi] = np.average(curr)
-                    vars[gi] = np.sum([np.abs(curr[i] - p2s[gi])**2 for i in range(len(curr))]) / (len(curr) - 1)
-            axs[bsi + 1].plot(gs, p2s / full_p2s, '--', color=colors[bi])
-            # axs[bsi + 1].plot(gs, p1s, color=colors[bi], label='_nolegend_')
-            with open('results/gauge/four_by_four_p1_b_' + str(bi), 'wb') as f:
-                pickle.dump(p1s, f)
-        axs[bsi + 1].legend([boundary_binary_string(b, boundary_sections) for b in bs])
-        axs[bsi + 1].set_ylabel(r'$p_2(q)/p_2$')
+import matplotlib.pyplot as plt
+gs = [np.round(0.1 * i, 8) for i in range(11)]
+for g in gs:
+    Ls = np.array([2, 3, 4], dtype=float)
+    loops_expect = np.zeros(len(Ls))
+    for li in range(len(Ls)):
+        L = Ls[li]
+        loops_expect[li] = square_wilson_loop_expectation_value(g, L)
+    plt.plot(np.log(Ls), np.log(loops_expect))
+    # plt.plot(Ls, Ls**(-1))
+    # plt.plot(Ls, Ls**(-2))
+    plt.title('g = ' + str(g))
+    # plt.yscale('log')
     plt.show()

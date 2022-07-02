@@ -621,3 +621,13 @@ def getExpectationValue(psi: List[tn.Node], ops: List[tn.Node], opt='single_site
     result = getOverlap(psi, psiCopy)
     removeState(psiCopy)
     return result
+
+
+def vector_to_mps(psi, d, N):
+    orig = tn.Node(psi.reshape([1] + [d] * N + [1]))
+    result = []
+    for i in range(N - 1):
+        [new_site, orig, te] = svdTruncation(orig, [0, 1], list(range(2, len(orig.tensor.shape))), '>>')
+        result.append(new_site)
+    result.append(orig)
+    return result

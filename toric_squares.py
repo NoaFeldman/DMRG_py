@@ -10,85 +10,234 @@ from typing import List
 import os
 import sys
 
-def get_boundaries(g=0.0):
-    d = 2
-    sites_per_node = 4
-    tensor_base_site = np.array([1] + [0] * (d**sites_per_node - 1)).reshape([d] * sites_per_node)
-    base_site = tn.Node(tensor_base_site)
+# ----*-----*-----*-----*----
+#   |    |     |     |     |
+#   *site*     *site *     *
+#   |    |     |     |     |
+# ----*-----*-----*-----*----
+#   |    |     |     |     |
+#   *    *site *     *site *
+#   |    |     |     |     |
+# ----*-----*-----*-----*----
 
-    Xs = np.eye(1)
-    for si in range(sites_per_node):
-        Xs = np.kron(Xs, basicDefs.pauli2X)
-    tensor_full_op = (np.eye(d**sites_per_node, dtype=complex) + Xs).reshape([d] * 2 * sites_per_node)
-    full_op = tn.Node(tensor_full_op)
-    tensor_splitted_op = np.zeros((d, d, 2), dtype=complex)
-    tensor_splitted_op[:, :, 0] = np.eye(d)
-    tensor_splitted_op[:, :, 1] = basicDefs.pauli2X
-    splitted_op = tn.Node(tensor_splitted_op)
+d = 2
+I = np.eye(2)
+X = np.array([[0, 1], [1, 0]])
 
-    A = tn.Node(bops.permute(bops.contract(bops.contract(bops.contract(bops.contract(bops.contract(
-        base_site, full_op, '0123', '0123'),
-        splitted_op, '0', '0'), splitted_op, '0', '0'), splitted_op, '0', '0'), splitted_op, '0', '0'),
-        [1, 3, 5, 7, 0, 4, 2, 6]).tensor.reshape([2, 2, 2, 2, d**sites_per_node]))
-    B = tn.Node(bops.contract(bops.contract(bops.contract(bops.contract(bops.contract(
-        base_site, splitted_op, '0', '0'), splitted_op, '0', '0'), splitted_op, '0', '0'), splitted_op, '0', '0'),
-        full_op, '0246', '0123').tensor.reshape([2, 2, 2, 2, d**sites_per_node]))
+def plaquette_node(g=0.0):
+    single_site_tensor = np.zeros((d, d, d, d), dtype=complex)
+    single_site_tensor[0, 0, 0, 0] = 1
+    single_site_tensor[1, 1, 1, 1] = 1
+    single_site = tn.Node(single_site_tensor)
 
+    I = np.eye(d, dtype=complex)
+    X = np.array([[0, 1], [1, 0]], dtype=complex)
+    # (1+x)s that settle the plaquettes that were not chosen in the checkerboard
+    # p     p
+    # |     |
+    # p-----p
+    # physical_in, physical_out, down
+    op_up_left_corner = np.zeros((d, d, d), dtype=complex)
+    op_up_left_corner[:, :, 0] = I
+    op_up_left_corner[:, :, 1] = X
+    op_up_left = tn.Node(op_up_left_corner)
+    # physical_in, physical_out, down
+    projector_up_right_corner = np.zeros((d, d, d), dtype=complex)
+    projector_up_right_corner[:, :, 0] = I
+    projector_up_right_corner[:, :, 1] = X
+    op_up_right = tn.Node(projector_up_right_corner)
+    # physical_in, physical_out, up, left
+    projector_down_right_corner = np.zeros((d, d, d, d), dtype=complex)
+    projector_down_right_corner[:, :, 0, 0] = I
+    projector_down_right_corner[:, :, 1, 1] = X
+    op_down_right = tn.Node(projector_down_right_corner)
+    # phisical_in, physical_out, right, up
+    projector_down_left_corner = np.zeros((d, d, d, d), dtype=complex)
+    projector_down_left_corner[:, :, 0, 0] = I
+    projector_down_left_corner[:, :, 1, 1] = X
+    op_down_left = tn.Node(projector_down_left_corner)
 
-    single_site_tension = tn.Node(np.diag([(1+g)**(bin(i).count('1')) for i in range(d**sites_per_node)]))
-    A = bops.contract(A, single_site_tension, '4', '0')
-    B = bops.contract(B, single_site_tension, '4', '0')
+    A = bops.unifyLegs(bops.unifyLegs(bops.unifyLegs(bops.permute(
+        bops.contract(bops.contract(bops.contract(bops.contract(
+        single_site, op_down_right, '0', '0'), op_down_left, '0', '0'), op_up_left, '0', '0'), op_up_right, '0', '0'),
+        [1, 4, 5, 9, 7, 2, 0, 3, 6, 8]), [3, 4]), [0, 1]), [4, 5, 6, 7])
+    single_pair = tn.Node(np.array([1, 0, 0, 1]).reshape([d, d]))
+    left_boundary = bops.unifyLegs(bops.permute(bops.contract(bops.contract(
+        single_pair, op_down_right, '0', '0'), op_up_right, '0', '0'),
+        [4, 2, 1, 0, 3]), [3, 4])
+    g_projector = \
+        np.diag([(1 + g)**(4 - sum([int(c) for c in bin(i).split('b')[1]])) for i in range(d**4)])
+    A = bops.contract(A, tn.Node(g_projector), '4', '0')
+    g_pair_projector = np.diag([(1+g)**2, 1+g, 1+g, 1])
+    left_boundary = bops.contract(left_boundary, tn.Node(g_pair_projector), '3', '0')
 
-
+    # TODO suit BMPS for this nonequal dimension of vertical and horizontal legs
     AEnv = pe.toEnvOperator(bops.multiContraction(A, A, '4', '4*'))
-    BEnv = pe.toEnvOperator(bops.multiContraction(B, B, '4', '4*'))
-    upRow, downRow, leftRow, rightRow, openA, openB = peps.applyBMPS(A, B, d=d**sites_per_node)
+    upRow, downRow, leftRow, rightRow, openA, openB = peps.applyBMPS(A, A, d=(d**4))
     with open('results/toricBoundaries_squares_' + str(g), 'wb') as f:
-        pickle.dump([upRow, downRow, leftRow, rightRow, openA, openB, A, B], f)
-    circle_A = bops.contract(bops.contract(bops.contract(bops.contract(bops.contract(bops.contract(bops.contract(
-        leftRow, upRow, '3', '0'), BEnv, '23', '30'), AEnv, '41', '30'), rightRow, '24', '01'), BEnv, '12', '03'),
-        downRow, '053', '320'), openA, '0132', '1234')
+        pickle.dump([upRow, downRow, leftRow, rightRow, openA, openB, A], f)
+    return [A, left_boundary]
+
+plaquette_node(g=0.1)
+
+# |\Psi_+> from https://journals.aps.org/prl/pdf/10.1103/PhysRevLett.119.040502
+# after tracing out the ancillary right qubit.
+# Fig 1 here https://www.nature.com/articles/s41534-018-0106-y.pdf, but rotated 90 degrees
+#
+#    *---*---*---*---*
+#    | x |   | x |   | x
+#    *---*---*---*---*
+#  x |   | X |   | X |
+#    *---*---*---*---*
+#    | x |   | x |   | x
+#    *---*---*---*---*
+#  x |   | X |   | X |
+#    *---*---*---*---*
+#
+# The large Xs are the nodes in my TN.
+def surface_code(w, h, g=0.0):
+    [A, left_boundary] = plaquette_node(g)
+    # Top bounadries close the upper plaquettes.
+    # bottom boundaries just require no application of additional X ops,
+    # so project to 0 on the bonds.
+    c_up_single = tn.Node(np.array([(1+g)**2, 0, 0, 1]).reshape([1, 4, 1]))
+    c_up = tn.Node(bops.contract(c_up_single, c_up_single, '2', '0').tensor.reshape([1, 16, 1]))
+    c_down_single = tn.Node(np.array([1, 0, 0, 0]).reshape([1, 4, 1]))
+    c_down = tn.Node(bops.contract(c_down_single, c_down_single, '2', '0').tensor.reshape([1, 16, 1]))
+    left_site = bops.unifyLegs(bops.unifyLegs(bops.unifyLegs(bops.permute(bops.contract(
+        left_boundary, left_boundary, '3', '3*'), [0, 3, 1, 4, 2, 5]), [4, 5]), [2, 3]), [0, 1])
+
+    left_row = bops.contract(left_site, left_site, '2', '0')
+    # right row imposes (1+X_b) on the boundary terms.
+    right_row = bops.contract(tn.Node(np.array([1, 1, 1, 1]).reshape([1, 4, 1])),
+                              tn.Node(np.array([1, 1, 1, 1]).reshape([1, 4, 1])), '2', '0')
+    # top left corner needs to close the plaquette
+    top_left_corner = tn.Node(np.array([1, 0, 0, 1]).reshape([4, 1]))
+    bottom_left_corner = tn.Node(np.array([1, 0, 0, 0]).reshape([1, 4]))
+    left_rows = [bops.copyState([left_row])[0] for hi in range(int(h / 2))]
+    left_rows[-1] = bops.contract(left_rows[-1], top_left_corner, '3', '0')
+    left_rows[0] = bops.contract(bottom_left_corner, left_rows[0], '1', '0')
+    norm = pe.applyLocalOperators_detailedBoundary(
+        [c_up] * int(w / 2), [c_up] * int(w / 2), [c_down] * int(w / 2), [c_down] * int(w / 2),
+        left_rows, [right_row] * int(h / 2), A, A, h, w,
+        [tn.Node(np.eye(d**4)) for i in range(w * h)])
+    bops.multNode(left_rows[0], 1 / norm)
+
+    return [A, c_up, c_down, left_rows, right_row]
+
+def get_mid_surface_explicit_block(w, h, boundary_sector=0, g=0.0, logical_qubit=0):
+    [A, c_up, c_down, left_rows, right_row] = surface_code(w, h, g)
+    boundary_length = 2 * w - 1 + 2 * h - 1
+    boundary_indices = [int(c) * 2 - 1 for c in bin(boundary_sector).split('b')[1].zfill(boundary_length)]
+
+    # TODO horribly inefficient, go over only allowed combinations if this code becomes important
+    mid_surface_size = (2 * w - 1) * (2 * h - 1)
+    allowed_combos = []
+    for ind in range(2**mid_surface_size):
+        combo = [int(c) * 2 - 1 for c in bin(ind).split('b')[1].zfill(mid_surface_size)]
+        expanded_combo = []
+        for wi in range(w - 1):
+            expanded_combo = expanded_combo \
+                             + combo[int((h - 0.5) * 4) * wi: int((h - 0.5) * 4) * (wi + 1)] \
+                             + ['n'] * 2
+        for hi in range(h - 1):
+            expanded_combo += [combo[int((h - 0.5) * 4) * (w - 1) + 2 * hi]] \
+                                + ['n'] * 2 \
+                                + [combo[int((h - 0.5) * 4) * (w - 1) + 2 * hi + 1]]
+        expanded_combo += [combo[-1]] + ['n'] * 3
+        a_test_combo = [int((expanded_combo[i] + 1) / 2) if expanded_combo[i] == -1 or expanded_combo[i] == 1
+                      else expanded_combo[i]
+                      for i in range(len(expanded_combo))]
+        legal = True
+        boundary_counter = 0
+        # left boundaries
+        for hi in range(h - 1):
+            if expanded_combo[hi * 4] * expanded_combo[hi * 4 + 3] != boundary_indices[boundary_counter]:
+                legal = False
+                break
+            boundary_counter += 1
+        if not legal:
+            continue
+        if expanded_combo[(h - 1) * 4] != boundary_indices[boundary_counter]:
+            continue
+        boundary_counter += 1
+        # top bottom boundaries
+        for wi in range(w - 1):
+            if expanded_combo[wi * h * 4] * expanded_combo[wi * h * 4 + 1] \
+                != boundary_indices[boundary_counter]:
+                legal = False
+                break
+            boundary_counter += 1
+            if expanded_combo[wi * 4 * h + int((h - 0.5) * 4) - 1] * expanded_combo[(wi + 1) * 4 * h + (h - 1) * 4] \
+                != boundary_indices[boundary_counter]:
+                legal = False
+                break
+            boundary_counter += 1
+        if not legal:
+            continue
+        # right boundaries
+        if expanded_combo[4 * h * (w - 1)] != boundary_indices[boundary_counter]:
+            continue
+        boundary_counter += 1
+        for hi in range(h - 1):
+            if expanded_combo[4 * h * (w - 1) + 4 * hi + 3] * expanded_combo[4 * h * (w - 1) + 4 * hi + 4] \
+                != boundary_indices[boundary_counter]:
+                legal = False
+            boundary_counter += 1
+        if not legal:
+            continue
+        # mid stars
+        for wi in range(w - 1):
+            for hi in range(h - 1):
+                if np.prod(expanded_combo[4 * h * wi + 4 * hi + 2: 4 * h * wi + 4 * (hi + 1) + 2]) != 1:
+                    legal = False
+                    break
+            for hi in range(h - 1):
+                if expanded_combo[4 * h * wi + 4 * hi + 2] * \
+                        expanded_combo[4 * h * wi + 4 * hi + 5] * \
+                        expanded_combo[4 * h * wi + 4 * hi + 2 + 5 + 4 * (h - 1)] * \
+                        expanded_combo[4 * h * wi + 4 * hi + 2 + 6 + 4 * (h - 1)] != 1:
+                    legal = False
+                    break
+        if not legal:
+            continue
+        allowed_combos.append(expanded_combo)
+
+    allowed_combos_temp = []
+    for c in allowed_combos:
+        for i in range(2):
+            for j in range(2):
+                for k in range(2):
+                    temp = c.copy()
+                    temp[9] = i
+                    temp[10] = j
+                    temp[14] = k
+                    allowed_combos_temp.append(temp)
+    allowed_combos = allowed_combos_temp
+    #                    00                           01                          10                 11
+    projectors_ops = [np.diag([1, 0]), np.array([[0 , 1], [0, 0]]), np.array([[0, 0], [1, 0]]), np.diag([0, 1])]
+    block = np.zeros((len(allowed_combos), len(allowed_combos)))
+    for ci in range(len(allowed_combos)):
+        for cj in range(len(allowed_combos)):
+            ops = []
+            for ni in range(int(len(allowed_combos[ci]) / 4)):
+                op = np.eye(1)
+                for si in range(4):
+                    curr_op = np.eye(d) if allowed_combos[ci][ni * 4 + si] == 'n' else \
+                        projectors_ops[int((allowed_combos[ci][ni * 4 + si] + 1) / 2
+                                           + 2 * (allowed_combos[cj][ni * 4 + si] + 1) / 2)]
+                    op = np.kron(op, curr_op)
+                ops.append(op)
+            if logical_qubit == 1 & w == 2 and h == 2: # TODO sort for other system measures
+                ops[1] = np.matmul(np.kron(X, np.kron(X, np.kron(I, I))),
+                                   np.matmul(ops[1], np.kron(X, np.kron(X, np.kron(I, I)))))
+                ops[3] = np.matmul(np.kron(X, np.kron(X, np.kron(I, I))),
+                                   np.matmul(ops[1], np.kron(X, np.kron(X, np.kron(I, I)))))
+            block[ci, cj] = pe.applyLocalOperators_detailedBoundary(
+                [c_up] * int(w / 2), [c_up] * int(w / 2), [c_down] * int(w / 2), [c_down] * int(w / 2),
+                left_rows, [right_row] * int(h / 2), A, A, h, w, [tn.Node(op) for op in ops])
     b = 1
+    return block
 
 
-def get_random_ops(n, N, theta=0, phi=0, random_option='full'):
-    rotating_op = np.matmul(ru.getUPhi(phi), ru.getUTheta(theta))
-    single_site_ops = ru.getNonUnitaryRandomOps(2, n, N * 2, random_option=random_option)
-    return [[tn.Node(np.kron(np.matmul(np.matmul(rotating_op, single_site_ops[ni][Ni * 2].tensor), rotating_op.T.conj()),
-                             np.kron(np.eye(2),
-                    np.kron(np.matmul(np.matmul(rotating_op, single_site_ops[ni][Ni * 2 + 1].tensor), rotating_op.T.conj()),
-                            np.eye(2)))))
-             for Ni in range(N)] for ni in range(n)]
 
-
-w = int(sys.argv[1])
-h = int(sys.argv[2])
-n = int(sys.argv[3])
-rep = sys.argv[4]
-indir = sys.argv[5]
-if len(sys.argv) > 6:
-    exclude_indicies = [int(arg) for arg in sys.argv[6:]]
-else:
-    exclude_indicies = []
-N = w * h
-with open(indir + '/toricBoundaries_squares_' + str(0.0), 'rb') as f:
-    [upRow, downRow, leftRow, rightRow, openA, openB, A, B] = pickle.load(f)
-[cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>')
-[cDown, dDown, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>')
-norm = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h,
-                              [tn.Node(np.eye(16)) for i in range(w * h)])
-leftRow = bops.multNode(leftRow, 1 / norm ** (2 / w))
-
-newdir = indir + '/toric_checkerboard/w_' + str(w) + '_h_' + str(h) + '_n_' + str(n) \
-         + '_excluded_'
-for ind in exclude_indicies:
-    newdir += '_' + str(ind)
-try:
-    os.mkdir(newdir)
-except FileExistsError:
-    pass
-
-M = 1000
-ru.renyiEntropy(n, w, h, M, pe.applyLocalOperators, [cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h],
-                      newdir + '/rep_' + str(rep), d=2**4, excludeIndices=exclude_indicies,
-                get_ops_func=get_random_ops, get_ops_arguments=[n, N, 0, 0, 'full'])

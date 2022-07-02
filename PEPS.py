@@ -53,7 +53,8 @@ def bmpsRowStep(gammaL, lambdaMid, gammaR, lambdaSide, envOp, lattice='squared',
     [U, S, V, truncErr] = bops.svdTruncation(opRow, leftEdges, rightEdges, dir='>*<', maxBondDim=chi)
     if len(truncErr) > 0:
         if np.max(truncErr) > 1e-14:
-            print(np.max(truncErr))
+            # print(np.max(truncErr))
+            b = 1
     newLambdaMid = tn.Node(np.diag(S.tensor) / np.sqrt(sum(np.diag(S.tensor)**2))) # bops.multNode(S, 1 / np.sqrt(sum(S.tensor**2)))
     lambdaSideInv = tn.Node(np.array([1 / val if val > 1e-15 else 0 for val in lambdaSide.tensor], dtype=complex))
     newGammaL = bops.multiContraction(lambdaSideInv, U, '1', '0', cleanOr2=True, isDiag1=True)
@@ -264,7 +265,7 @@ def twoCopiesEntanglement(circle, A, B):
     return p2
 
 
-def applyBMPS(A: tn.Node, B:tn.Node, db=2, d=2, steps=50):
+def applyBMPS(A: tn.Node, B:tn.Node, d=2, steps=50):
     AEnv = pe.toEnvOperator(bops.multiContraction(A, A, '4', '4*'))
     BEnv = pe.toEnvOperator(bops.multiContraction(B, B, '4', '4*'))
 
@@ -279,12 +280,12 @@ def applyBMPS(A: tn.Node, B:tn.Node, db=2, d=2, steps=50):
 
     currAB = curr
 
-    openA = tn.Node(np.transpose(np.reshape(np.kron(A.tensor, A.tensor), [db ** 2, db ** 2, db ** 2, db ** 2, d, d]),
+    openA = tn.Node(np.transpose(np.reshape(np.kron(A.tensor, A.tensor), [r**2 for r in A.tensor.shape[:-1]] + [d, d]),
                                  [4, 0, 1, 2, 3, 5]))
-    openB = tn.Node(np.transpose(np.reshape(np.kron(B.tensor, B.tensor), [db ** 2, db ** 2, db ** 2, db ** 2, d, d]),
+    openB = tn.Node(np.transpose(np.reshape(np.kron(B.tensor, B.tensor), [r**2 for r in A.tensor.shape[:-1]] + [d, d]),
                                  [4, 0, 1, 2, 3, 5]))
 
-    rowTensor = np.zeros((11, 4, 4, 11), dtype=complex)
+    rowTensor = np.ones((11, AEnv[0].dimension, BEnv[0].dimension, 11), dtype=complex)
     rowTensor[0, 0, 0, 0] = 1
     rowTensor[1, 0, 0, 2] = 1
     rowTensor[2, 0, 0, 3] = 1
@@ -294,22 +295,72 @@ def applyBMPS(A: tn.Node, B:tn.Node, db=2, d=2, steps=50):
     rowTensor[6, 0, 3, 7] = 1
     rowTensor[7, 3, 0, 8] = 1
     rowTensor[8, 0, 0, 5] = 1
+    rowTensor[0, 0, 3, 0] = 1
+    rowTensor[1, 0, 3, 2] = 1
+    rowTensor[2, 0, 3, 3] = 1
+    rowTensor[3, 0, 0, 4] = 1
+    rowTensor[4, 0, 0, 1] = 1
+    rowTensor[5, 0, 3, 6] = 1
+    rowTensor[6, 0, 0, 7] = 1
+    rowTensor[7, 0, 0, 8] = 1
+    rowTensor[8, 0, 3, 5] = 1
+    rowTensor[0, 3, 0, 0] = 1
+    rowTensor[1, 3, 0, 2] = 1
+    rowTensor[2, 3, 0, 3] = 1
+    rowTensor[3, 0, 0, 4] = 1
+    rowTensor[4, 0, 0, 1] = 1
+    rowTensor[5, 3, 0, 6] = 1
+    rowTensor[6, 0, 0, 7] = 1
+    rowTensor[7, 0, 0, 8] = 1
+    rowTensor[8, 3, 0, 5] = 1
+    rowTensor[0, 3, 3, 0] = 1
+    rowTensor[1, 3, 3, 2] = 1
+    rowTensor[2, 3, 3, 3] = 1
+    rowTensor[3, 3, 3, 4] = 1
+    rowTensor[4, 3, 3, 1] = 1
+    rowTensor[5, 3, 3, 6] = 1
+    rowTensor[6, 3, 3, 7] = 1
+    rowTensor[7, 3, 3, 8] = 1
+    rowTensor[8, 3, 3, 5] = 1
+    rowTensor[0, 3, 3, 0] = 1
+    rowTensor[1, 3, 3, 2] = 1
+    rowTensor[2, 3, 3, 3] = 1
+    rowTensor[3, 3, 3, 4] = 1
+    rowTensor[4, 3, 3, 1] = 1
+    rowTensor[5, 3, 3, 6] = 1
+    rowTensor[6, 3, 3, 7] = 1
+    rowTensor[7, 3, 3, 8] = 1
+    rowTensor[8, 3, 3, 5] = 1
+    rowTensor[5, 10, 10, 6] = 1
+    rowTensor[6, 10, 3, 7] = 1
+    rowTensor[7, 3, 10, 8] = 1
+    rowTensor[8, 15, 3, 5] = 1
     row = tn.Node(rowTensor)
-    closer = tn.Node(np.array([1, 0, 0, 1]))
-    row = bops.contract(bops.contract(envOpAB, closer, '0', '0'), closer, '0', '0')
+    closer = tn.Node(np.array([1, 0] * int(envOpAB[0].dimension / 2)))
+    row = bops.permute(bops.contract(bops.contract(
+        envOpAB, closer, '0', '0'), closer, '0', '0'), [0, 2, 3, 1])
 
     upRow = bops.unifyLegs(bops.unifyLegs(bops.unifyLegs(bops.unifyLegs(
-        bops.permute(bops.multiContraction(row, tn.Node(currAB.tensor), '12', '04'), [0, 2, 3, 4, 7, 1, 5, 6]), [5, 6]),
+        bops.permute(bops.multiContraction(row, tn.Node(currAB.tensor), '12', '04'),
+                     [0, 2, 3, 4, 7, 1, 5, 6]), [5, 6]),
         [5, 6]), [0, 1]), [0, 1])
     [C, D, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>', normalize=True)
     upRow = bops.multiContraction(D, C, '2', '0')
-    [cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>', normalize=True)
-    GammaC, LambdaC, GammaD, LambdaD = getBMPSRowOps(cUp, tn.Node(np.ones(cUp[2].dimension)), dUp,
-                                                          tn.Node(np.ones(dUp[2].dimension)), AEnv, BEnv, 50)
+    [cUp_orig, dUp_orig, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>', normalize=True)
+    GammaC, LambdaC, GammaD, LambdaD = getBMPSRowOps(cUp_orig, tn.Node(np.ones(cUp_orig[2].dimension)), dUp_orig,
+                                                          tn.Node(np.ones(dUp_orig[2].dimension)), AEnv, BEnv, steps)
     cUp = bops.multiContraction(GammaC, LambdaC, '2', '0', isDiag2=True)
     dUp = bops.multiContraction(GammaD, LambdaD, '2', '0', isDiag2=True)
     upRow = bops.multiContraction(cUp, dUp, '2', '0')
-    downRow = bops.copyState([upRow])[0]
+
+    GammaC, LambdaC, GammaD, LambdaD = getBMPSRowOps(cUp, tn.Node(np.ones(cUp[2].dimension)), dUp,
+                                                          tn.Node(np.ones(dUp[2].dimension)),
+                                                     bops.permute(AEnv, [2, 3, 0, 1]),
+                                                     bops.permute(BEnv, [2, 3, 0, 1]), steps)
+    cDown = bops.multiContraction(GammaC, LambdaC, '2', '0', isDiag2=True)
+    dDown = bops.multiContraction(GammaD, LambdaD, '2', '0', isDiag2=True)
+    downRow = bops.multiContraction(cDown, dDown, '2', '0')
+
     rightRow = bmpsCols(upRow, downRow, AEnv, BEnv, steps, option='right', X=upRow)
     leftRow = bmpsCols(upRow, downRow, AEnv, BEnv, steps, option='left', X=upRow)
 
