@@ -6,6 +6,7 @@ import basicDefs as basic
 import sys
 from typing import List
 import scipy.linalg as linalg
+import os
 
 
 def tensor_overlap(n1, n2, num_of_sites=2):
@@ -266,11 +267,21 @@ def get_XXZ_H(n, delta):
                                       delta * np.kron(basic.pauli2Z, basic.pauli2Z)])
 
 
-def get_gnm(r, gamma, k, theta):
-    kr = k * r
-    g = -gamma * 3 / 4 * np.exp(1j * kr) / kr * (1 + (1j * kr - 1) / kr**2 + (-1 + 3 * (1 - 1j * kr) / kr**2) * np.cos(theta)**2)
-    return np.real(g), -2 * np.imag(g)
-
+def get_gnm(gamma, k, theta, nearest_neighbors_num, case):
+    if case == 'dicke':
+        Deltas = np.ones(nearest_neighbors_num + 1)
+        gammas = np.ones(nearest_neighbors_num + 1)
+    else:
+        Deltas = np.zeros(nearest_neighbors_num + 1)
+        gammas = np.zeros(nearest_neighbors_num + 1)
+        gammas[0] = gamma
+        for ni in range(1, nearest_neighbors_num + 1):
+            r = ni
+            kr = k * r
+            g = -gamma * 3 / 4 * np.exp(1j * kr) / kr * (1 + (1j * kr - 1) / kr**2 + (-1 + 3 * (1 - 1j * kr) / kr**2) * np.cos(theta)**2)
+        Deltas[ni] = np.real(g)
+        gammas[ni] = -2 * np.imag(g)
+    return Deltas, gammas
 
 def get_photon_green_L(n, Omega, Gamma, k, theta, sigma, opt='NN', case='kernel', nearest_neighbors_num=1, exp_coeffs=[0]):
     d = 2
@@ -281,17 +292,7 @@ def get_photon_green_L(n, Omega, Gamma, k, theta, sigma, opt='NN', case='kernel'
     S = -1j * Omega * (np.kron(np.eye(d), sigma + sigma.T) - np.kron(sigma + sigma.T, np.eye(d))) \
         + Gamma * (np.kron(sigma, sigma)
                    - 0.5 * (np.kron(np.matmul(sigma.T, sigma), np.eye(d)) + np.kron(np.eye(d), np.matmul(sigma.T, sigma))))
-
-    Deltas = np.zeros(nearest_neighbors_num)
-    gammas = np.zeros(nearest_neighbors_num)
-    for ni in range(nearest_neighbors_num):
-        Delta, gamma = get_gnm(ni + 1, Gamma, k, theta)
-        if case == 'kernel':
-            Deltas[ni] = Delta
-            gammas[ni] = gamma
-        elif case == 'dicke':
-            Deltas[ni] = 1
-            gammas[ni] = 1
+    Deltas, gammas = get_gnm(Gamma, k, theta, nearest_neighbors_num, case)
     pairs = [[[(-1j * Deltas[i] - gammas[i] / 2) * A + gammas[i] * D for i in range(nearest_neighbors_num)], B],
                  [[(1j * Deltas[i] - gammas[i] / 2) * C + gammas[i] * B for i in range(nearest_neighbors_num)], D],
                  [[(-1j * Deltas[i] - gammas[i] / 2) * B for i in range(nearest_neighbors_num)], A],
@@ -372,26 +373,25 @@ d = 2
 outdir = sys.argv[5]
 sigma = np.array([[0, 0], [1, 0]])
 timesteps = int(sys.argv[6])
-T = 2
+
+newdir = outdir + '/' + case + '_N_' + str(N) + '_Omega_' + str(Omega) + '_nn_' + str(nn_num) + '_timesteps_' + str(timesteps)
+try:
+    os.mkdir(newdir)
+except FileExistsError:
+    pass
+
+T = 10
 dt = T / timesteps
+save_each = 10
 results_to = sys.argv[7]
+
 if results_to == 'plot':
     import matplotlib.pyplot as plt
 L = get_photon_green_L(N, Omega, Gamma, k, theta, sigma, case=case, nearest_neighbors_num=nn_num)
 psi = [tn.Node(np.array([1, 0, 0, 0]).reshape([1, d**2, 1])) for n in range(N)]
 if N <= 6:
     I = np.eye(2).reshape([1, d ** 2, 1])
-    Deltas = np.zeros(nn_num + 1)
-    gammas = np.zeros(nn_num + 1)
-    gammas[0] = Gamma
-    for ni in range(nn_num):
-        Delta, gamma = get_gnm(ni + 1, Gamma, k, theta)
-        if case == 'kernel':
-            Deltas[ni + 1] = Delta
-            gammas[ni + 1] = gamma
-        elif case == 'dicke':
-            Deltas[ni + 1] = 1
-            gammas[ni + 1] = 1
+    Deltas, gammas = get_gnm(Gamma, k, theta, nn_num, case)
     L_exact = np.zeros((d**(2*N), d**(2*N)), dtype=complex)
     sigmas = []
     for i in range(N):
@@ -417,11 +417,8 @@ if N <= 6:
                                                              + [3 + 4 * i for i in range(N)])\
         .reshape([d**(2 * N), d**(2 * N)]).T
     rho_vec = bops.getExplicitVec(psi, d**2)
-    rho_vec_half_exact = np.copy(rho_vec)
     evolver = linalg.expm(L_mat * dt)
     J_expect = np.zeros(timesteps)
-    half_exact = np.zeros(timesteps)
-    J_expect_half_exact = np.zeros(timesteps)
     z_inds = [[i + d**N * i,
                2 * bin(i).split('b')[1].count('1') - N]
               for i in range(d**N)]
@@ -431,7 +428,7 @@ if N <= 6:
     JdJ = np.matmul(J.conj().T, J)
     for ti in range(timesteps):
         J_expect[ti] = np.abs(np.trace(np.matmul(JdJ, rho_vec.reshape([d**N, d**N]))))
-        J_expect_half_exact[ti] = np.abs(np.trace(np.matmul(JdJ, rho_vec_half_exact.reshape([d**N, d**N]))))
+        # J_expect_half_exact[ti] = np.abs(np.trace(np.matmul(JdJ, rho_vec_half_exact.reshape([d**N, d**N]))))
         projector = np.zeros((len(rho_vec), len(rho_vec)), dtype=complex)
         rho_mps = bops.vector_to_mps(rho_vec.reshape([d]*(2 * N))\
                                      .transpose(np.array([[i, i + N] for i in range(N)]).reshape([2 * N])), d**2, N)
@@ -482,22 +479,10 @@ if N <= 6:
                                                              + [2 * N + 2 * i for i in range(N)]
                                                              + [2 * N + 1 + 2 * i for i in range(N)])\
             .reshape([d**(2 * N), d**(2 * N)])
-        curr_evolver = linalg.expm(dt * np.matmul(projector, L_mat))
-        PL = np.matmul(projector, L_mat)
-        PLrho = np.matmul(PL, rho_vec).reshape([d**N, d**N])
-        PLrho_half_exact = np.matmul(PL, rho_vec_half_exact).reshape([d**N, d**N])
-        Lrho = np.matmul(L_mat, rho_vec).reshape([d**N, d**N])
-        print(np.round(max(np.matmul(projector, rho_vec) - rho_vec), 8),
-            np.round(np.trace(Lrho), 8),
-            np.round(np.trace(PLrho), 8),
-            np.round(np.trace(PLrho_half_exact), 8))
         rho_vec = np.matmul(evolver, rho_vec)
-        rho_vec_half_exact = np.matmul(curr_evolver, rho_vec_half_exact)
 
     if results_to == 'plot':
         plt.plot(J_expect)
-        plt.plot(J_expect_half_exact)
-        # plt.show()
     else:
         with open(outdir + '/explicit_J_expect', 'wb') as f:
             pickle.dump(J_expect, f)
@@ -510,10 +495,10 @@ for ti in range(timesteps):
     print('---')
     print(ti)
     try:
-        with open(outdir + '/mid_state_' + case + '_N_' + str(N)
+        with open(newdir + '/mid_state_' + case + '_N_' + str(N)
                   + '_Omega_' + str(Omega) + '_nn_' + str(nn_num) + '_ti_' + str(ti), 'rb') as f:
             [ti, psi, projectors_left, projectors_right] = pickle.load(f)
-        with open(outdir + '/tdvp_' + case + '_N_' + str(N)
+        with open(newdir + '/tdvp_' + case + '_N_' + str(N)
                   + '_Omega_' + str(Omega) + '_nn_' + str(nn_num), 'rb') as f:
             [J_expect_form, bond_dims_form] = pickle.load(f)
             J_expect[:len(J_expect_form)] = J_expect_form
@@ -530,11 +515,11 @@ for ti in range(timesteps):
                                                     + [tn.Node(I) for i in range(si + 1, sj)] + [tn.Node(sigma.reshape([1, d**2, 1]))]
                                                     + [tn.Node(I) for i in range(sj +1, N)])
         bond_dims[ti] = psi[int(len(psi)/2)].tensor.shape[0]
-        tdvp_sweep(psi, L, projectors_left, projectors_right, dt, max_bond_dim=128)
-        if True: # ti % 10 == 0:
-            with open(outdir + '/tdvp_' + case + '_N_' + str(N) + '_Omega_' + str(Omega) + '_nn_' + str(nn_num), 'wb') as f:
+        tdvp_sweep(psi, L, projectors_left, projectors_right, dt, max_bond_dim=1024)
+        if ti % save_each == 0:
+            with open(newdir + '/tdvp_' + case + '_N_' + str(N) + '_Omega_' + str(Omega) + '_nn_' + str(nn_num), 'wb') as f:
                 pickle.dump([J_expect, bond_dims], f)
-            with open(outdir + '/mid_state_' + case + '_N_' + str(N) + '_Omega_' + str(Omega) + '_nn_' + str(nn_num) + '_ti_' + str(ti), 'wb') as f:
+            with open(newdir + '/mid_state_' + case + '_N_' + str(N) + '_Omega_' + str(Omega) + '_nn_' + str(nn_num) + '_ti_' + str(ti), 'wb') as f:
                 pickle.dump([ti, psi, projectors_left, projectors_right], f)
 if results_to == 'plot':
     plt.plot(np.array(range(timesteps)) * 2, np.abs(J_expect))
