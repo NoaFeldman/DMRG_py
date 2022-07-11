@@ -208,7 +208,7 @@ J_expect = np.zeros(timesteps)
 for ti in range(timesteps):
     print('---')
     print(ti)
-    state_filename, data_filename = filenames(newdir, case, N, Omega, nn_num, ti, sim_method)
+    state_filename, data_filename = filenames(newdir, case, N, Omega, nn_num, int(save_each * np.ceil(ti / save_each)), sim_method)
     try:
         # TODO try in steps of save_every...
         with open(state_filename, 'rb') as f:
