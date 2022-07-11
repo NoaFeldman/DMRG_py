@@ -307,7 +307,7 @@ def inner_contract(node: tn.Node, indices: List[int]) -> tn.Node:
 
 
 def svdTruncation(node: tn.Node, leftEdges: List[int], rightEdges: List[int],
-                  dir: str, maxBondDim=128, leftName='U', rightName='V',  edgeName='default', normalize=False, maxTrunc=15):
+                  dir: str, maxBondDim=1024, leftName='U', rightName='V',  edgeName='default', normalize=False, maxTrunc=15):
     # np.seterr(all='raise')
     maxBondDim = getAppropriateMaxBondDim(maxBondDim,
                                           [node.edges[e] for e in leftEdges], [node.edges[e] for e in rightEdges])
