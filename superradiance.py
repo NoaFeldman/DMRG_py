@@ -95,17 +95,17 @@ def get_photon_green_L(n, Omega, Gamma, k, theta, sigma, opt='NN', case='kernel'
     return L
 
 
-def filenames(newdir, case, N, Omega, nn_num, ti, method):
+def filenames(newdir, case, N, Omega, nn_num, ti, method, bond_dim):
     if method == 'tdvp':
         state_filename = newdir + '/mid_state_' + case + '_N_' + str(N) \
-            + '_Omega_' + str(Omega) + '_nn_' + str(nn_num) + '_ti_' + str(ti)
+            + '_Omega_' + str(Omega) + '_nn_' + str(nn_num) + '_ti_' + str(ti) + '_bond_' + str(bond_dim)
         data_filename = newdir + '/tdvp_' + case + '_N_' + str(N) \
-                          + '_Omega_' + str(Omega) + '_nn_' + str(nn_num)
+                          + '_Omega_' + str(Omega) + '_nn_' + str(nn_num) + '_bond_' + str(bond_dim)
     elif method == 'swap':
         state_filename = newdir + '/swap_mid_state_' + case + '_N_' + str(N) \
-                         + '_Omega_' + str(Omega) + '_nn_' + str(nn_num) + '_ti_' + str(ti)
+                         + '_Omega_' + str(Omega) + '_nn_' + str(nn_num) + '_ti_' + str(ti) + '_bond_' + str(bond_dim)
         data_filename = newdir + '/swap_' + case + '_N_' + str(N) \
-                        + '_Omega_' + str(Omega) + '_nn_' + str(nn_num)
+                        + '_Omega_' + str(Omega) + '_nn_' + str(nn_num) + '_bond_' + str(bond_dim)
     return state_filename, data_filename
 
 d = 2
@@ -126,6 +126,7 @@ dt = T / timesteps
 save_each = 10
 results_to = sys.argv[7]
 sim_method = sys.argv[8]
+bond_dim = int(sys.argv[9])
 
 newdir = outdir + '/' + sim_method + '_' + case + '_N_' + str(N) + '_Omega_' + str(Omega) + '_nn_' + str(nn_num) + '_timesteps_' + str(timesteps)
 try:
@@ -209,7 +210,7 @@ J_expect = np.zeros(timesteps)
 for ti in range(timesteps):
     print('---')
     print(ti)
-    state_filename, data_filename = filenames(newdir, case, N, Omega, nn_num, int(save_each * np.ceil(ti / save_each)), sim_method)
+    state_filename, data_filename = filenames(newdir, case, N, Omega, nn_num, int(save_each * np.ceil(ti / save_each)), sim_method, bond_dim)
     try:
         # TODO try in steps of save_every...
         with open(state_filename, 'rb') as f:
@@ -238,7 +239,7 @@ for ti in range(timesteps):
                                                     + [tn.Node(I) for i in range(si + 1, N)])
         bond_dims[ti] = psi[int(len(psi)/2)].tensor.shape[0]
         if sim_method == 'tdvp':
-            tdvp.tdvp_sweep(psi, L, projectors_left, projectors_right, dt / 2, max_bond_dim=1024)
+            tdvp.tdvp_sweep(psi, L, projectors_left, projectors_right, dt / 2, max_bond_dim=bond_dim)
         elif sim_method == 'swap':
             swap.trotter_sweep(psi, trotter_single_op, neighbor_trotter_ops, swap_op)
         if ti % save_each == 0:
