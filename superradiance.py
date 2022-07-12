@@ -21,8 +21,8 @@ def get_gnm(gamma, k, theta, nearest_neighbors_num, case):
             r = ni + 1
             kr = k * r
             g = -gamma * 3 / 4 * np.exp(1j * kr) / kr * (1 + (1j * kr - 1) / kr**2 + (-1 + 3 * (1 - 1j * kr) / kr**2) * np.cos(theta)**2)
-        Deltas[ni] = np.real(g)
-        gammas[ni] = -2 * np.imag(g)
+            Deltas[ni] = np.real(g)
+            gammas[ni] = -2 * np.imag(g)
     return Deltas, gammas
 
 
@@ -135,6 +135,7 @@ except FileExistsError:
 
 if results_to == 'plot':
     import matplotlib.pyplot as plt
+
 L = get_photon_green_L(N, Omega, Gamma, k, theta, sigma, case=case, nearest_neighbors_num=nn_num)
 psi = [tn.Node(np.array([1, 0, 0, 0]).reshape([1, d**2, 1])) for n in range(N)]
 if N <= 6:
