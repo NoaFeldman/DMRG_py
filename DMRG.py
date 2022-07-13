@@ -22,13 +22,7 @@ def getDMRGH(N, onsiteTerms, neighborTerms, d=2):
     hr2l = [None] * (N)
     hl2r = [None] * (N)
     for i in range(N-1):
-        if d == 2:
-            neighborTerm = np.reshape(neighborTerms[i], (2, 2, 2, 2))
-        elif d == 3:
-            neighborTerm = np.reshape(neighborTerms[i], (3, 3, 3, 3))
-        else:
-            print(" d unsupported!")
-            return -1
+        neighborTerm = np.reshape(neighborTerms[i], (d, d, d, d))
         pairOp = tn.Node(neighborTerm,
                          axis_names=['s' + str(i) + '*', 's' + str(i+1) + '*', 's' + str(i), 's' + str(i+1)])
         splitted = tn.split_node(pairOp, [pairOp[0], pairOp[2]], [pairOp[1], pairOp[3]],
@@ -214,17 +208,9 @@ def lanczos(HL, HR, H, k, psi, psiCompare=None, apply_function=applyHToM, opt='g
     [Es, Vs] = np.linalg.eigh(T)
     M = None
 
-    h = bops.permute(
-        bops.contract(bops.contract(bops.contract(HL[k], H[k], '1', '2'), H[k + 1], '4', '2'), HR[k + 1], '6', '1'),
-        [0, 2, 4, 6, 1, 3, 5, 7]).tensor.reshape([16, 16])
-    v = bops.contract(psi[k], psi[k+1], '2', '0').tensor.reshape(16)
-    hv = np.matmul(h, v)
     for ei in range(len(Es)):
         for vi in range(len(base)):
             M = bops.addNodes(M, bops.multNode(base[vi], Vs[vi, ei] * Es[ei]))
-    b = 1
-
-
     if opt == 'ground_state':
         minIndex = np.argmin(Es)
         E0 = Es[minIndex]
