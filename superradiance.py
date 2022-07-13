@@ -6,7 +6,8 @@ import os
 import tensornetwork as tn
 import basicOperations as bops
 import scipy.linalg as linalg
-
+import swap_dmrg as swap
+from typing import List
 
 def get_gnm(gamma, k, theta, nearest_neighbors_num, case):
     if case == 'dicke':
@@ -20,8 +21,8 @@ def get_gnm(gamma, k, theta, nearest_neighbors_num, case):
             r = ni + 1
             kr = k * r
             g = -gamma * 3 / 4 * np.exp(1j * kr) / kr * (1 + (1j * kr - 1) / kr**2 + (-1 + 3 * (1 - 1j * kr) / kr**2) * np.cos(theta)**2)
-        Deltas[ni] = np.real(g)
-        gammas[ni] = -2 * np.imag(g)
+            Deltas[ni] = np.real(g)
+            gammas[ni] = -2 * np.imag(g)
     return Deltas, gammas
 
 
@@ -94,171 +95,159 @@ def get_photon_green_L(n, Omega, Gamma, k, theta, sigma, opt='NN', case='kernel'
     return L
 
 
+def filenames(newdir, case, N, Omega, nn_num, ti, method, bond_dim):
+    if method == 'tdvp':
+        state_filename = newdir + '/mid_state_' + case + '_N_' + str(N) \
+            + '_Omega_' + str(Omega) + '_nn_' + str(nn_num) + '_ti_' + str(ti) + '_bond_' + str(bond_dim)
+        data_filename = newdir + '/tdvp_' + case + '_N_' + str(N) \
+                          + '_Omega_' + str(Omega) + '_nn_' + str(nn_num) + '_bond_' + str(bond_dim)
+    elif method == 'swap':
+        state_filename = newdir + '/swap_mid_state_' + case + '_N_' + str(N) \
+                         + '_Omega_' + str(Omega) + '_nn_' + str(nn_num) + '_ti_' + str(ti) + '_bond_' + str(bond_dim)
+        data_filename = newdir + '/swap_' + case + '_N_' + str(N) \
+                        + '_Omega_' + str(Omega) + '_nn_' + str(nn_num) + '_bond_' + str(bond_dim)
+    return state_filename, data_filename
+
 d = 2
 Gamma = 1
 sigma = np.array([[0, 0], [1, 0]])
 I = np.eye(2).reshape([1, d ** 2, 1])
 
-do_run = int(sys.argv[1])
-if do_run:
-    N = int(sys.argv[2])
-    k = 2 * np.pi / 10
-    theta = 0
-    nn_num = int(sys.argv[3])
-    Omega = float(sys.argv[4]) / Gamma
-    case = sys.argv[5]
-    outdir = sys.argv[6]
-    timesteps = int(sys.argv[7])
+N = int(sys.argv[1])
+k = 2 * np.pi / 10
+theta = 0
+nn_num = int(sys.argv[2])
+Omega = float(sys.argv[3]) / Gamma
+case = sys.argv[4]
+outdir = sys.argv[5]
+timesteps = int(sys.argv[6])
+T = 4
+dt = T / timesteps
+save_each = 10
+results_to = sys.argv[7]
+sim_method = sys.argv[8]
+bond_dim = int(sys.argv[9])
 
-    newdir = outdir + '/' + case + '_N_' + str(N) + '_Omega_' + str(Omega) + '_nn_' + str(nn_num) + '_timesteps_' + str(timesteps)
-    try:
-        os.mkdir(newdir)
-    except FileExistsError:
-        pass
+newdir = outdir + '/' + sim_method + '_' + case + '_N_' + str(N) + '_Omega_' + str(Omega) + '_nn_' + str(nn_num) + '_timesteps_' + str(timesteps)
+try:
+    os.mkdir(newdir)
+except FileExistsError:
+    pass
 
-    T = 4
-    dt = T / timesteps
-    save_each = 10
-    results_to = sys.argv[8]
+if results_to == 'plot':
+    import matplotlib.pyplot as plt
 
-    if results_to == 'plot':
-        import matplotlib.pyplot as plt
-    L = get_photon_green_L(N, Omega, Gamma, k, theta, sigma, case=case, nearest_neighbors_num=nn_num)
-    psi = [tn.Node(np.array([1, 0, 0, 0]).reshape([1, d**2, 1])) for n in range(N)]
-    if N <= 6:
-        Deltas, gammas = get_gnm(Gamma, k, theta, nn_num, case)
-        if case == 'kernel':
-            Deltas = np.array([0] + list(Deltas))
-            gammas = np.array([Gamma] + list(gammas))
-        L_exact = np.zeros((d**(2*N), d**(2*N)), dtype=complex)
-        sigmas = []
-        for i in range(N):
-            sigmas.append(np.kron(np.eye(d**(i)), np.kron(sigma, np.eye(d**(N - i - 1)))))
+L = get_photon_green_L(N, Omega, Gamma, k, theta, sigma, case=case, nearest_neighbors_num=nn_num)
+psi = [tn.Node(np.array([1, 0, 0, 0]).reshape([1, d**2, 1])) for n in range(N)]
+if N <= 6:
+    Deltas, gammas = get_gnm(Gamma, k, theta, nn_num, case)
+    if case == 'kernel':
+        Deltas = np.array([0] + list(Deltas))
+        gammas = np.array([Gamma] + list(gammas))
+    L_exact = np.zeros((d**(2*N), d**(2*N)), dtype=complex)
+    sigmas = []
+    for i in range(N):
+        sigmas.append(np.kron(np.eye(d**(i)), np.kron(sigma, np.eye(d**(N - i - 1)))))
 
-        for n in range(N):
-            for m in range(N):
-                if np.abs(m - n) <= nn_num:
-                    L_exact += (-1j * Deltas[np.abs(m - n)] - 0.5 * gammas[np.abs(m - n)]) * \
-                               np.kron(np.eye(d**N), np.matmul(sigmas[n].T, sigmas[m]))
-                    L_exact += (1j * Deltas[np.abs(m - n)] - 0.5 * gammas[np.abs(m - n)]) * \
-                               np.kron(np.matmul(sigmas[n].T, sigmas[m]), np.eye(d**N))
-                    L_exact += gammas[np.abs(m - n)] * np.kron(sigmas[n], sigmas[m])
+    for n in range(N):
+        for m in range(N):
+            if np.abs(m - n) <= nn_num:
+                L_exact += (-1j * Deltas[np.abs(m - n)] - 0.5 * gammas[np.abs(m - n)]) * \
+                           np.kron(np.eye(d**N), np.matmul(sigmas[n].T, sigmas[m]))
+                L_exact += (1j * Deltas[np.abs(m - n)] - 0.5 * gammas[np.abs(m - n)]) * \
+                           np.kron(np.matmul(sigmas[n].T, sigmas[m]), np.eye(d**N))
+                L_exact += gammas[np.abs(m - n)] * np.kron(sigmas[n], sigmas[m])
 
-        explicit_L = bops.contract(L[0], L[1], '3', '2')
-        explicit_rho = bops.contract(psi[0], psi[1], '2', '0')
-        for ni in range(2, N):
-            explicit_L = bops.contract(explicit_L, L[ni], [2 * ni + 1], '2')
-            explicit_rho = bops.contract(explicit_rho, psi[ni], [ni + 1], '0')
-        L_mat = explicit_L.tensor.reshape([d] * 4 * N).transpose([4 * i for i in range(N)]
-                                                                 + [1 + 4 * i for i in range(N)]
-                                                                 + [2 + 4 * i for i in range(N)]
-                                                                 + [3 + 4 * i for i in range(N)])\
-            .reshape([d**(2 * N), d**(2 * N)]).T
-        rho_vec = bops.getExplicitVec(psi, d**2)
-        evolver = linalg.expm(L_mat * dt)
-        J_expect = np.zeros(timesteps)
-        z_inds = [[i + d**N * i,
-                   2 * bin(i).split('b')[1].count('1') - N]
-                  for i in range(d**N)]
-        J = np.zeros(sigmas[0].shape)
-        for i in range(N):
-            J += sigmas[i]
-        JdJ = np.matmul(J.conj().T, J)
-        for ti in range(timesteps):
-            J_expect[ti] = np.abs(np.trace(np.matmul(JdJ, rho_vec.reshape([d**N, d**N]))))
-            # J_expect_half_exact[ti] = np.abs(np.trace(np.matmul(JdJ, rho_vec_half_exact.reshape([d**N, d**N]))))
-            projector = np.zeros((len(rho_vec), len(rho_vec)), dtype=complex)
-            rho_mps = bops.vector_to_mps(rho_vec.reshape([d]*(2 * N))\
-                                         .transpose(np.array([[i, i + N] for i in range(N)]).reshape([2 * N])), d**2, N)
-            for si in range(N - 1, 0, -1):
-                if si > 1:
-                    curr_l = tn.Node(np.eye(1))
-                    for sli in range(si - 1):
-                        curr_l = bops.contract(curr_l, rho_mps[sli], [1 + sli], '0')
-                    projector_l = bops.contract(curr_l, curr_l, [si, '*'], [si])
-                    curr_projector = np.kron(projector_l.tensor.reshape([d**(2*si - 2), d**(2 * si - 2)]),
-                                             np.eye(d**4))
-                else:
-                    curr_projector = np.eye(d**4)
-                if si < N - 1:
-                    curr_r = tn.Node(np.eye(rho_mps[si + 1][0].dimension))
-                    for sri in range(si + 1, N):
-                        curr_r = bops.contract(curr_r, rho_mps[sri], [sri - si], '0')
-                    projector_r = bops.contract(curr_r, curr_r, '0*', '0')
-                    curr_projector = np.kron(curr_projector,
-                                    projector_r.tensor.reshape([d**(2 * (N - 1- si)), d**(2 * (N - 1- si))]))
-                projector += curr_projector / np.max(np.linalg.eigvalsh(curr_projector))
-                rho_mps = bops.shiftWorkingSite(rho_mps, si, '<<')
-
-            rho_mps = bops.vector_to_mps(rho_vec.reshape([d] * (2 * N)) \
-                                         .transpose(np.array([[i, i + N] for i in range(N)]).reshape([2 * N])), d ** 2, N)
-            for si in range(N - 2, 0, -1):
-                if si > 0:
-                    curr_l = tn.Node(np.eye(1))
-                    for sli in range(si):
-                        curr_l = bops.contract(curr_l, rho_mps[sli], [1 + sli], '0')
-                    projector_l = bops.contract(curr_l, curr_l, [si + 1, '*'], [si + 1])
-                    curr_projector = np.kron(projector_l.tensor.reshape([d ** (2 * si), d ** (2 * si)]),
-                                             np.eye(d ** 2))
-                else:
-                    curr_projector = np.eye(d ** 2)
-                if si < N - 1:
-                    curr_r = tn.Node(np.eye(rho_mps[si + 1][0].dimension))
-                    for sri in range(si + 1, N):
-                        curr_r = bops.contract(curr_r, rho_mps[sri], [sri - si], '0')
-                    projector_r = bops.contract(curr_r, curr_r, '0*', '0')
-                    curr_projector = np.kron(curr_projector,
-                                             projector_r.tensor.reshape(
-                                                 [d ** (2 * (N - 1 - si)), d ** (2 * (N - 1 - si))]))
-                projector -= curr_projector / np.max(np.linalg.eigvalsh(curr_projector))
-                rho_mps = bops.shiftWorkingSite(rho_mps, si, '<<')
-            projector = projector.reshape([d] * 4 * N).transpose([2 * i for i in range(N)]
-                                                                 + [1 + 2 * i for i in range(N)]
-                                                                 + [2 * N + 2 * i for i in range(N)]
-                                                                 + [2 * N + 1 + 2 * i for i in range(N)])\
-                .reshape([d**(2 * N), d**(2 * N)])
-            rho_vec = np.matmul(evolver, rho_vec)
-
-        if results_to == 'plot':
-            plt.plot(J_expect)
-        else:
-            with open(outdir + '/explicit_J_expect', 'wb') as f:
-                pickle.dump(J_expect, f)
-
-    projectors_left, projectors_right = tdvp.get_initial_projectors(psi, L)
-    I = np.eye(2).reshape([1, d**2, 1])
-    J_expect = np.zeros(timesteps, dtype=complex)
-    bond_dims = np.zeros(timesteps, dtype=complex)
+    explicit_L = bops.contract(L[0], L[1], '3', '2')
+    explicit_rho = bops.contract(psi[0], psi[1], '2', '0')
+    for ni in range(2, N):
+        explicit_L = bops.contract(explicit_L, L[ni], [2 * ni + 1], '2')
+        explicit_rho = bops.contract(explicit_rho, psi[ni], [ni + 1], '0')
+    L_mat = explicit_L.tensor.reshape([d] * 4 * N).transpose([4 * i for i in range(N)]
+                                                             + [1 + 4 * i for i in range(N)]
+                                                             + [2 + 4 * i for i in range(N)]
+                                                             + [3 + 4 * i for i in range(N)])\
+        .reshape([d**(2 * N), d**(2 * N)]).T
+    rho_vec = bops.getExplicitVec(psi, d**2)
+    evolver_L = linalg.expm(L_mat * dt)
+    J_expect_L = np.zeros(timesteps)
+    z_inds = [[i + d**N * i,
+               2 * bin(i).split('b')[1].count('1') - N]
+              for i in range(d**N)]
+    J = np.zeros(sigmas[0].shape)
+    for i in range(N):
+        J += sigmas[i]
+    JdJ = np.matmul(J.conj().T, J)
     for ti in range(timesteps):
-        print('---')
-        print(ti)
-        try:
-            with open(newdir + '/mid_state_' + case + '_N_' + str(N)
-                      + '_Omega_' + str(Omega) + '_nn_' + str(nn_num) + '_ti_' + str(ti), 'rb') as f:
-                [ti, psi, projectors_left, projectors_right] = pickle.load(f)
-            with open(newdir + '/tdvp_' + case + '_N_' + str(N)
-                      + '_Omega_' + str(Omega) + '_nn_' + str(nn_num), 'rb') as f:
-                [J_expect_form, bond_dims_form] = pickle.load(f)
-                J_expect[:len(J_expect_form)] = J_expect_form
-                bond_dims[:len(bond_dims_form)] = bond_dims_form
-        except FileNotFoundError:
-            for si in range(N):
-                J_expect[ti] += bops.getOverlap(psi,
-                                    [tn.Node(I) for i in range(si)] + [tn.Node(np.matmul(sigma.T, sigma).reshape([1, d**2, 1]))]
-                                                + [tn.Node(I) for i in range(si + 1, N)])
-                for sj in range(N):
-                    if si != sj:
-                        J_expect[ti] += bops.getOverlap(psi,
-                                        [tn.Node(I) for i in range(si)] + [tn.Node(sigma.T.reshape([1, d**2, 1]))]
-                                                        + [tn.Node(I) for i in range(si + 1, sj)] + [tn.Node(sigma.reshape([1, d**2, 1]))]
-                                                        + [tn.Node(I) for i in range(sj +1, N)])
-            bond_dims[ti] = psi[int(len(psi)/2)].tensor.shape[0]
-            tdvp.tdvp_sweep(psi, L, projectors_left, projectors_right, dt, max_bond_dim=1024)
-            if ti % save_each == 0:
-                with open(newdir + '/tdvp_' + case + '_N_' + str(N) + '_Omega_' + str(Omega) + '_nn_' + str(nn_num), 'wb') as f:
-                    pickle.dump([J_expect, bond_dims], f)
-                with open(newdir + '/mid_state_' + case + '_N_' + str(N) + '_Omega_' + str(Omega) + '_nn_' + str(nn_num) + '_ti_' + str(ti), 'wb') as f:
-                    pickle.dump([ti, psi, projectors_left, projectors_right], f)
+        J_expect_L[ti] = np.abs(np.trace(np.matmul(JdJ, rho_vec.reshape([d**N, d**N]))))
+        rho_vec = np.matmul(evolver_L, rho_vec)
+
     if results_to == 'plot':
-        plt.plot(np.array(range(timesteps)) * 2, np.abs(J_expect))
-        plt.show()
+        plt.plot(J_expect_L)
+    else:
+        with open(outdir + '/explicit_J_expect', 'wb') as f:
+            pickle.dump(J_expect_L, f)
+
+I = np.eye(2).reshape([1, d**2, 1])
+J_expect = np.zeros(timesteps, dtype=complex)
+bond_dims = np.zeros(timesteps, dtype=complex)
+
+
+projectors_left, projectors_right = tdvp.get_initial_projectors(psi, L)
+if sim_method == 'swap':
+    swap_op = tn.Node(np.eye(d**4).reshape([d**2] * 4).transpose([0, 1, 3, 2]))
+    trotter_single_op = swap.get_single_trotter_op(get_single_L_term(Omega, Gamma, sigma).T, 1j * dt)
+    pairs = get_pair_L_terms(Deltas, gammas, nn_num, sigma)
+    terms = []
+    for ni in range(nn_num):
+        curr = np.kron(pairs[0][0][ni], pairs[0][1])
+        for pi in range(1, len(pairs)):
+            curr += np.kron(pairs[pi][0][ni], pairs[pi][1])
+        terms.append(curr)
+    neighbor_trotter_ops = swap.get_neighbor_trotter_ops([term.T for term in terms], 1j * dt, d**2)
+
+J_expect = np.zeros(timesteps)
+for ti in range(timesteps):
+    print('---')
+    print(ti)
+    state_filename, data_filename = filenames(newdir, case, N, Omega, nn_num, int(save_each * np.ceil(ti / save_each)), sim_method, bond_dim)
+    try:
+        # TODO try in steps of save_every...
+        with open(state_filename, 'rb') as f:
+            [ti, psi, projectors_left, projectors_right] = pickle.load(f)
+        with open(data_filename, 'rb') as f:
+            [J_expect_form, bond_dims_form] = pickle.load(f)
+            J_expect[:len(J_expect_form)] = J_expect_form
+            bond_dims[:len(bond_dims_form)] = bond_dims_form
+    except FileNotFoundError:
+        for si in range(N):
+            J_expect[ti] += bops.getOverlap(psi,
+                                [tn.Node(I) for i in range(si)] + [tn.Node(np.matmul(sigma.T, sigma).reshape([1, d**2, 1]))]
+                                            + [tn.Node(I) for i in range(si + 1, N)])
+            for sj in range(N):
+                if si < sj:
+                    J_expect[ti] += bops.getOverlap(psi,
+                                    [tn.Node(I) for i in range(si)] + [tn.Node(sigma.T.reshape([1, d**2, 1]))]
+                                                    + [tn.Node(I) for i in range(si + 1, sj)] + [tn.Node(sigma.reshape([1, d**2, 1]))]
+                                                    + [tn.Node(I) for i in range(sj +1, N)])
+                elif sj < si:
+                    J_expect[ti] += bops.getOverlap(psi,
+                                                    [tn.Node(I) for i in range(sj)] + [
+                                                        tn.Node(sigma.T.reshape([1, d ** 2, 1]))]
+                                                    + [tn.Node(I) for i in range(sj + 1, si)] + [
+                                                        tn.Node(sigma.reshape([1, d ** 2, 1]))]
+                                                    + [tn.Node(I) for i in range(si + 1, N)])
+        bond_dims[ti] = psi[int(len(psi)/2)].tensor.shape[0]
+        if sim_method == 'tdvp':
+            tdvp.tdvp_sweep(psi, L, projectors_left, projectors_right, dt / 2, max_bond_dim=bond_dim)
+        elif sim_method == 'swap':
+            swap.trotter_sweep(psi, trotter_single_op, neighbor_trotter_ops, swap_op)
+        if ti % save_each == 0:
+            with open(data_filename, 'wb') as f:
+                pickle.dump([J_expect, bond_dims], f)
+            with open(state_filename, 'wb') as f:
+                pickle.dump([ti, psi, projectors_left, projectors_right], f)
+
+if results_to == 'plot':
+    plt.plot(np.array(range(timesteps)), np.abs(J_expect), ':')
+    plt.show()
