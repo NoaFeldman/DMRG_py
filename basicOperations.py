@@ -294,7 +294,8 @@ def contractDiag(node: tn.Node, diag: np.array, edgeNum: int):
 
 
 def permute(node: tn.Node, perm: List[int]) -> tn.Node:
-    return tn.Node(node.tensor.transpose(perm))
+    node.tensor = node.tensor.transpose(perm)
+    return node
 
 
 def dagger(mat:np.array) -> np.array:

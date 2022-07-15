@@ -26,6 +26,22 @@ def get_gnm(gamma, k, theta, nearest_neighbors_num, case):
     return Deltas, gammas
 
 
+def get_gamma_matrix(N, Gamma, nn_num, k, theta):
+    result = np.diag(np.ones(N) * Gamma)
+    for ni in range(1, nn_num + 1):
+        Delta, gamma = get_gnm(ni + 1, Gamma, k, theta)
+        for i in range(N - ni):
+            result[i, i + ni] = gamma
+            result[i + ni, i] = gamma
+    return result
+
+
+def tn_dm_to_matrix(rho):
+    return bops.getExplicitVec(rho, d**2).reshape([d] * 2 * len(rho)).\
+        transpose([i * 2 for i in range(len(rho))] + [i * 2 + 1 for i in range(len(rho))]).reshape([d**N, d**N])
+
+
+
 def get_single_L_term(Omega, Gamma, sigma):
     return -1j * Omega * (np.kron(np.eye(d), sigma + sigma.T) - np.kron(sigma + sigma.T, np.eye(d))) \
         + Gamma * (np.kron(sigma, sigma)
@@ -121,7 +137,7 @@ Omega = float(sys.argv[3]) / Gamma
 case = sys.argv[4]
 outdir = sys.argv[5]
 timesteps = int(sys.argv[6])
-T = 4
+T = 1
 dt = T / timesteps
 save_each = 10
 results_to = sys.argv[7]
@@ -139,6 +155,11 @@ if results_to == 'plot':
 
 L = get_photon_green_L(N, Omega, Gamma, k, theta, sigma, case=case, nearest_neighbors_num=nn_num)
 psi = [tn.Node(np.array([1, 0, 0, 0]).reshape([1, d**2, 1])) for n in range(N)]
+psi_ten = np.zeros((2, 4, 2), dtype=complex)
+psi_ten[0, 0, 1] = 1
+psi_ten[0, 0, 0] = 1
+psi_ten[1, 3, 0] = 1
+psi = [tn.Node(psi_ten[0, :, :].reshape([1, 4, 2]))] + [tn.Node(psi_ten) for n in range(N - 2)] + [tn.Node(psi_ten[:, :, 0].reshape([2, 4, 1]))]
 if N <= 6:
     Deltas, gammas = get_gnm(Gamma, k, theta, nn_num, case)
     if case == 'kernel':
@@ -239,7 +260,7 @@ for ti in range(timesteps):
                                                     + [tn.Node(I) for i in range(si + 1, N)])
         bond_dims[ti] = psi[int(len(psi)/2)].tensor.shape[0]
         if sim_method == 'tdvp':
-            tdvp.tdvp_sweep(psi, L, projectors_left, projectors_right, dt / 2, max_bond_dim=bond_dim)
+            tdvp.tdvp_sweep(psi, L, projectors_left, projectors_right, dt / 2, max_bond_dim=bond_dim, num_of_sites=1)
         elif sim_method == 'swap':
             swap.trotter_sweep(psi, trotter_single_op, neighbor_trotter_ops, swap_op)
         if ti % save_each == 0:
