@@ -155,11 +155,11 @@ if results_to == 'plot':
 
 L = get_photon_green_L(N, Omega, Gamma, k, theta, sigma, case=case, nearest_neighbors_num=nn_num)
 psi = [tn.Node(np.array([1, 0, 0, 0]).reshape([1, d**2, 1])) for n in range(N)]
-psi_ten = np.zeros((2, 4, 2), dtype=complex)
-psi_ten[0, 0, 1] = 1
-psi_ten[0, 0, 0] = 1
-psi_ten[1, 3, 0] = 1
-psi = [tn.Node(psi_ten[0, :, :].reshape([1, 4, 2]))] + [tn.Node(psi_ten) for n in range(N - 2)] + [tn.Node(psi_ten[:, :, 0].reshape([2, 4, 1]))]
+# psi_ten = np.zeros((2, 4, 2), dtype=complex)
+# psi_ten[0, 0, 1] = 1
+# psi_ten[0, 0, 0] = 1
+# psi_ten[1, 3, 0] = 1
+# psi = [tn.Node(psi_ten[0, :, :].reshape([1, 4, 2]))] + [tn.Node(psi_ten) for n in range(N - 2)] + [tn.Node(psi_ten[:, :, 0].reshape([2, 4, 1]))]
 if N <= 6:
     Deltas, gammas = get_gnm(Gamma, k, theta, nn_num, case)
     if case == 'kernel':
@@ -271,4 +271,5 @@ for ti in range(timesteps):
 
 if results_to == 'plot':
     plt.plot(np.array(range(timesteps)), np.abs(J_expect), ':')
+    plt.plot(np.array(range(timesteps)), np.abs(J_expect) / 2, ':')
     plt.show()

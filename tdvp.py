@@ -7,6 +7,7 @@ import sys
 from typing import List
 import scipy.linalg as linalg
 import os
+import CBE as cbe
 
 
 def tensor_overlap(n1, n2):
@@ -116,6 +117,12 @@ def tdvp_step(psi: List[tn.Node], H: List[tn.Node], k: int,
         elif dir == '<<':
             psi[k - 1] = bops.contract(psi[k - 1], C, '2', '0')
 
+    left_ind = k-1 if dir == '<<' else k
+    M = bops.contract(psi[left_ind], psi[left_ind + 1], '2', '0')
+    [A, C, B, te] = bops.svdTruncation(M, [0, 1], [2, 3], '>*<')
+    psi_copy = bops.copyState(psi)
+    cbe.get_op_tilde_tr(psi, left_ind, HL, HR, H, A, C, B, dir, D=max_bond_dim, w=H[M_ind - 1].tensor.shape[3])
+    print(bops.getOverlap(psi, psi_copy) / bops.getOverlap(psi, psi))
     return te
 
 
@@ -269,7 +276,7 @@ def get_gamma_matrix(N, Gamma, nn_num, k, theta):
     return result
 
 
-def tn_dm_to_matrix(rho):
+def tn_dm_to_matrix(rho, d=2):
     return bops.getExplicitVec(rho, d**2).reshape([d] * 2 * len(rho)).\
         transpose([i * 2 for i in range(len(rho))] + [i * 2 + 1 for i in range(len(rho))]).reshape([d**N, d**N])
 
