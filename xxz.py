@@ -9,18 +9,15 @@ import magicRenyi
 import sys
 import random
 import randomUs as ru
+import os
 
 d = 2
 model = sys.argv[1]
 indir = sys.argv[2]
-if len(sys.argv) == 5:
-    n = 16
-    curr_ind = 3
-else:
-    n = int(sys.argv[3])
-    curr_ind = 4
-range_i = int(sys.argv[curr_ind])
-range_f = int(sys.argv[curr_ind + 1])
+n = int(sys.argv[3])
+range_i = int(sys.argv[4])
+range_f = int(sys.argv[5])
+
 
 def get_xxz_dmrg_terms(delta):
     onsite_terms = [0 * np.eye(d) for i in range(n)]
@@ -57,6 +54,15 @@ def get_magic_xxz_dmrg_terms(delta):
                       np.kron(basic.pauli2X, basic.pauli2X) + \
                       np.kron(basic.pauli2Y, basic.pauli2Y) for i in range(n - 1)]
     return onsite_terms, neighbor_terms
+
+def get_magic_xxz_rotations_dmrg_terms(theta):
+    onsite_terms = [0 * np.eye(d) for i in range(n)]
+    neighbor_terms = [np.kron(np.diag([1, np.exp(1j * np.pi * theta)]), np.diag([1, np.exp(1j * np.pi * theta)])) + \
+                      np.kron(np.diag([1, np.exp(1j * np.pi * theta)]), np.diag([1, np.exp(1j * np.pi * theta)])).T.conj() + \
+                      np.kron(basic.pauli2X, basic.pauli2X) + \
+                      np.kron(basic.pauli2Y, basic.pauli2Y) for i in range(n - 1)]
+    return onsite_terms, neighbor_terms
+
 
 def get_magic_xxz_real_pairs_dmrg_terms(delta):
     onsite_terms = [0 * np.eye(d) for i in range(n)]
@@ -96,10 +102,7 @@ def get_fermion_tight_binding_dmrg_terms(mu):
 
 
 def filename(indir, model, param_name, param, n):
-    if n == 16:
-        return indir + '/magic/results/' + model + '/' + param_name + '_' + str(param)
-    else:
-        return indir + '/magic/results/' + model + '/' + param_name + '_' + str(param) + '_n_' + str(n)
+    return indir + '/magic/results/' + model + '/' + param_name + '_' + str(param) + '_n_' + str(n)
 
 
 def get_H_explicit(onsite_terms, neighbor_terms):
@@ -141,6 +144,11 @@ elif model == 'magic_xxz':
     param_name = 'delta'
     params = [np.round(i * 0.1 - 2, 1) for i in range(range_i, range_f)]
     h_func = get_magic_xxz_dmrg_terms
+elif model == 'magic_xxz_rotations':
+    param_name = 'theta'
+    resolution = 0.25 / (range_f - range_i)
+    params = [np.round(i * resolution, 3) for i in range(range_f - range_i)]
+    h_func = get_magic_xxz_rotations_dmrg_terms
 elif model == 't_ising':
     param_name = 'h'
     params = [np.round(i * 0.1, 1) for i in range(range_i, range_f)]
@@ -159,8 +167,8 @@ elif model == 'xy_magic':
     h_func = get_xy_magic_dmrg_terms
 elif model == 'kitaev':
     param_name = 'mu_t'
-    mu_range = list(range(0, 100, 2)) # list(range(-40, 40, 2))
-    t_range = list(range(0, 100, 2))
+    mu_range = np.array([5.0]) # np.array(range(0, 100, 2)) # list(range(-40, 40, 2))
+    t_range = np.array(range(range_i, range_f, 2))
     params = [[np.round(mui * 0.1, 8), np.round(ti * 0.1, 8)] for mui in mu_range for ti in t_range]
     h_func = get_kitaev_chain_dmrg_terms
 elif model == 'fermion_tight_binding':
@@ -174,7 +182,7 @@ etas = [e * np.pi for e in [0.0, 0.15, 0.25, 0.4]]
 
 
 def run():
-    psi = bops.getStartupState(n, d)
+    psi = [tn.Node(np.array([np.sqrt(2), np.sqrt(2)]).reshape([1, 2, 1])) for i in range(n)] #bops.getStartupState(n, d)
     p2s = np.zeros(len(params))
     m2s = np.zeros((len(params), len(thetas), len(phis), len(etas)))
     mhalves = np.zeros((len(params), len(thetas), len(phis), len(etas)))
@@ -185,11 +193,13 @@ def run():
         param = params[pi]
         try:
             with open(filename(indir, model, param_name, param, n), 'rb') as f:
+                # [psi_orig, m2, m2_optimized, best_basis, mhalf, m2_maximized, worst_basis,
+                #                mhalf_optimized, mhalf_best_basis, mhalf_maximized, mhalf_worst_basis] = pickle.load(f)
                 [psi_orig, m2, mhalf] = pickle.load(f)
         except FileNotFoundError or EOFError:
             onsite_terms, neighbor_terms = h_func(param)
             psi_bond_dim = psi[int(n/2)].tensor.shape[0]
-            psi, E0, truncErrs = dmrg.DMRG(psi, onsite_terms, neighbor_terms, accuracy=1e-12)
+            psi, E0, truncErrs = dmrg.DMRG(psi, onsite_terms, neighbor_terms, accuracy=1e-10)
             psi_orig = psi
             if psi[int(n / 2)].tensor.shape[0] > 4:
                 psi = bops.relaxState(psi, 4)
@@ -198,25 +208,13 @@ def run():
             # m2_optimized, best_basis = magicRenyi.getSecondRenyi_optimizedBasis(psi, d)
             # m2_maximized, worst_basis = magicRenyi.getSecondRenyi_optimizedBasis(psi, d, opt='max')
             dm = get_half_system_dm(psi)
-            mhalf = 0 # magicRenyi.getHalfRenyiExact_dm(dm, d)
+            mhalf = magicRenyi.getHalfRenyiExact_dm(dm, d)
             # mhalf_optimized, mhalf_best_basis, mhalf_maximized, mhalf_worst_basis = \
             #     magicRenyi.getHalfRenyiExact_dm_optimized(dm, d)
-            szs[pi] = sum([bops.getExpectationValue(psi, [tn.Node(np.eye(2)) for i in range(j)] + \
-                                                    [tn.Node(basic.pauli2Z)] + \
-                                                    [tn.Node(np.eye(2)) for i in range(n - 1 - j)]) for j in range(n)])
+            # szs[pi] = sum([bops.getExpectationValue(psi, [tn.Node(np.eye(2)) for i in range(j)] + \
+            #                                         [tn.Node(basic.pauli2Z)] + \
+            #                                         [tn.Node(np.eye(2)) for i in range(n - 1 - j)]) for j in range(n)])
         print(psi[int(n/2)].tensor.shape)
-        dm = get_half_system_dm(psi)
-        # for ti in range(len(thetas)):
-        #     theta = thetas[ti]
-        #     for phi_i in range(len(phis)):
-        #         phi = phis[phi_i]
-        #         for ei in range(len(etas)):
-        #             eta = etas[ei]
-        #             m2s[pi, ti, phi_i, ei] = magicRenyi.getSecondRenyi_basis(psi, d, theta, phi, eta)
-        #             mhalves[pi, ti, phi_i, ei] = magicRenyi.getHalfRenyiExact_dm_basis(dm, d, theta, phi, eta)
-        p2s[pi] = bops.getRenyiEntropy(psi, 2, int(n / 2))
-        # best_bases.append([phase / np.pi for phase in best_basis])
-        # worst_bases.append([phase / np.pi for phase in worst_basis])
         print(param)
         with open(filename(indir, model, param_name, param, n), 'wb') as f:
             # pickle.dump([psi_orig, m2, m2_optimized, best_basis, mhalf, m2_maximized, worst_basis,
@@ -377,11 +375,14 @@ def analyze_kitaev():
             param = params[pi]
             mu = param[0]
             t = param[1]
-            with open(filename(indir, model, param_name, param, n), 'rb') as f:
-                [psi, m2, mhalf] = pickle.load(f)
-                m2s[mui, ti] = m2
-                mhalves[mui, ti] = mhalf
-                p2s[mui, ti] = bops.getRenyiEntropy(psi, 2, int(len(psi) / 2))
+            try:
+                with open(filename(indir, model, param_name, param, n), 'rb') as f:
+                    [psi, m2, mhalf] = pickle.load(f)
+                    m2s[mui, ti] = m2
+                    mhalves[mui, ti] = mhalf
+                    p2s[mui, ti] = bops.getRenyiEntropy(psi, 2, int(len(psi) / 2))
+            except FileNotFoundError:
+                pass
     pcm = axs[0].pcolormesh(mu_range, t_range, np.abs(p2s), shading='auto')
     ff.colorbar(pcm, ax=axs[0])
     pcm = axs[1].pcolormesh(mu_range, t_range, np.abs(m2s), shading='auto')
@@ -398,11 +399,12 @@ def analyze_thin():
     for pi in range(len(params)):
         param = params[pi]
         with open(filename(indir, model, param_name, param, n), 'rb') as f:
-            [psi, m2, mhalf] = pickle.load(f)
+            a = pickle.load(f)
+            psi = a[0]
+            m2 = a[1]
         p2s[pi] = bops.getRenyiEntropy(psi, 2, int(len(psi) / 2))
         m2s[pi] = m2
     axs[0].plot(params, p2s)
     axs[1].plot(params, m2s)
     plt.show()
-# analyze_thin()
 run()
