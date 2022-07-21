@@ -4,12 +4,12 @@ import DMRG as dmrg
 import tensornetwork as tn
 import pickle
 import basicDefs as basic
-import matplotlib.pyplot as plt
 import magicRenyi
 import sys
 import random
 import randomUs as ru
-import os
+from os import path
+
 
 d = 2
 model = sys.argv[1]
@@ -167,7 +167,7 @@ elif model == 'xy_magic':
     h_func = get_xy_magic_dmrg_terms
 elif model == 'kitaev':
     param_name = 'mu_t'
-    mu_range = np.array([5.0]) # np.array(range(0, 100, 2)) # list(range(-40, 40, 2))
+    mu_range = list(range(-40, 40, 2))
     t_range = np.array(range(range_i, range_f, 2))
     params = [[np.round(mui * 0.1, 8), np.round(ti * 0.1, 8)] for mui in mu_range for ti in t_range]
     h_func = get_kitaev_chain_dmrg_terms
@@ -183,42 +183,42 @@ etas = [e * np.pi for e in [0.0, 0.15, 0.25, 0.4]]
 
 def run():
     psi = [tn.Node(np.array([np.sqrt(2), np.sqrt(2)]).reshape([1, 2, 1])) for i in range(n)] #bops.getStartupState(n, d)
-    p2s = np.zeros(len(params))
     m2s = np.zeros((len(params), len(thetas), len(phis), len(etas)))
     mhalves = np.zeros((len(params), len(thetas), len(phis), len(etas)))
-    best_bases = []
-    worst_bases = []
-    szs = np.zeros(len(params), dtype=complex)
     for pi in range(len(params)):
         param = params[pi]
-        try:
-            with open(filename(indir, model, param_name, param, n), 'rb') as f:
-                # [psi_orig, m2, m2_optimized, best_basis, mhalf, m2_maximized, worst_basis,
-                #                mhalf_optimized, mhalf_best_basis, mhalf_maximized, mhalf_worst_basis] = pickle.load(f)
+        final_file_name = filename(indir, model, param_name, param, n)
+        if path.exists(final_file_name):
+            with open(final_file_name, 'rb') as f:
                 [psi_orig, m2, mhalf] = pickle.load(f)
-        except FileNotFoundError or EOFError:
+        else:
             onsite_terms, neighbor_terms = h_func(param)
-            psi_bond_dim = psi[int(n/2)].tensor.shape[0]
-            psi, E0, truncErrs = dmrg.DMRG(psi, onsite_terms, neighbor_terms, accuracy=1e-10)
+            try:
+                psi, E0, truncErrs = dmrg.DMRG(psi, onsite_terms, neighbor_terms, accuracy=1e-10)
+            except TypeError:
+                H = np.zeros((d**n, d**n), dtype=complex)
+                for i in range(n):
+                    H += np.kron(np.eye(d**i), np.kron(onsite_terms[i], np.kron(d**(n - i - 1))))
+                for i in range(n - 1):
+                    H += np.kron(np.eye(d**i), np.kron(neighbor_terms[i], np.kron(d**(n - i - 2))))
+                evals, evecs = np.linalg.eigvalsh(H)
+                gs = evecs[:, np.armin(evals)]
+                curr = tn.Node(gs.reshape([1] + [d] * n + [1]))
+                psi = []
+                for i in range(n - 1):
+                    [l, curr, te] = bops.svdTruncation(curr, [0, 1], list(range(2, len(curr.tensor.shape))), '>>')
+                    psi.append(l)
+                psi.append(curr)
             psi_orig = psi
             if psi[int(n / 2)].tensor.shape[0] > 4:
                 psi = bops.relaxState(psi, 4)
                 print(bops.getOverlap(psi, psi_orig))
             m2 = magicRenyi.getSecondRenyi(psi, d)
-            # m2_optimized, best_basis = magicRenyi.getSecondRenyi_optimizedBasis(psi, d)
-            # m2_maximized, worst_basis = magicRenyi.getSecondRenyi_optimizedBasis(psi, d, opt='max')
             dm = get_half_system_dm(psi)
             mhalf = magicRenyi.getHalfRenyiExact_dm(dm, d)
-            # mhalf_optimized, mhalf_best_basis, mhalf_maximized, mhalf_worst_basis = \
-            #     magicRenyi.getHalfRenyiExact_dm_optimized(dm, d)
-            # szs[pi] = sum([bops.getExpectationValue(psi, [tn.Node(np.eye(2)) for i in range(j)] + \
-            #                                         [tn.Node(basic.pauli2Z)] + \
-            #                                         [tn.Node(np.eye(2)) for i in range(n - 1 - j)]) for j in range(n)])
         print(psi[int(n/2)].tensor.shape)
         print(param)
         with open(filename(indir, model, param_name, param, n), 'wb') as f:
-            # pickle.dump([psi_orig, m2, m2_optimized, best_basis, mhalf, m2_maximized, worst_basis,
-            #              mhalf_optimized, mhalf_best_basis, mhalf_maximized, mhalf_worst_basis], f)
             pickle.dump([psi_orig, m2, mhalf], f)
     with open(indir + '/magic/results/' + model + 'm2s_' + param_name + 's_' + str(params[0]) + '_' + str(params[-1]), 'wb') as f:
         pickle.dump(m2s, f)
@@ -364,11 +364,13 @@ def analyze_basis():
     plt.show()
 
 
-def analyze_kitaev():
-    ff, axs = plt.subplots(3, 1, gridspec_kw={'wspace': 0, 'hspace': 0}, sharex='all')
+def analyze_kitaev_2d():
+    import matplotlib.pyplot as plt
+    ff, axs = plt.subplots(4, 1, gridspec_kw={'wspace': 0, 'hspace': 0}, sharex='all')
     m2s = np.zeros((len(mu_range), len(t_range)), dtype=complex)
     mhalves = np.zeros((len(mu_range), len(t_range)), dtype=complex)
     p2s = np.zeros((len(mu_range), len(t_range)), dtype=complex)
+    Es = np.zeros((len(mu_range), len(t_range)), dtype=complex)
     for mui in range(len(mu_range)):
         for ti in range(len(t_range)):
             pi = mui * len(mu_range) + ti
@@ -378,21 +380,65 @@ def analyze_kitaev():
             try:
                 with open(filename(indir, model, param_name, param, n), 'rb') as f:
                     [psi, m2, mhalf] = pickle.load(f)
+                    onsite_terms, neighbor_terms = get_kitaev_chain_dmrg_terms(param)
+                    Es[mui, ti] = dmrg.stateEnergy(psi, dmrg.getDMRGH(n, onsite_terms, neighbor_terms, d=2))
                     m2s[mui, ti] = m2
                     mhalves[mui, ti] = mhalf
                     p2s[mui, ti] = bops.getRenyiEntropy(psi, 2, int(len(psi) / 2))
             except FileNotFoundError:
                 pass
-    pcm = axs[0].pcolormesh(mu_range, t_range, np.abs(p2s), shading='auto')
+    pcm = axs[0].pcolormesh(mu_range, t_range, np.abs(Es), shading='auto')
     ff.colorbar(pcm, ax=axs[0])
-    pcm = axs[1].pcolormesh(mu_range, t_range, np.abs(m2s), shading='auto')
+    axs[0].set_ylabel('E')
+    pcm = axs[1].pcolormesh(mu_range, t_range, np.abs(p2s), shading='auto')
     ff.colorbar(pcm, ax=axs[1])
-    pcm = axs[2].pcolormesh(mu_range, t_range, np.abs(mhalves), shading='auto')
+    axs[1].set_ylabel(r'$p_2$')
+    pcm = axs[2].pcolormesh(mu_range, t_range, np.abs(m2s), shading='auto')
     ff.colorbar(pcm, ax=axs[2])
+    axs[2].set_ylabel(r'$M_2$')
+    pcm = axs[3].pcolormesh(mu_range, t_range, np.abs(mhalves), shading='auto')
+    ff.colorbar(pcm, ax=axs[3])
+    axs[3].set_ylabel(r'$M_{1/2}$')
     plt.show()
 
 
+def analyze_kitaev_ts():
+    import matplotlib.pyplot as plt
+    ff, axs = plt.subplots(3, 1, gridspec_kw={'wspace': 0, 'hspace': 0}, sharex='all')
+    ns = [6, 8, 10, 12, 16]
+    mu = 5.0
+    ts = [p[1] for p in params]
+    legends = []
+    for n in ns:
+        curr_ts = []
+        p2s = []
+        m2s = []
+        mhalves = []
+        for ti in range(len(ts)):
+            t = ts[ti]
+            try:
+                with open(filename(indir, model, param_name, [mu, t], n), 'rb') as f:
+                    [psi_orig, m2, mhalf] = pickle.load(f)
+                    if psi_orig[int(n / 2)].tensor.shape[0] > 4:
+                        psi = bops.relaxState(psi_orig, 4)
+                        print(bops.getOverlap(psi, psi_orig))
+                    curr_ts.append(t)
+                    p2s.append(bops.getRenyiEntropy(psi, 2, int(len(psi) / 2)))
+                    m2s.append(m2)
+                    mhalves.append(mhalf)
+            except FileNotFoundError:
+                pass
+        axs[0].scatter(curr_ts, p2s)
+        axs[1].scatter(curr_ts, m2s)
+        axs[2].scatter(curr_ts, mhalves)
+        legends.append(str(n))
+    plt.legend(legends)
+    plt.show()
+# analyze_kitaev_2d()
+
+
 def analyze_thin():
+    import matplotlib.pyplot as plt
     f, axs = plt.subplots(2, 1)
     p2s = np.zeros(len(params))
     m2s = np.zeros(len(params))
