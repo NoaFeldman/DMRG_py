@@ -319,7 +319,11 @@ for ti in range(timesteps):
         with open(state_filename, 'rb') as f:
             [ti, psi, projectors_left, projectors_right] = pickle.load(f)
         with open(data_filename, 'rb') as f:
-            [J_expect_form, sigma_expect_form, sigma_T_expect_form, sigma_X_expect_form, sigma_Z_expect_form, bond_dims_form] = pickle.load(f)
+            form_results = pickle.load(f)
+            if len(form_results) == 6:
+                [J_expect_form, sigma_expect_form, sigma_T_expect_form, sigma_X_expect_form, sigma_Z_expect_form, bond_dims_form] = form_results
+            else:
+                [J_expect_form, bond_dims_form] = form_results
             J_expect[:len(J_expect_form)] = J_expect_form
             sigma_expect[:len(sigma_expect_form)] = sigma_expect_form
             sigma_T_expect[:len(sigma_T_expect_form)] = sigma_T_expect_form
