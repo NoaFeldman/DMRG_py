@@ -345,13 +345,13 @@ for ti in range(timesteps):
                                                         tn.Node(sigma.reshape([1, d ** 2, 1]))]
                                                     + [tn.Node(I) for i in range(si + 1, N)])
         sigma_expect[ti] += bops.getOverlap(psi,
-            [tn.Node(I) for i in range(int(N / 2))] + [tn.Node(sigma)] + [tn.Node(I) for i in range(int(N / 2) - 1)])
+            [tn.Node(I) for i in range(int(N / 2))] + [tn.Node(sigma.reshape([1, d ** 2, 1]))] + [tn.Node(I) for i in range(int(N / 2) - 1)])
         sigma_T_expect[ti] += bops.getOverlap(psi,
-            [tn.Node(I) for i in range(int(N / 2))] + [tn.Node(sigma.T)] + [tn.Node(I) for i in range(int(N / 2) - 1)])
+            [tn.Node(I) for i in range(int(N / 2))] + [tn.Node(sigma.T.reshape([1, d ** 2, 1]))] + [tn.Node(I) for i in range(int(N / 2) - 1)])
         sigma_X_expect[ti] += bops.getOverlap(psi,
-            [tn.Node(I) for i in range(int(N / 2))] + [tn.Node(X)] + [tn.Node(I) for i in range(int(N / 2) - 1)])
+            [tn.Node(I) for i in range(int(N / 2))] + [tn.Node(X.reshape([1, d ** 2, 1]))] + [tn.Node(I) for i in range(int(N / 2) - 1)])
         sigma_Z_expect[ti] += bops.getOverlap(psi,
-            [tn.Node(I) for i in range(int(N / 2))] + [tn.Node(Z)] + [tn.Node(I) for i in range(int(N / 2) - 1)])
+            [tn.Node(I) for i in range(int(N / 2))] + [tn.Node(Z.reshape([1, d ** 2, 1]))] + [tn.Node(I) for i in range(int(N / 2) - 1)])
         bond_dims[ti] = psi[int(len(psi)/2)].tensor.shape[0]
         if sim_method == 'tdvp':
             tdvp.tdvp_sweep(psi, L, projectors_left, projectors_right, dt / 2, max_bond_dim=bond_dim, num_of_sites=1)
