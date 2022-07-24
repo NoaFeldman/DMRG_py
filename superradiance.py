@@ -41,6 +41,39 @@ def tn_dm_to_matrix(rho):
         transpose([i * 2 for i in range(len(rho))] + [i * 2 + 1 for i in range(len(rho))]).reshape([d**N, d**N])
 
 
+# https://math.stackexchange.com/questions/1428566/fit-sum-of-exponentials
+def fit_exponential(y):
+    y = np.array(y)
+    S = np.zeros(len(y), dtype=complex)
+    SS = np.zeros(len(y), dtype=complex)
+    for k in range(1, len(y)):
+        S[k] = S[k - 1] + 0.5 * (y[k] + y[k - 1])
+        SS[k] = SS[k - 1] + 0.5 * (S[k] + S[k - 1])
+    x = np.array(range(len(y))) + 1
+    rhs_vec = np.array([np.sum(SS * y),
+                        np.sum(S * y),
+                        np.sum(x**2 * y),
+                        np.sum(x * y),
+                        np.sum(y)])
+    rhs_mat = np.linalg.inv(
+        np.array([[np.sum(SS**2), np.sum(SS*S), np.sum(SS * x**2), np.sum(SS*x), np.sum(SS)],
+                        [np.sum(SS*S), np.sum(S**2), np.sum(S * x**2), np.sum(S * x), np.sum(S)],
+                        [np.sum(SS * x**2), np.sum(S * x**2), np.sum(x**4), np.sum(x**3), np.sum(x**2)],
+                        [np.sum(SS * x), np.sum(S * x), np.sum(x**3), np.sum(x**2), np.sum(x)],
+                        [np.sum(SS), np.sum(S), np.sum(x**2), np.sum(x), len(y)]]))
+    A_to_E = np.matmul(rhs_mat, rhs_vec)
+    p = 0.5 * (A_to_E[1] + np.sqrt(A_to_E[1]**2 + 4 * A_to_E[0]))
+    q = 0.5 * (A_to_E[1] - np.sqrt(A_to_E[1]**2 + 4 * A_to_E[0]))
+    betas = np.exp(x * p)
+    etas = np.exp(x * q)
+    rhs_vec = np.array([np.sum(y), np.sum(betas * y), np.sum(etas * y)])
+    rhs_mat = np.linalg.inv(
+        np.array([[len(y), np.sum(betas), np.sum(etas)],
+                  [np.sum(betas), np.sum(betas**2), np.sum(betas * etas)],
+                  [np.sum(etas), np.sum(betas * etas), np.sum(etas**2)]]))
+    a_b_c = np.matmul(rhs_mat, rhs_vec)
+    return a_b_c[0], a_b_c[1], a_b_c[2], p, q
+
 
 def get_single_L_term(Omega, Gamma, sigma):
     return -1j * Omega * (np.kron(np.eye(d), sigma + sigma.T) - np.kron(sigma + sigma.T, np.eye(d))) \
@@ -57,6 +90,53 @@ def get_pair_L_terms(Deltas, gammas, nearest_neighbors_num, sigma):
      [[(1j * Deltas[i] - gammas[i] / 2) * C + gammas[i] * B for i in range(nearest_neighbors_num)], D],
      [[(-1j * Deltas[i] - gammas[i] / 2) * B for i in range(nearest_neighbors_num)], A],
      [[(1j * Deltas[i] - gammas[i] / 2) * D for i in range(nearest_neighbors_num)], C]]
+
+
+def get_photon_green_L_exp(n, Omega, Gamma, k, theta, sigma, case='kernel', nearest_neighbors_num=1, exp_coeffs=[0]):
+    d = 2
+    S = get_single_L_term(Omega, Gamma, sigma)
+    Deltas, gammas = get_gnm(Gamma, k, theta, nearest_neighbors_num, case)
+    ad, bd, cd, pd, qd = fit_exponential(Deltas)
+    print('neglecting constant in Deltas fit:' + str(ad / np.max(Deltas)))
+    ag, bg, cg, pg, qg = fit_exponential(Deltas)
+    print('neglecting constant in Gammas fit:' + str(ag / np.max(Deltas)))
+    interacting_terms = [[-1j * bd * np.kron(I, sigma.T)], [np.exp(pd) * I], [np.exp(pd) * np.kron(I, sigma)] +
+                         [-1j * cd * np.kron(I, sigma.T)], [np.exp(qd) * I], [np.exp(qd) * np.kron(I, sigma)] +
+                         [-1j * bd * np.kron(I, sigma)], [np.exp(pd) * I], [np.exp(pd) * np.kron(I, sigma.T)] +
+                         [-1j * cd * np.kron(I, sigma)], [np.exp(qd) * I], [np.exp(qd) * np.kron(I, sigma.T)] +
+                         [-0.5 * bg * np.kron(I, sigma.T)], [np.exp(pg) * I], [np.exp(pg) * np.kron(I, sigma)] +
+                         [-0.5 * cg * np.kron(I, sigma.T)], [np.exp(qg) * I], [np.exp(qg) * np.kron(I, sigma)] +
+                         [-0.5 * bg * np.kron(I, sigma)], [np.exp(pg) * I], [np.exp(pg) * np.kron(I, sigma.T)] +
+                         [-0.5 * cg * np.kron(I, sigma)], [np.exp(qg) * I], [np.exp(qg) * np.kron(I, sigma.T)] +
+                         [1j * bd * np.kron(sigma.T, I)], [np.exp(pd) * I], [np.exp(pd) * np.kron(sigma, I)] +
+                         [1j * cd * np.kron(sigma.T, I)], [np.exp(qd) * I], [np.exp(qd) * np.kron(sigma, I)] +
+                         [1j * bd * np.kron(sigma, I)], [np.exp(pd) * I], [np.exp(pd) * np.kron(sigma.T, I)] +
+                         [1j * cd * np.kron(sigma, I)], [np.exp(qd) * I], [np.exp(qd) * np.kron(sigma.T, I)] +
+                         [0.5 * bg * np.kron(sigma.T, I)], [np.exp(pg) * I], [np.exp(pg) * np.kron(sigma, I)] +
+                         [0.5 * cg * np.kron(sigma.T, I)], [np.exp(qg) * I], [np.exp(qg) * np.kron(sigma, I)] +
+                         [0.5 * bg * np.kron(sigma, I)], [np.exp(pg) * I], [np.exp(pg) * np.kron(sigma.T, I)] +
+                         [0.5 * cg * np.kron(sigma, I)], [np.exp(qg) * I], [np.exp(qg) * np.kron(sigma.T, I)] +
+                         [bg * np.kron(sigma, I)], [np.exp(pg) * I], [np.exp(pg) * np.kron(I, sigma)] +
+                         [cg * np.kron(sigma, I)], [np.exp(qg) * I], [np.exp(qg) * np.kron(I, sigma)] +
+                         [bg * np.kron(I, sigma)], [np.exp(pg) * I], [np.exp(pg) * np.kron(sigma, I)] +
+                         [cg * np.kron(I, sigma)], [np.exp(qg) * I], [np.exp(qg) * np.kron(sigma, I)]
+                         ]
+    operators_len = 2 + 20 # TODO I need more here - also for the mid-Is in the interaction term
+    nothing_yet_ind = operators_len - 1
+    left_tensor = np.zeros((d ** 2, d ** 2, 1, operators_len), dtype=complex)
+    mid_tensor = np.zeros((d ** 2, d ** 2, operators_len, operators_len), dtype=complex)
+    right_tensor = np.zeros((d ** 2, d ** 2, operators_len, 1), dtype=complex)
+    left_tensor[:, :, 0, 0] = S.T
+    left_tensor[:, :, 0, nothing_yet_ind] = I
+    mid_tensor[:, :, nothing_yet_ind, 0] = S.T
+    mid_tensor[:, :, 0, 0] = I
+    mid_tensor[:, :, nothing_yet_ind, nothing_yet_ind] = I
+    right_tensor[:, :, nothing_yet_ind, 0] = S.T
+    right_tensor[:, :, 0, 0] = I
+    for term_i in range(len(interacting_terms)):
+        left_tensor[:, :, 0, term_i + 1] = interacting_terms[term_i][0]
+        left_tensor[:, :, term_i + 1, ] = interacting_terms[term_i][0]
+
 
 def get_photon_green_L(n, Omega, Gamma, k, theta, sigma, opt='NN', case='kernel', nearest_neighbors_num=1, exp_coeffs=[0]):
     d = 2
@@ -128,6 +208,8 @@ d = 2
 Gamma = 1
 sigma = np.array([[0, 0], [1, 0]])
 I = np.eye(2).reshape([1, d ** 2, 1])
+X = np.array([[0, 1], [1, 0]])
+Z = np.diag([1, -1])
 
 N = int(sys.argv[1])
 k = 2 * np.pi / 10
@@ -137,7 +219,7 @@ Omega = float(sys.argv[3]) / Gamma
 case = sys.argv[4]
 outdir = sys.argv[5]
 timesteps = int(sys.argv[6])
-T = 1
+T = 10
 dt = T / timesteps
 save_each = 10
 results_to = sys.argv[7]
@@ -153,13 +235,9 @@ except FileExistsError:
 if results_to == 'plot':
     import matplotlib.pyplot as plt
 
+
 L = get_photon_green_L(N, Omega, Gamma, k, theta, sigma, case=case, nearest_neighbors_num=nn_num)
 psi = [tn.Node(np.array([1, 0, 0, 0]).reshape([1, d**2, 1])) for n in range(N)]
-# psi_ten = np.zeros((2, 4, 2), dtype=complex)
-# psi_ten[0, 0, 1] = 1
-# psi_ten[0, 0, 0] = 1
-# psi_ten[1, 3, 0] = 1
-# psi = [tn.Node(psi_ten[0, :, :].reshape([1, 4, 2]))] + [tn.Node(psi_ten) for n in range(N - 2)] + [tn.Node(psi_ten[:, :, 0].reshape([2, 4, 1]))]
 if N <= 6:
     Deltas, gammas = get_gnm(Gamma, k, theta, nn_num, case)
     if case == 'kernel':
@@ -227,6 +305,10 @@ if sim_method == 'swap':
         terms.append(curr)
     neighbor_trotter_ops = swap.get_neighbor_trotter_ops([term.T for term in terms], 1j * dt, d**2)
 
+sigma_expect = np.zeros(timesteps)
+sigma_T_expect = np.zeros(timesteps)
+sigma_X_expect = np.zeros(timesteps)
+sigma_Z_expect = np.zeros(timesteps)
 J_expect = np.zeros(timesteps)
 for ti in range(timesteps):
     print('---')
@@ -258,6 +340,14 @@ for ti in range(timesteps):
                                                     + [tn.Node(I) for i in range(sj + 1, si)] + [
                                                         tn.Node(sigma.reshape([1, d ** 2, 1]))]
                                                     + [tn.Node(I) for i in range(si + 1, N)])
+        sigma_expect[ti] += bops.getOverlap(psi,
+            [tn.Node(I) for i in range(int(N / 2))] + [tn.Node(sigma)] + [tn.Node(I) for i in range(int(N / 2) - 1)])
+        sigma_T_expect[ti] += bops.getOverlap(psi,
+            [tn.Node(I) for i in range(int(N / 2))] + [tn.Node(sigma.T)] + [tn.Node(I) for i in range(int(N / 2) - 1)])
+        sigma_X_expect[ti] += bops.getOverlap(psi,
+            [tn.Node(I) for i in range(int(N / 2))] + [tn.Node(X)] + [tn.Node(I) for i in range(int(N / 2) - 1)])
+        sigma_Z_expect[ti] += bops.getOverlap(psi,
+            [tn.Node(I) for i in range(int(N / 2))] + [tn.Node(Z)] + [tn.Node(I) for i in range(int(N / 2) - 1)])
         bond_dims[ti] = psi[int(len(psi)/2)].tensor.shape[0]
         if sim_method == 'tdvp':
             tdvp.tdvp_sweep(psi, L, projectors_left, projectors_right, dt / 2, max_bond_dim=bond_dim, num_of_sites=1)
@@ -265,7 +355,7 @@ for ti in range(timesteps):
             swap.trotter_sweep(psi, trotter_single_op, neighbor_trotter_ops, swap_op)
         if ti % save_each == 0:
             with open(data_filename, 'wb') as f:
-                pickle.dump([J_expect, bond_dims], f)
+                pickle.dump([J_expect, sigma_expect, sigma_T_expect, sigma_X_expect, sigma_Z_expect, bond_dims], f)
             with open(state_filename, 'wb') as f:
                 pickle.dump([ti, psi, projectors_left, projectors_right], f)
 
