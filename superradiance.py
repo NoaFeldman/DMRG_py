@@ -319,8 +319,12 @@ for ti in range(timesteps):
         with open(state_filename, 'rb') as f:
             [ti, psi, projectors_left, projectors_right] = pickle.load(f)
         with open(data_filename, 'rb') as f:
-            [J_expect_form, bond_dims_form] = pickle.load(f)
+            [J_expect_form, sigma_expect_form, sigma_T_expect_form, sigma_X_expect_form, sigma_Z_expect_form, bond_dims_form] = pickle.load(f)
             J_expect[:len(J_expect_form)] = J_expect_form
+            sigma_expect[:len(sigma_expect_form)] = sigma_expect_form
+            sigma_T_expect[:len(sigma_T_expect_form)] = sigma_T_expect_form
+            sigma_X_expect[:len(sigma_X_expect_form)] = sigma_X_expect_form
+            sigma_Z_expect[:len(sigma_Z_expect_form)] = sigma_Z_expect_form
             bond_dims[:len(bond_dims_form)] = bond_dims_form
     except FileNotFoundError:
         for si in range(N):
