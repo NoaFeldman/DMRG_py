@@ -187,7 +187,10 @@ def get_photon_green_L(n, Omega, Gamma, k, theta, sigma, opt='NN', case='kernel'
         for pi in range(len(pairs)):
             mid_tensor[:, :, pi + 1, pi + 1] = exp_coeffs[pi] * np.eye(d**2)
     L = [tn.Node(left_tensor)] + [tn.Node(mid_tensor) for i in range(n - 2)] + [tn.Node(right_tensor)]
-    I = np.eye(4)
+    for i in range(len(L) - 1):
+        [r, l, te] = bops.svdTruncation(bops.contract(L[i], L[i+1], '3', '2'), [0, 1, 2], [3, 4, 5], '>>')
+        L[i] = r
+        L[i+1] = bops.permute(l, [1, 2, 0, 3])
     return L
 
 
@@ -234,7 +237,6 @@ except FileExistsError:
 
 if results_to == 'plot':
     import matplotlib.pyplot as plt
-
 
 L = get_photon_green_L(N, Omega, Gamma, k, theta, sigma, case=case, nearest_neighbors_num=nn_num)
 psi = [tn.Node(np.array([1, 0, 0, 0]).reshape([1, d**2, 1])) for n in range(N)]
