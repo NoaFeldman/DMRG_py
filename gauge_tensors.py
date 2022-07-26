@@ -8,7 +8,7 @@ import randomUs as ru
 from typing import List
 import os
 import sys
-
+import basicAnalysis as bans
 
 X = np.array([[0, 1], [1, 0]])
 I = np.eye(2)
@@ -467,16 +467,29 @@ def toric_tensors_lgt_approach():
     A = tn.Node(tensor.reshape([2, 2, 2, 2, 4]))
     return A
 
+#  a  b
+#  b  c
+def edit_t_blocks(t, a, b, c):
+    for i in range(int(len(t) / 2)):
+        block_inds = np.where(t[i] != 0)[0]
+        if len(block_inds) > 0:
+            t[block_inds[0], block_inds[0]] = a
+            t[block_inds[0], block_inds[1]] = -2 * b
+            t[block_inds[1], block_inds[0]] = b
+            t[block_inds[1], block_inds[1]] = c
 
-def tensors_from_transfer_matrix(g):
+
+def tensors_from_transfer_matrix(b, c):
     A = toric_tensors_lgt_approach()
     E0 = bops.permute(bops.contract(A, A, '4', '4'), [0, 4, 2, 6, 1, 5, 3, 7])
     t = E0.tensor.reshape([16, 16])
-    t_minus = -t + 2 * np.diag(np.diag(t))
-    tg = tn.Node((t + g * t_minus).reshape([2] * 8).transpose([0, 4, 2, 6, 1, 5, 3, 7]))
-    [l, s, r, te] = bops.svdTruncation(tg, [0, 1, 2, 3], [4, 5, 6, 7], '>*<')
+    edit_t_blocks(t, 1, b, c)
+    tg = tn.Node(t.reshape([2] * 8).transpose([0, 4, 2, 6, 1, 5, 3, 7]))
+    [l, s, r, te] = bops.svdTruncation(tg, [0, 1, 2, 3], [4, 5, 6, 7], '>*<', minBondDim=4)
+    l = bops.contract(l, tn.Node(np.sqrt(np.round(s.tensor, 10))), '4', '0')
+    r = bops.contract(tn.Node(np.sqrt(np.round(s.tensor, 10))), r, '1', '0')
     if np.amax(l.tensor - r.tensor.transpose([1, 2, 3, 4, 0]).conj()) > 1e-12:
-        print(g)
+        print(b, c)
         raise Warning('Transfer matrix truncation turned out non-symmetric?')
     # We require that u, r = s, t, based on Fig. 5 in Zohar ^^. The truncation doesn't know that obviously,
     # so it needs to be sorted.
@@ -492,56 +505,59 @@ def tensors_from_transfer_matrix(g):
     return l
 
 
-colors = [ 'black', '#0000FF', '#9D02D7', '#EA5F94', '#FA8775', '#FFB14E', '#FFD700',
-           '#ff6f3c', '#2f0056', '#930043', '#026645', '#23C26F', '#77C4A8', '#004753', 'green']
-gs = [np.round(0.1 * G, 8) for G in range(11)] + [2.0, 3.0, 5.0, 10.0, 20.0]
 import matplotlib.pyplot as plt
 legends = []
 normalized_p2s = []
-for g in gs[:10]:
-    print(g)
-    if os.path.exists('results/toricBoundaries_gauge_' + str(g)):
-        with open('results/toricBoundaries_gauge_' + str(g), 'rb') as f:
-            [upRow, downRow, leftRow, rightRow, openA, openA, A, A] = pickle.load(f)
-    else:
-        A = tensors_from_transfer_matrix(g)
-        upRow, downRow, leftRow, rightRow, openA, openB = peps.applyBMPS(A, A, d=4)
-        with open('results/toricBoundaries_gauge_' + str(g), 'wb') as f:
-                pickle.dump([upRow, downRow, leftRow, rightRow, openA, openA, A, A], f)
-    circle = bops.contract(bops.contract(bops.contract(
-        upRow, rightRow, '3', '0'), downRow, '5', '0'), leftRow, '70', '03')
-    M = bops.contract(bops.contract(bops.contract(bops.contract(
-        circle, openA, '07', '14'), openA, '017', '124'), openA, '523', '134'), openA, '5018', '1234')
-    mat = np.round(np.real(M.tensor.transpose([0, 2, 4, 6, 1, 3, 5, 7]). reshape([4**4, 4**4]) / 0.03125), 10)
-    mat /= mat.trace()
-    if g == 0.5:
-        b = 1
-    [cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>', maxTrunc=5)
-    [cDown, dDown, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>', maxTrunc=5)
-    ws = np.array(range(1, 5)) * 2
-    wilson_loops_exps = []
-    for w in ws:
-        norm = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, A, 2, w,
-                                      [tn.Node(np.eye(4)) for i in range(w * 2)])
-        leftRow = bops.multNode(leftRow, 1 / norm)
-        ops = [tn.Node(np.kron(I, X)), tn.Node(np.kron(X, X))] + \
-              [tn.Node(np.kron(I, X)), tn.Node(np.kron(I, X))] * (w - 2) + \
-              [tn.Node(np.kron(I, I)), tn.Node(np.kron(X, I))]
-        wilson_loops_exps.append(np.abs(pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, A, 2, w, ops)))
-        bis = 2**6
-    average_normalized_p2 = 0
-    counter = 0
-    for i in range(len(mat)):
-        inds = np.where(np.abs(mat[i]) > 1e-12)[0]
-        if len(inds) > 0:
-            counter += 1
-            block = np.array([[mat[inds[0], inds[0]], mat[inds[0], inds[1]]], [mat[inds[1], inds[0]], mat[inds[1], inds[1]]]])
-            print(block)
-            average_normalized_p2 += np.matmul(block, block).trace() / block.trace()**2
-            print(np.matmul(block, block).trace() / block.trace()**2)
-    normalized_p2s.append(average_normalized_p2 / counter)
-    plt.plot(ws, np.array(wilson_loops_exps) / max(wilson_loops_exps))
-    legends.append(str(g))
-plt.legend(legends)
+bs = [np.round(i * 0.1, 8) for i in range(-10, 11)]
+cs = [np.round(i * 0.1, 8) for i in range(-10, 11)]
+wilson_expectations_map = np.zeros((len(bs), len(cs)))
+for bi in range(len(bs)):
+    for ci in range(len(cs)):
+        b, c = bs[bi], cs[ci]
+        print(b, c)
+        if os.path.exists('results/toricBoundaries_gauge_' + str(b) + '_' + str(c)):
+            with open('results/toricBoundaries_gauge_' + str(b) + '_' + str(c), 'rb') as f:
+                [upRow, downRow, leftRow, rightRow, openA, openA, A, A] = pickle.load(f)
+        else:
+            A = tensors_from_transfer_matrix(b, c)
+            upRow, downRow, leftRow, rightRow, openA, openB = peps.applyBMPS(A, A, d=4)
+            with open('results/toricBoundaries_gauge_' + str(b) + '_' + str(c), 'wb') as f:
+                    pickle.dump([upRow, downRow, leftRow, rightRow, openA, openA, A, A], f)
+        circle = bops.contract(bops.contract(bops.contract(
+            upRow, rightRow, '3', '0'), downRow, '5', '0'), leftRow, '70', '03')
+        M = bops.contract(bops.contract(bops.contract(bops.contract(
+            circle, openA, '07', '14'), openA, '017', '124'), openA, '523', '134'), openA, '5018', '1234')
+        mat = np.round(np.real(M.tensor.transpose([0, 2, 4, 6, 1, 3, 5, 7]). reshape([4**4, 4**4]) / 0.03125), 10)
+        mat /= mat.trace()
+        [cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>', maxTrunc=5)
+        [cDown, dDown, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>', maxTrunc=5)
+        ws = np.array(range(1, 5)) * 2
+        wilson_expectations_curr = []
+        for w in ws:
+            norm = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, A, 2, w,
+                                          [tn.Node(np.eye(4)) for i in range(w * 2)])
+            leftRow = bops.multNode(leftRow, 1 / norm)
+            ops = [tn.Node(np.kron(I, X)), tn.Node(np.kron(X, X))] + \
+                  [tn.Node(np.kron(I, X)), tn.Node(np.kron(I, X))] * (w - 2) + \
+                  [tn.Node(np.kron(I, I)), tn.Node(np.kron(X, I))]
+            wilson_expectations_curr.append(np.abs(pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, A, 2, w, ops)))
+            bis = 2**6
+        average_normalized_p2 = 0
+        counter = 0
+        for i in range(1): #range(len(mat)):
+            inds = [0, 78] # np.where(np.abs(mat[i]) > 1e-12)[0]
+            if len(inds) > 0:
+                counter += 1
+                block = np.array([[mat[inds[0], inds[0]], mat[inds[0], inds[1]]], [mat[inds[1], inds[0]], mat[inds[1], inds[1]]]])
+                print(block)
+                average_normalized_p2 += np.matmul(block, block).trace() / block.trace()**2
+                print(np.matmul(block, block).trace() / block.trace()**2)
+        normalized_p2s.append(average_normalized_p2 / counter)
+        coef = np.polyfit(ws, np.log2(np.array(wilson_expectations_curr)), 1)
+        if b == 0:
+            coef = [0, 0]
+        wilson_expectations_map[bi, ci] = coef[0]
 print(normalized_p2s)
+plt.pcolormesh(bs, cs, wilson_expectations_map)
+plt.colorbar()
 plt.show()
