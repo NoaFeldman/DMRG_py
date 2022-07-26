@@ -1,14 +1,11 @@
 import numpy as np
 import tensornetwork as tn
-import basicDefs
 import basicOperations as bops
 import pepsExpect as pe
 import PEPS as peps
 import pickle
-import randomUs as ru
 from typing import List
-import os
-import sys
+import scipy.linalg as linalg
 
 # ----*-----*-----*-----*----
 #   |    |     |     |     |
@@ -21,17 +18,17 @@ import sys
 # ----*-----*-----*-----*----
 
 d = 2
-I = np.eye(2)
+I = np.eye(d)
 X = np.array([[0, 1], [1, 0]])
+Z = np.diag([1, -1])
+links_in_site = 4
 
-def plaquette_node(g=0.0):
+def plaquette_node(g=0.0) -> List[tn.Node]:
     single_site_tensor = np.zeros((d, d, d, d), dtype=complex)
     single_site_tensor[0, 0, 0, 0] = 1
     single_site_tensor[1, 1, 1, 1] = 1
     single_site = tn.Node(single_site_tensor)
 
-    I = np.eye(d, dtype=complex)
-    X = np.array([[0, 1], [1, 0]], dtype=complex)
     # (1+x)s that settle the plaquettes that were not chosen in the checkerboard
     # p     p
     # |     |
@@ -72,10 +69,10 @@ def plaquette_node(g=0.0):
     left_boundary = bops.contract(left_boundary, tn.Node(g_pair_projector), '3', '0')
 
     # TODO suit BMPS for this nonequal dimension of vertical and horizontal legs
-    AEnv = pe.toEnvOperator(bops.multiContraction(A, A, '4', '4*'))
-    upRow, downRow, leftRow, rightRow, openA, openB = peps.applyBMPS(A, A, d=(d**4))
-    with open('results/toricBoundaries_squares_' + str(g), 'wb') as f:
-        pickle.dump([upRow, downRow, leftRow, rightRow, openA, openB, A], f)
+    # AEnv = pe.toEnvOperator(bops.multiContraction(A, A, '4', '4*'))
+    # upRow, downRow, leftRow, rightRow, openA, openB = peps.applyBMPS(A, A, d=(d**4))
+    # with open('results/toricBoundaries_squares_' + str(g), 'wb') as f:
+    #     pickle.dump([upRow, downRow, leftRow, rightRow, openA, openB, A], f)
     return [A, left_boundary]
 
 plaquette_node(g=0.1)
@@ -124,6 +121,7 @@ def surface_code(w, h, g=0.0):
     bops.multNode(left_rows[0], 1 / norm)
 
     return [A, c_up, c_down, left_rows, right_row]
+
 
 def get_mid_surface_explicit_block(w, h, boundary_sector=0, g=0.0, logical_qubit=0):
     [A, c_up, c_down, left_rows, right_row] = surface_code(w, h, g)
@@ -240,4 +238,89 @@ def get_mid_surface_explicit_block(w, h, boundary_sector=0, g=0.0, logical_qubit
     return block
 
 
+dt = 1e-2
+int_op_top_left_tensor = np.zeros((d**4, d**4, 2))
+int_op_top_left_tensor[:, :, 0] = np.eye(d**4)
+int_op_top_left_tensor[:, :, 1] = np.kron(I, np.kron(linalg.expm(dt * X), np.kron(I, I)))
+int_op_top_left = tn.Node(int_op_top_left_tensor)
+int_op_top_right_tensor = np.zeros((d**4, d**4, 2, 2))
+int_op_top_right_tensor[:, :, 0, 0] = np.eye(d ** 4)
+int_op_top_right_tensor[:, :, 1, 1] = np.kron(I, np.kron(I, np.kron(linalg.expm(dt * X), I)))
+int_op_top_right = tn.Node(int_op_top_right_tensor)
+int_op_bottom_right_tensor = np.zeros((d ** 4, d ** 4, 2, 2))
+int_op_bottom_right_tensor[:, :, 0, 0] = np.eye(d ** 4)
+int_op_bottom_right_tensor[:, :, 1, 1] = np.kron(I, np.kron(I, np.kron(I, linalg.expm(dt * X))))
+int_op_bottom_right = tn.Node(int_op_bottom_right_tensor)
+int_op_bottom_left_tensor = np.zeros((d ** 4, d ** 4, 2))
+int_op_bottom_left_tensor[:, :, 0] = np.eye(d ** 4)
+int_op_bottom_left_tensor[:, :, 1] = np.kron(linalg.expm(dt * X), np.kron(I, np.kron(I, I)))
+int_op_bottom_left = tn.Node(int_op_bottom_left_tensor)
+def apply_interaction_op(A, B, C, D, bond_dim_vertical, bond_dim_horizontal):
+    AB = bops.contract(bops.contract(
+        A, int_op_top_left, '4', '1'), bops.contract(B, int_op_top_right, '4', '1'), '15', '35')
+    [A, B, te] = bops.svdTruncation(AB, [0, 1, 2, 3], [4, 5, 6, 7, 8], '<<', maxBondDim=bond_dim_horizontal, normalize=True)
+    if len(te) > 0:
+        print(max(te))
+    A = bops.permute(A, [0, 4, 1, 2, 3])
+    BC = bops.contract(B, bops.contract(C, int_op_bottom_right, '4', '1'), '35', '05')
+    [B, C, te] = bops.svdTruncation(BC, [0, 1, 2, 3], [4, 5, 6, 7, 8], '>>', maxBondDim=bond_dim_vertical, normalize=True)
+    if len(te) > 0:
+        print(max(te))
+    B = bops.permute(B, [1, 2, 4, 0, 3])
+    CD = bops.contract(C, bops.contract(D, int_op_bottom_left, '4', '1'), '35', '15')
+    [C, D, te] = bops.svdTruncation(CD, [0, 1, 2, 3], [4, 5, 6, 7], '>>', maxBondDim=bond_dim_horizontal, normalize=True)
+    if len(te) > 0:
+        print(max(te))
+    C = bops.permute(C, [0, 1, 2, 4, 3])
+    D = bops.permute(D, [1, 0, 2, 3, 4])
+    return A, B, C, D
 
+# playing around with the pure gauge model of \sum_p X_p + g * \sum_l Z_l
+def gauge_models_test(g, A=None, B=None, C=None, D=None):
+    if A == None:
+        [A, left_boundary] = plaquette_node()
+        A = tn.Node(np.real(A.tensor))
+        B = tn.Node(np.copy(A.tensor))
+        C = tn.Node(np.copy(A.tensor))
+        D = tn.Node(np.copy(A.tensor))
+    local_op_X = np.kron(X, np.kron(X, np.kron(X, X))).reshape([d**links_in_site, d**links_in_site])
+    local_op_Z = np.zeros((d**links_in_site, d**links_in_site))
+    for i in range(links_in_site):
+        local_op_Z += np.kron(np.eye(d**i), np.kron(g * Z, np.eye(d**(links_in_site - 1 - i))))
+    local_op_Z = local_op_Z.reshape([d**links_in_site, d**links_in_site])
+    local_op = local_op_X + local_op_Z
+    local_op_exp = tn.Node(linalg.expm(dt * local_op))
+
+    num_of_steps = int(10 / dt)
+    bond_dim_vertical = 8
+    bond_dim_horizontal = 4
+    for stepi in range(num_of_steps):
+        A = bops.contract(A, local_op_exp, '4', '1')
+        B = bops.contract(B, local_op_exp, '4', '1')
+        C = bops.contract(C, local_op_exp, '4', '1')
+        D = bops.contract(D, local_op_exp, '4', '1')
+        A, B, C, D = apply_interaction_op(A, B, C, D, bond_dim_vertical, bond_dim_horizontal)
+        A, B, C, D = apply_interaction_op(B, A, D, C, bond_dim_vertical, bond_dim_horizontal)
+        A, B, C, D = apply_interaction_op(D, C, B, A, bond_dim_vertical, bond_dim_horizontal)
+        A, B, C, D = apply_interaction_op(C, D, A, B, bond_dim_vertical, bond_dim_horizontal)
+
+    with open('results/gauge/imag_time_evolution_g_' + str(g), 'wb') as f:
+        pickle.dump([A, B, C, D], f)
+
+gs = [0.1, 0.5, 1.0, 2.0, 4.0, 8.0]
+Z_s_vertical = tn.Node(np.kron(Z, np.kron(Z, np.kron(I, np.kron(I, np.kron(I, np.kron(I, np.kron(Z, Z))))))).reshape([d**4] * 4))
+Z_s_horizontal = tn.Node(np.kron(Z, np.kron(I, np.kron(I, np.kron(Z, np.kron(I, np.kron(Z, np.kron(Z, I))))))).reshape([d**4] * 4))
+for g in gs:
+    print('-----')
+    print('g = ' + str(g))
+    try:
+        with open('results/gauge/imag_time_evolution_g_' + str(g), 'rb') as f:
+            A = pickle.load(f)
+    except FileNotFoundError:
+        gauge_models_test(g)
+        with open('results/gauge/imag_time_evolution_g_' + str(g), 'rb') as f:
+            [A, B, C, D] =pickle.load(f)
+    A.tensor = np.array(A.tensor, dtype=complex)
+    upRow, downRow, leftRow, rightRow, openA, openB = peps.applyBMPS(A, A, d=(d ** 4))
+    with open('results/toricBoundaries_squares_' + str(g), 'wb') as f:
+        pickle.dump([upRow, downRow, leftRow, rightRow, openA, openB, A], f)

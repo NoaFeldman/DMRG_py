@@ -11,6 +11,7 @@ import sys
 
 
 X = np.array([[0, 1], [1, 0]])
+I = np.eye(2)
 def toric_code(g=0.0):
     #
     #    O
@@ -64,8 +65,6 @@ def toric_code(g=0.0):
     A = tn.Node(A.tensor.reshape([2, 2, 2, 2, 4]))
     B = tn.Node(B.tensor.reshape([2, 2, 2, 2, 4]))
 
-    AEnv = pe.toEnvOperator(bops.multiContraction(A, A, '4', '4*'))
-    BEnv = pe.toEnvOperator(bops.multiContraction(B, B, '4', '4*'))
     upRow, downRow, leftRow, rightRow, openA, openB = peps.applyBMPS(A, B, d=4)
     with open('results/toricBoundaries_gauge_' + str(g), 'wb') as f:
         pickle.dump([upRow, downRow, leftRow, rightRow, openA, openB, A, B], f)
@@ -176,9 +175,9 @@ def get_explicit_block(w, h, g, boundary_identifier=0):
         [upRow, downRow, leftRow, rightRow, openA, openB, A, B] = pickle.load(f)
     [cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>')
     [cDown, dDown, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>')
-    norm = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h,
+    norm = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, h, w,
                                   [tn.Node(np.eye(4)) for i in range(w * h)])
-    leftRow = bops.multNode(leftRow, 1 / norm ** (2 / w))
+    leftRow = bops.multNode(leftRow, 1 / norm)
 
     res = np.zeros((block_size, block_size), dtype=complex)
     for i in range(block_size):
@@ -357,17 +356,6 @@ def shrink_boundaries(upRow, downRow, leftRow, rightRow, max_bond_dim):
     # print(te)
     return [upRow, downRow, leftRow, rightRow]
 
-def get_boundaries_from_file(g, w, h):
-    with open('results/toricBoundaries_gauge_' + str(np.round(g, 8)), 'rb') as f:
-        [upRow, downRow, leftRow, rightRow, openA, openB, A, B] = pickle.load(f)
-        [upRow, downRow, leftRow, rightRow] = shrink_boundaries(upRow, downRow, leftRow, rightRow, max_bond_dim=4)
-        [cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>', maxTrunc=5)
-        [cDown, dDown, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>', maxTrunc=5)
-        norm = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, h, w,
-                                      [tn.Node(np.eye(4)) for i in range(w * h)])
-        leftRow = bops.multNode(leftRow, 1 / norm**(2 / h))
-    return [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, A, B]
-
 
 def exact_purity(w, h, g, d=4):
     with open('results/toricBoundaries_gauge_' + str(np.round(g, 8)), 'rb') as f:
@@ -394,45 +382,6 @@ def exact_purity(w, h, g, d=4):
                                          [tn.Node(double_swap) for i in range(w * h)])
     return full_purity
 
-
-run_estimations = False
-if run_estimations:
-    w = 4
-    h = 4
-    n = 2 
-    M = 1000
-    d = 4
-    gs = [float(sys.argv[1])] # [0.1 * G for G in range(11)]
-    num_of_boundary_options = 24 # 2**(2 * (w + h -1))
-    colors = ['#0000FF', '#9D02D7', '#EA5F94', '#FA8775', '#FFB14E', '#FFD700', '#ff6f3c', '#FFD700', '#2f0056', '#930043']
-    estimate_func = pe.applyLocalOperators
-    for gi in range(len(gs)):
-        g = gs[gi]
-        dirname = sys.argv[4] + '/gauge/toric_g_' + str(g)
-        try:
-            os.mkdir(dirname)
-        except FileExistsError:
-            pass
-        with open(sys.argv[4] + '/toricBoundaries_gauge_' + str(np.round(g, 8)), 'rb') as f:
-            [upRow, downRow, leftRow, rightRow, openA, openB, A, B] = pickle.load(f)
-        [cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>')
-        [cDown, dDown, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>')
-        norm = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h,
-                                      [tn.Node(np.eye(4)) for i in range(w * h)])
-        leftRow = bops.multNode(leftRow, 1 / norm ** (2 / w))
-
-        for bi in [int(sys.argv[2])]:
-            list_of_sectors = get_list_of_sectors(w, h, bi)
-            ru.renyiEntropy(n, w, h, M, estimate_func, [cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h],
-                              dirname + '/gauge_rep_' + sys.argv[3] + '_g_' + str(g) + '_b_' + str(bi),
-                              get_ops_func=get_random_operators,
-                              get_ops_arguments=[w, h, n, list_of_sectors])
-
-
-colors = [ 'black', '#0000FF', '#9D02D7', '#EA5F94', '#FA8775', '#FFB14E', '#FFD700',
-           '#ff6f3c', '#2f0056', '#930043', '#026645', '#23C26F', '#77C4A8', '#004753', 'green']
-gs = [np.round(0.1 * G, 8) for G in range(11)] + [2.0, 3.0, 5.0, 10.0, 20.0]
-plot_2_by_2 = False
 
 def boundary_binary_string(i, N):
     curr = bin(i).split('b')[1]
@@ -465,17 +414,134 @@ def square_wilson_loop_expectation_value(g, L):
     return result
 
 
+# TODO doubt everythong above this line
+
+def get_boundaries_from_file(g, w, h):
+    with open('results/toricBoundaries_gauge_' + str(np.round(g, 8)), 'rb') as f:
+        [upRow, downRow, leftRow, rightRow, openA, openB, A, B] = pickle.load(f)
+        [upRow, downRow, leftRow, rightRow] = shrink_boundaries(upRow, downRow, leftRow, rightRow, max_bond_dim=4)
+        [cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>', maxTrunc=5)
+        [cDown, dDown, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>', maxTrunc=5)
+        norm = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, h, w,
+                                      [tn.Node(np.eye(4)) for i in range(w * h)])
+        leftRow = bops.multNode(leftRow, 1 / norm**(2 / h))
+    return [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, A, B]
+
+
+def q_to_i(q):
+    return int((q + 1) / 2)
+def i_to_q(i):
+    return i * 2 - 1
+def get_2_by_2_explicit_block(g, boundary_identifier):
+    [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, A, B] = get_boundaries_from_file(g, 2, 2)
+    boundary = [i_to_q(int(c)) for c in bin(boundary_identifier).split('b')[1].zfill(6)]
+    projectors = [[np.diag([1, 0]), np.array([[0, 0], [1, 0]])],
+                  [np.array([[0, 1], [0, 0]]), np.diag([0, 1])]]
+    block = np.zeros((2, 2), dtype=complex)
+    choices = [-1, 1]
+    for ci in range(len(choices)):
+        ingoing = [q_to_i(boundary[0]), q_to_i(choices[ci]),
+                   q_to_i(boundary[0] * boundary[1] * choices[ci]), q_to_i(boundary[0] * boundary[1] * choices[ci] * boundary[2]),
+                   q_to_i(boundary[3]), q_to_i(boundary[4]),
+                   q_to_i(choices[ci] * boundary[3] * boundary[4]), q_to_i(np.prod(boundary))]
+        for cj in range(len(choices)):
+            outgoing = [q_to_i(boundary[0]), q_to_i(choices[cj]),
+                        q_to_i(boundary[0] * boundary[1] * choices[cj]), q_to_i(boundary[0] * boundary[1] * choices[cj] * boundary[2]),
+                        q_to_i(boundary[3]), q_to_i(boundary[4]),
+                        q_to_i(choices[cj] * boundary[3] * boundary[4]), q_to_i(np.prod(boundary))]
+            ops = [tn.Node(np.kron(projectors[ingoing[2 * i]][outgoing[2 * i]],
+                                   projectors[ingoing[2 * i + 1]][outgoing[2 * i + 1]])) for i in range(4)]
+            block[ci, cj] = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, h=2, w=2, ops=ops)
+    return block
+
+
+# Fig 5 in https://journals.aps.org/prresearch/pdf/10.1103/PhysRevResearch.3.033179
+def toric_tensors_lgt_approach():
+    # u, r, d, l, t, s
+    tensor = np.zeros([2, 2, 2, 2, 2, 2], dtype=complex)
+    for i in range(2):
+        for j in range(2):
+            tensor[i, i, j, j, i, i] = 1
+            tensor[i, j, i, j, i, j] = 1
+            tensor[i, j, j, i, i, j] = 1
+    A = tn.Node(tensor.reshape([2, 2, 2, 2, 4]))
+    return A
+
+
+def tensors_from_transfer_matrix(g):
+    A = toric_tensors_lgt_approach()
+    E0 = bops.permute(bops.contract(A, A, '4', '4'), [0, 4, 2, 6, 1, 5, 3, 7])
+    t = E0.tensor.reshape([16, 16])
+    t_minus = -t + 2 * np.diag(np.diag(t))
+    tg = tn.Node((t + g * t_minus).reshape([2] * 8).transpose([0, 4, 2, 6, 1, 5, 3, 7]))
+    [l, s, r, te] = bops.svdTruncation(tg, [0, 1, 2, 3], [4, 5, 6, 7], '>*<')
+    if np.amax(l.tensor - r.tensor.transpose([1, 2, 3, 4, 0]).conj()) > 1e-12:
+        print(g)
+        raise Warning('Transfer matrix truncation turned out non-symmetric?')
+    # We require that u, r = s, t, based on Fig. 5 in Zohar ^^. The truncation doesn't know that obviously,
+    # so it needs to be sorted.
+    # TODO sort |S| < 4
+    non_zero_indices = np.where(np.abs(l.tensor.reshape([2] * 6)) > 1e-12)
+    swap_op = np.zeros([2] * 4)
+    for appearence_i in range(len(non_zero_indices[0])):
+        swap_op[non_zero_indices[4][appearence_i], non_zero_indices[5][appearence_i],
+                non_zero_indices[0][appearence_i], non_zero_indices[1][appearence_i]] = 1
+    swap = tn.Node(swap_op.reshape([4, 4]))
+    l = bops.contract(l, tn.Node(np.sqrt(s.tensor)), '4', '0')
+    l = bops.contract(l, swap, '4', '0')
+    return l
+
+
+colors = [ 'black', '#0000FF', '#9D02D7', '#EA5F94', '#FA8775', '#FFB14E', '#FFD700',
+           '#ff6f3c', '#2f0056', '#930043', '#026645', '#23C26F', '#77C4A8', '#004753', 'green']
+gs = [np.round(0.1 * G, 8) for G in range(11)] + [2.0, 3.0, 5.0, 10.0, 20.0]
 import matplotlib.pyplot as plt
-gs = [np.round(0.1 * i, 8) for i in range(11)]
-for g in gs:
-    Ls = np.array([2, 3, 4], dtype=float)
-    loops_expect = np.zeros(len(Ls))
-    for li in range(len(Ls)):
-        L = Ls[li]
-        loops_expect[li] = square_wilson_loop_expectation_value(g, L)
-    plt.plot(np.log(Ls), np.log(loops_expect))
-    # plt.plot(Ls, Ls**(-1))
-    # plt.plot(Ls, Ls**(-2))
-    plt.title('g = ' + str(g))
-    # plt.yscale('log')
-    plt.show()
+legends = []
+normalized_p2s = []
+for g in gs[:10]:
+    print(g)
+    if os.path.exists('results/toricBoundaries_gauge_' + str(g)):
+        with open('results/toricBoundaries_gauge_' + str(g), 'rb') as f:
+            [upRow, downRow, leftRow, rightRow, openA, openA, A, A] = pickle.load(f)
+    else:
+        A = tensors_from_transfer_matrix(g)
+        upRow, downRow, leftRow, rightRow, openA, openB = peps.applyBMPS(A, A, d=4)
+        with open('results/toricBoundaries_gauge_' + str(g), 'wb') as f:
+                pickle.dump([upRow, downRow, leftRow, rightRow, openA, openA, A, A], f)
+    circle = bops.contract(bops.contract(bops.contract(
+        upRow, rightRow, '3', '0'), downRow, '5', '0'), leftRow, '70', '03')
+    M = bops.contract(bops.contract(bops.contract(bops.contract(
+        circle, openA, '07', '14'), openA, '017', '124'), openA, '523', '134'), openA, '5018', '1234')
+    mat = np.round(np.real(M.tensor.transpose([0, 2, 4, 6, 1, 3, 5, 7]). reshape([4**4, 4**4]) / 0.03125), 10)
+    mat /= mat.trace()
+    if g == 0.5:
+        b = 1
+    [cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>', maxTrunc=5)
+    [cDown, dDown, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>', maxTrunc=5)
+    ws = np.array(range(1, 5)) * 2
+    wilson_loops_exps = []
+    for w in ws:
+        norm = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, A, 2, w,
+                                      [tn.Node(np.eye(4)) for i in range(w * 2)])
+        leftRow = bops.multNode(leftRow, 1 / norm)
+        ops = [tn.Node(np.kron(I, X)), tn.Node(np.kron(X, X))] + \
+              [tn.Node(np.kron(I, X)), tn.Node(np.kron(I, X))] * (w - 2) + \
+              [tn.Node(np.kron(I, I)), tn.Node(np.kron(X, I))]
+        wilson_loops_exps.append(np.abs(pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, A, 2, w, ops)))
+        bis = 2**6
+    average_normalized_p2 = 0
+    counter = 0
+    for i in range(len(mat)):
+        inds = np.where(np.abs(mat[i]) > 1e-12)[0]
+        if len(inds) > 0:
+            counter += 1
+            block = np.array([[mat[inds[0], inds[0]], mat[inds[0], inds[1]]], [mat[inds[1], inds[0]], mat[inds[1], inds[1]]]])
+            print(block)
+            average_normalized_p2 += np.matmul(block, block).trace() / block.trace()**2
+            print(np.matmul(block, block).trace() / block.trace()**2)
+    normalized_p2s.append(average_normalized_p2 / counter)
+    plt.plot(ws, np.array(wilson_loops_exps) / max(wilson_loops_exps))
+    legends.append(str(g))
+plt.legend(legends)
+print(normalized_p2s)
+plt.show()
