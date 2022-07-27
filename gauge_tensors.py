@@ -456,51 +456,79 @@ def get_2_by_2_explicit_block(g, boundary_identifier):
 
 
 # Fig 5 in https://journals.aps.org/prresearch/pdf/10.1103/PhysRevResearch.3.033179
-def toric_tensors_lgt_approach():
+def toric_tensors_lgt_approach(d=2):
     # u, r, d, l, t, s
-    tensor = np.zeros([2, 2, 2, 2, 2, 2], dtype=complex)
-    for i in range(2):
-        for j in range(2):
-            tensor[i, i, j, j, i, i] = 1
-            tensor[i, j, i, j, i, j] = 1
-            tensor[i, j, j, i, i, j] = 1
-    A = tn.Node(tensor.reshape([2, 2, 2, 2, 4]))
+    tensor = np.zeros([d] * 6, dtype=complex)
+    for i in range(d):
+        for j in range(d):
+            for k in range(d):
+                if [i, j, k] == [2, 2, 0]:
+                    b = 1
+                tensor[i, j, k,
+                       int(np.round(np.angle(np.exp(2j * np.pi * i / d) *
+                                             np.exp(2j * np.pi * j / d) *
+                             np.exp(-2j * np.pi * k / d)) * d / (2 * np.pi), 10)) % d,
+                       i, j] = 1
+    A = tn.Node(tensor.reshape([d] * 4 + [d**2]))
     return A
 
 #  a  b
 #  b  c
-def edit_t_blocks(t, a, b, c):
+def edit_t_blocks(t, a, params, d=2):
     for i in range(int(len(t) / 2)):
         block_inds = np.where(t[i] != 0)[0]
         if len(block_inds) > 0:
-            t[block_inds[0], block_inds[0]] = a
-            t[block_inds[0], block_inds[1]] = -2 * b
-            t[block_inds[1], block_inds[0]] = b
-            t[block_inds[1], block_inds[1]] = c
+            if d == 2:
+                b, c = params
+                t[block_inds[0], block_inds[0]] = a
+                t[block_inds[0], block_inds[1]] = b
+                t[block_inds[1], block_inds[0]] = b
+                t[block_inds[1], block_inds[1]] = c
+            elif d == 3:
+                p0, p1, p2, p3, p4 = params
+                t[block_inds[0], block_inds[0]] = a
+                t[block_inds[0], block_inds[1]] = p0
+                t[block_inds[1], block_inds[0]] = p0
+                t[block_inds[1], block_inds[1]] = p1
+                t[block_inds[0], block_inds[2]] = p2
+                t[block_inds[2], block_inds[0]] = p2
+                t[block_inds[2], block_inds[2]] = p3
+                t[block_inds[2], block_inds[1]] = p4
+                t[block_inds[1], block_inds[2]] = p4
 
 
-def tensors_from_transfer_matrix(b, c):
-    A = toric_tensors_lgt_approach()
+def numberToBase(n, b):
+    if n == 0:
+        return [0]
+    digits = []
+    while n:
+        digits.append(int(n % b))
+        n //= b
+    return digits[::-1]
+
+def tensors_from_transfer_matrix(params, d=2):
+    A = toric_tensors_lgt_approach(d)
     E0 = bops.permute(bops.contract(A, A, '4', '4'), [0, 4, 2, 6, 1, 5, 3, 7])
-    t = E0.tensor.reshape([16, 16])
-    edit_t_blocks(t, 1, b, c)
-    tg = tn.Node(t.reshape([2] * 8).transpose([0, 4, 2, 6, 1, 5, 3, 7]))
-    [l, s, r, te] = bops.svdTruncation(tg, [0, 1, 2, 3], [4, 5, 6, 7], '>*<', minBondDim=4)
+    t = E0.tensor.reshape([d**4, d**4])
+    # TODO t to tau here
+    edit_t_blocks(t, 1, params, d)
+    t_new = tn.Node(t.reshape([d] * 8).transpose([0, 4, 2, 6, 1, 5, 3, 7]))
+    [l, s, r, te] = bops.svdTruncation(t_new, [0, 1, 2, 3], [4, 5, 6, 7],
+                                       '>*<', minBondDim=d**2)
     l = bops.contract(l, tn.Node(np.sqrt(np.round(s.tensor, 10))), '4', '0')
     r = bops.contract(tn.Node(np.sqrt(np.round(s.tensor, 10))), r, '1', '0')
     if np.amax(l.tensor - r.tensor.transpose([1, 2, 3, 4, 0]).conj()) > 1e-12:
-        print(b, c)
+        print(params)
         raise Warning('Transfer matrix truncation turned out non-symmetric?')
     # We require that u, r = s, t, based on Fig. 5 in Zohar ^^. The truncation doesn't know that obviously,
     # so it needs to be sorted.
-    # TODO sort |S| < 4
-    non_zero_indices = np.where(np.abs(l.tensor.reshape([2] * 6)) > 1e-12)
-    swap_op = np.zeros([2] * 4)
+    # TODO sort |S| < d**2
+    non_zero_indices = np.where(np.abs(l.tensor.reshape([d] * 6)) > 1e-12)
+    swap_op = np.zeros([d] * 4)
     for appearence_i in range(len(non_zero_indices[0])):
         swap_op[non_zero_indices[4][appearence_i], non_zero_indices[5][appearence_i],
                 non_zero_indices[0][appearence_i], non_zero_indices[1][appearence_i]] = 1
-    swap = tn.Node(swap_op.reshape([4, 4]))
-    l = bops.contract(l, tn.Node(np.sqrt(s.tensor)), '4', '0')
+    swap = tn.Node(swap_op.reshape([d**2, d**2]))
     l = bops.contract(l, swap, '4', '0')
     return l
 
@@ -508,21 +536,23 @@ def tensors_from_transfer_matrix(b, c):
 import matplotlib.pyplot as plt
 legends = []
 normalized_p2s = []
-bs = [np.round(i * 0.1, 8) for i in range(-10, 11)]
-cs = [np.round(i * 0.1, 8) for i in range(-10, 11)]
+bs = [np.round(i * 0.1, 8) for i in range(-10, 1)]
+cs = [np.round(i * 0.1, 8) for i in range(-10, 1)]
 wilson_expectations_map = np.zeros((len(bs), len(cs)))
 for bi in range(len(bs)):
     for ci in range(len(cs)):
         b, c = bs[bi], cs[ci]
+        params = [b, c, c, b, c]
         print(b, c)
-        if os.path.exists('results/toricBoundaries_gauge_' + str(b) + '_' + str(c)):
-            with open('results/toricBoundaries_gauge_' + str(b) + '_' + str(c), 'rb') as f:
+        filename = 'results/gauge/toricBoundaries_gauge_' + str(params)
+        if os.path.exists(filename):
+            with open(filename, 'rb') as f:
                 [upRow, downRow, leftRow, rightRow, openA, openA, A, A] = pickle.load(f)
         else:
-            A = tensors_from_transfer_matrix(b, c)
+            A = tensors_from_transfer_matrix(params, d=3)
             upRow, downRow, leftRow, rightRow, openA, openB = peps.applyBMPS(A, A, d=4)
-            with open('results/toricBoundaries_gauge_' + str(b) + '_' + str(c), 'wb') as f:
-                    pickle.dump([upRow, downRow, leftRow, rightRow, openA, openA, A, A], f)
+            with open(filename, 'wb') as f:
+                pickle.dump([upRow, downRow, leftRow, rightRow, openA, openA, A, A], f)
         circle = bops.contract(bops.contract(bops.contract(
             upRow, rightRow, '3', '0'), downRow, '5', '0'), leftRow, '70', '03')
         M = bops.contract(bops.contract(bops.contract(bops.contract(
