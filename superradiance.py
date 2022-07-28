@@ -312,62 +312,54 @@ sigma_T_expect = np.zeros(timesteps)
 sigma_X_expect = np.zeros(timesteps)
 sigma_Z_expect = np.zeros(timesteps)
 J_expect = np.zeros(timesteps)
-for ti in range(timesteps):
+
+initial_ti = 0
+for file in os.listdir(newdir):
+    ti = int(file.split('_')[file.split('_').index('ti') + 1])
+    if ti > initial_ti:
+        initial_ti = ti + 1
+        with open(newdir + '/' + file, 'rb') as f:
+            [ti, psi, projectors_left, projectors_right] = pickle.load(f)
+
+for ti in range(initial_ti, timesteps):
     print('---')
     print(ti)
-    state_filename, data_filename = filenames(newdir, case, N, Omega, nn_num, int(save_each * np.ceil(ti / save_each)), sim_method, bond_dim)
-    try:
-        # TODO try in steps of save_every...
-        with open(state_filename, 'rb') as f:
-            [ti, psi, projectors_left, projectors_right] = pickle.load(f)
-        with open(data_filename, 'rb') as f:
-            form_results = pickle.load(f)
-            if len(form_results) == 6:
-                [J_expect_form, sigma_expect_form, sigma_T_expect_form, sigma_X_expect_form, sigma_Z_expect_form, bond_dims_form] = form_results
-            else:
-                [J_expect_form, bond_dims_form] = form_results
-            J_expect[:len(J_expect_form)] = J_expect_form
-            sigma_expect[:len(sigma_expect_form)] = sigma_expect_form
-            sigma_T_expect[:len(sigma_T_expect_form)] = sigma_T_expect_form
-            sigma_X_expect[:len(sigma_X_expect_form)] = sigma_X_expect_form
-            sigma_Z_expect[:len(sigma_Z_expect_form)] = sigma_Z_expect_form
-            bond_dims[:len(bond_dims_form)] = bond_dims_form
-    except FileNotFoundError:
-        for si in range(N):
-            J_expect[ti] += bops.getOverlap(psi,
-                                [tn.Node(I) for i in range(si)] + [tn.Node(np.matmul(sigma.T, sigma).reshape([1, d**2, 1]))]
-                                            + [tn.Node(I) for i in range(si + 1, N)])
-            for sj in range(N):
-                if si < sj:
-                    J_expect[ti] += bops.getOverlap(psi,
-                                    [tn.Node(I) for i in range(si)] + [tn.Node(sigma.T.reshape([1, d**2, 1]))]
-                                                    + [tn.Node(I) for i in range(si + 1, sj)] + [tn.Node(sigma.reshape([1, d**2, 1]))]
-                                                    + [tn.Node(I) for i in range(sj +1, N)])
-                elif sj < si:
-                    J_expect[ti] += bops.getOverlap(psi,
-                                                    [tn.Node(I) for i in range(sj)] + [
-                                                        tn.Node(sigma.T.reshape([1, d ** 2, 1]))]
-                                                    + [tn.Node(I) for i in range(sj + 1, si)] + [
-                                                        tn.Node(sigma.reshape([1, d ** 2, 1]))]
-                                                    + [tn.Node(I) for i in range(si + 1, N)])
-        sigma_expect[ti] += bops.getOverlap(psi,
-            [tn.Node(I) for i in range(int(N / 2))] + [tn.Node(sigma.reshape([1, d ** 2, 1]))] + [tn.Node(I) for i in range(int(N / 2) - 1)])
-        sigma_T_expect[ti] += bops.getOverlap(psi,
-            [tn.Node(I) for i in range(int(N / 2))] + [tn.Node(sigma.T.reshape([1, d ** 2, 1]))] + [tn.Node(I) for i in range(int(N / 2) - 1)])
-        sigma_X_expect[ti] += bops.getOverlap(psi,
-            [tn.Node(I) for i in range(int(N / 2))] + [tn.Node(X.reshape([1, d ** 2, 1]))] + [tn.Node(I) for i in range(int(N / 2) - 1)])
-        sigma_Z_expect[ti] += bops.getOverlap(psi,
-            [tn.Node(I) for i in range(int(N / 2))] + [tn.Node(Z.reshape([1, d ** 2, 1]))] + [tn.Node(I) for i in range(int(N / 2) - 1)])
-        bond_dims[ti] = psi[int(len(psi)/2)].tensor.shape[0]
-        if sim_method == 'tdvp':
-            tdvp.tdvp_sweep(psi, L, projectors_left, projectors_right, dt / 2, max_bond_dim=bond_dim, num_of_sites=1)
-        elif sim_method == 'swap':
-            swap.trotter_sweep(psi, trotter_single_op, neighbor_trotter_ops, swap_op)
-        if ti % save_each == 0:
-            with open(data_filename, 'wb') as f:
-                pickle.dump([J_expect, sigma_expect, sigma_T_expect, sigma_X_expect, sigma_Z_expect, bond_dims], f)
-            with open(state_filename, 'wb') as f:
-                pickle.dump([ti, psi, projectors_left, projectors_right], f)
+    for si in range(N):
+        J_expect[ti] += bops.getOverlap(psi,
+                            [tn.Node(I) for i in range(si)] + [tn.Node(np.matmul(sigma.T, sigma).reshape([1, d**2, 1]))]
+                                        + [tn.Node(I) for i in range(si + 1, N)])
+        for sj in range(N):
+            if si < sj:
+                J_expect[ti] += bops.getOverlap(psi,
+                                [tn.Node(I) for i in range(si)] + [tn.Node(sigma.T.reshape([1, d**2, 1]))]
+                                                + [tn.Node(I) for i in range(si + 1, sj)] + [tn.Node(sigma.reshape([1, d**2, 1]))]
+                                                + [tn.Node(I) for i in range(sj +1, N)])
+            elif sj < si:
+                J_expect[ti] += bops.getOverlap(psi,
+                                                [tn.Node(I) for i in range(sj)] + [
+                                                    tn.Node(sigma.T.reshape([1, d ** 2, 1]))]
+                                                + [tn.Node(I) for i in range(sj + 1, si)] + [
+                                                    tn.Node(sigma.reshape([1, d ** 2, 1]))]
+                                                + [tn.Node(I) for i in range(si + 1, N)])
+    sigma_expect[ti] += bops.getOverlap(psi,
+        [tn.Node(I) for i in range(int(N / 2))] + [tn.Node(sigma.reshape([1, d ** 2, 1]))] + [tn.Node(I) for i in range(int(N / 2) - 1)])
+    sigma_T_expect[ti] += bops.getOverlap(psi,
+        [tn.Node(I) for i in range(int(N / 2))] + [tn.Node(sigma.T.reshape([1, d ** 2, 1]))] + [tn.Node(I) for i in range(int(N / 2) - 1)])
+    sigma_X_expect[ti] += bops.getOverlap(psi,
+        [tn.Node(I) for i in range(int(N / 2))] + [tn.Node(X.reshape([1, d ** 2, 1]))] + [tn.Node(I) for i in range(int(N / 2) - 1)])
+    sigma_Z_expect[ti] += bops.getOverlap(psi,
+        [tn.Node(I) for i in range(int(N / 2))] + [tn.Node(Z.reshape([1, d ** 2, 1]))] + [tn.Node(I) for i in range(int(N / 2) - 1)])
+    bond_dims[ti] = psi[int(len(psi)/2)].tensor.shape[0]
+    if sim_method == 'tdvp':
+        tdvp.tdvp_sweep(psi, L, projectors_left, projectors_right, dt / 2, max_bond_dim=bond_dim, num_of_sites=2)
+    elif sim_method == 'swap':
+        swap.trotter_sweep(psi, trotter_single_op, neighbor_trotter_ops, swap_op)
+    if ti > 0 and ti % save_each != 1:
+        old_state_filename, old_data_filename = filenames(newdir, case, N, Omega, nn_num, ti - 1, sim_method, bond_dim)
+        os.remove(old_state_filename)
+    state_filename, data_filename = filenames(newdir, case, N, Omega, nn_num, ti, sim_method, bond_dim)
+    with open(state_filename, 'wb') as f:
+        pickle.dump([ti, psi, projectors_left, projectors_right], f)
 
 if results_to == 'plot':
     plt.plot(np.array(range(timesteps)), np.abs(J_expect), ':')
