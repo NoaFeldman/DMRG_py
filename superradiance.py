@@ -320,6 +320,7 @@ for file in os.listdir(newdir):
         initial_ti = ti + 1
         with open(newdir + '/' + file, 'rb') as f:
             [ti, psi, projectors_left, projectors_right] = pickle.load(f)
+            projectors_left, projectors_right = tdvp.get_initial_projectors(psi, L)
 
 for ti in range(initial_ti, timesteps):
     print('---')
