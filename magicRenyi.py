@@ -200,14 +200,33 @@ def getPOp(index, paulis, d, n):
     return op
 
 
-def getSecondRenyiExact(psi: List[tn.Node], d: int):
-    n = len(psi)
-    dm = tn.Node(np.eye(1))
-    for i in range(n - 1):
-        dm = bops.multiContraction(bops.multiContraction(psi[i], dm, '0', '1'), psi[i], [2 * i + 2], '0*')
-    dm = bops.multiContraction(bops.multiContraction(psi[n - 1], dm, '0', '1'), psi[n - 1], [2 * n, 1], '02*')
-    dm = dm.tensor.transpose(list(range(n)) + list(range(2*n - 1, n-1, -1))).reshape([d**n, d**n])
-    return getSecondRenyiExact_dm(dm, d)
+def getSecondRenyiExact(psi, d: int):
+    n = int(np.log(len(psi)) / np.log(d))
+    paulis = basicDefs.getPauliMatrices(d)
+    renyiSum = 0
+    for i in range(d**(2 * n)):
+        pOp = getPOp(i, paulis, d, n)
+        renyiSum += np.abs(np.matmul(psi.conj().T, np.matmul(pOp, psi)))**4 / d**(2*n)
+    print('renyi sum = ' + str(renyiSum))
+    return -np.log(renyiSum) / np.log(d) - n
+
+
+def getSecondRenyiAverage(psi: List[tn.Node], ASize: int, d: int):
+    for k in range(len(psi) - 1, ASize - 1, -1):
+        psi = bops.shiftWorkingSite(psi, k , '<<')
+    [u, s, v, te] = bops.svdTruncation(bops.contract(psi[ASize - 1], psi[ASize], '2', '0'), [0, 1], [2, 3], '>*<')
+    psi[ASize - 1] = u
+    psi[ASize] = bops.contract(s, v, '1', '0')
+    singular_values = np.diag(s.tensor)
+    res = 0
+    for si in range(len(singular_values)):
+        eigen_vector = bops.copyState(psi[:ASize])
+        eigen_vector[ASize - 1].tensor = eigen_vector[ASize - 1].tensor[:, :, si]\
+            .reshape(list(eigen_vector[ASize - 1].tensor.shape[:2]) + [1])
+        print('eigen_vecotr_norm = ' + str(bops.getOverlap(eigen_vector, eigen_vector)))
+        eigen_vector = bops.getExplicitVec(eigen_vector, d)
+        res += np.abs(singular_values[si])**2 * getSecondRenyiExact(eigen_vector, d)
+    return res
 
 
 def getSecondRenyiExact_dm(dm, d):
