@@ -146,7 +146,7 @@ elif model == 'magic_xxz':
     h_func = get_magic_xxz_dmrg_terms
 elif model == 'magic_xxz_rotations':
     param_name = 'theta'
-    resolution = 0.25 / (range_f - range_i)
+    resolution = 0.01
     params = [np.round(i * resolution, 3) for i in range(range_f - range_i)]
     h_func = get_magic_xxz_rotations_dmrg_terms
 elif model == 't_ising':
@@ -167,8 +167,10 @@ elif model == 'xy_magic':
     h_func = get_xy_magic_dmrg_terms
 elif model == 'kitaev':
     param_name = 'mu_t'
-    mu_range = list(range(-40, 40, 2))
-    t_range = np.array(range(range_i, range_f, 2))
+    mu_range = list(range(8, 12, 2))
+    t_range = list(range(-40, 40, 2))
+    # mu_range = list(range(-40, 40, 2))
+    # t_range = np.array(range(range_i, range_f, 2))
     params = [[np.round(mui * 0.1, 8), np.round(ti * 0.1, 8)] for mui in mu_range for ti in t_range]
     h_func = get_kitaev_chain_dmrg_terms
 elif model == 'fermion_tight_binding':
@@ -190,7 +192,17 @@ def run():
         final_file_name = filename(indir, model, param_name, param, n)
         if path.exists(final_file_name):
             with open(final_file_name, 'rb') as f:
-                [psi_orig, m2, mhalf] = pickle.load(f)
+                form = pickle.load(f)
+            if len(form) == 4:
+                continue
+            else:
+                psi_orig, m2, mhalf = form
+                m2_avg = magicRenyi.getSecondRenyiAverage(psi, int(n / 2), d)
+                print('m2_avg = ' + str(m2_avg))
+                print(psi[int(n / 2)].tensor.shape)
+                print(param)
+                with open(filename(indir, model, param_name, param, n), 'wb') as f:
+                    pickle.dump([psi_orig, m2, mhalf, m2_avg], f)
         else:
             onsite_terms, neighbor_terms = h_func(param)
             try:
@@ -198,32 +210,33 @@ def run():
             except TypeError:
                 H = np.zeros((d**n, d**n), dtype=complex)
                 for i in range(n):
-                    H += np.kron(np.eye(d**i), np.kron(onsite_terms[i], np.kron(d**(n - i - 1))))
+                    H += np.kron(np.eye(d**i), np.kron(onsite_terms[i], np.eye(d**(n - i - 1))))
                 for i in range(n - 1):
-                    H += np.kron(np.eye(d**i), np.kron(neighbor_terms[i], np.kron(d**(n - i - 2))))
-                evals, evecs = np.linalg.eigvalsh(H)
-                gs = evecs[:, np.armin(evals)]
+                    H += np.kron(np.eye(d**i), np.kron(neighbor_terms[i], np.eye(d**(n - i - 2))))
+                evals, evecs = np.linalg.eigh(H)
+                gs = evecs[:, np.argmin(evals)]
                 curr = tn.Node(gs.reshape([1] + [d] * n + [1]))
                 psi = []
                 for i in range(n - 1):
                     [l, curr, te] = bops.svdTruncation(curr, [0, 1], list(range(2, len(curr.tensor.shape))), '>>')
                     psi.append(l)
                 psi.append(curr)
+                psi[-1].tensor /= bops.getOverlap(psi, psi)**0.5
             psi_orig = psi
             if psi[int(n / 2)].tensor.shape[0] > 4:
                 psi = bops.relaxState(psi, 4)
                 print(bops.getOverlap(psi, psi_orig))
             m2 = magicRenyi.getSecondRenyi(psi, d)
+            print('m2 = ' + str(m2))
             dm = get_half_system_dm(psi)
             mhalf = magicRenyi.getHalfRenyiExact_dm(dm, d)
-        print(psi[int(n/2)].tensor.shape)
-        print(param)
-        with open(filename(indir, model, param_name, param, n), 'wb') as f:
-            pickle.dump([psi_orig, m2, mhalf], f)
-    with open(indir + '/magic/results/' + model + 'm2s_' + param_name + 's_' + str(params[0]) + '_' + str(params[-1]), 'wb') as f:
-        pickle.dump(m2s, f)
-    with open(indir + '/magic/results/' + model + 'mhalves_' + param_name + 's_' + str(params[0]) + '_' + str(params[-1]), 'wb') as f:
-        pickle.dump(mhalves, f)
+            print('mhalf = ' + str(mhalf))
+            m2_avg = magicRenyi.getSecondRenyiAverage(psi, int(n / 2), d)
+            print('m2_avg = ' + str(m2_avg))
+            print(psi[int(n/2)].tensor.shape)
+            print(param)
+            with open(filename(indir, model, param_name, param, n), 'wb') as f:
+                pickle.dump([psi_orig, m2, mhalf, m2_avg], f)
 
 
 def analyze_scaling():
@@ -434,7 +447,6 @@ def analyze_kitaev_ts():
         legends.append(str(n))
     plt.legend(legends)
     plt.show()
-# analyze_kitaev_2d()
 
 
 def analyze_thin():
