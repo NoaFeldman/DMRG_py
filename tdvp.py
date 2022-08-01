@@ -66,13 +66,16 @@ def apply_time_evolver(arnoldi_T: np.array, arnoldi_basis: List[tn.Node], M: tn.
 
 # k is OC, pair is [k, k+1]
 def tdvp_step(psi: List[tn.Node], H: List[tn.Node], k: int,
-              HL: List[tn.Node], HR: List[tn.Node], dir: str, dt, max_bond_dim, num_of_sites):
+              HL: List[tn.Node], HR: List[tn.Node], dir: str, dt, max_bond_dim, num_of_sites, is_density_matrix=True):
+    if num_of_sites == 1:
+        left_ind = k - int(dir == '<<')
+        cbe.get_op_tilde_tr(psi, left_ind, HL, HR, H, dir, D=max_bond_dim)
+
     T, basis = arnoldi(HL, HR, H, psi, k, num_of_sites)
     if num_of_sites == 2:
         M = bops.contract(psi[k], psi[k+1], '2', '0')
     else:
         M = psi[k]
-
     M = apply_time_evolver(T, basis, M, dt)
 
     if dir == '>>':
@@ -116,13 +119,8 @@ def tdvp_step(psi: List[tn.Node], H: List[tn.Node], k: int,
             psi[k+1] = bops.contract(C, psi[k+1], '1', '0')
         elif dir == '<<':
             psi[k - 1] = bops.contract(psi[k - 1], C, '2', '0')
-
-    left_ind = k-1 if dir == '<<' else k
-    M = bops.contract(psi[left_ind], psi[left_ind + 1], '2', '0')
-    [A, C, B, te] = bops.svdTruncation(M, [0, 1], [2, 3], '>*<')
-    psi_copy = bops.copyState(psi)
-    cbe.get_op_tilde_tr(psi, left_ind, HL, HR, H, A, C, B, dir, D=max_bond_dim, w=H[M_ind - 1].tensor.shape[3])
-    print(bops.getOverlap(psi, psi_copy) / bops.getOverlap(psi, psi))
+    if is_density_matrix:
+        bops.normalize_mps_of_dm(psi)
     return te
 
 
