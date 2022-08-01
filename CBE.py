@@ -23,23 +23,30 @@ def get_dm(psi):
 # Fig 2
 # Assuming k is the OC
 def get_op_tilde_tr(psi: List[tn.Node], k: int, HL: List[tn.Node], HR: List[tn.Node], H: List[tn.Node], dir, D:int):
+    psi_copy = bops.copyState(psi)
     if k == -1 or k == len(psi) - 1:
         return
     if dir == '>>':
+        print(dir, k, 'orthogonality', np.round(bops.contract(psi[k+1], psi[k+1], '12', '12*').tensor, 10))
         [A, Delta, te] = bops.svdTruncation(psi[k], [0, 1], [2], '>>')
         B = psi[k+1]
     else: # dir == '<<'
+        print(dir, k, 'orthogonality', np.round(bops.contract(psi[k], psi[k], '01', '01*').tensor, 10))
         A = psi[k]
         [Delta, B, te] = bops.svdTruncation(psi[k + 1], [0], [1, 2], '<<')
     a_left_id = bops.contract(bops.contract(HL[k], A, '0', '0'), H[k], '02', '20')
     a_left_Al = bops.contract(bops.contract(a_left_id, A, '02', '01*'), A, '2', '2')
     a_left = tn.Node(a_left_id.tensor.transpose([1, 3, 0, 2]) - a_left_Al.tensor)
+    if dir == '>>' and np.amax(a_left.tensor) < 1e-13:
+        return
 
     a_right_id = bops.contract(bops.contract(HR[k+1], B, '0', '2'), H[k+1], '03', '30')
     a_right_Bl1 = bops.contract(bops.contract(a_right_id, B, '02', '21*'), B, '2', '0')
     a_right = tn.Node(a_right_id.tensor.transpose([1, 3, 2, 0]) - a_right_Bl1.tensor)
+    if dir == '<<' and np.amax(a_right.tensor) < 1e-13:
+        return
 
-    if dir == '<<':
+    if dir == '>>':
         pink = bops.contract(Delta, a_right, '1', '0')
         [US, V, te] = bops.svdTruncation(pink, [0], [1, 2, 3], '<<', maxBondDim=1024) #=D)
         blue = bops.contract(a_left, US, '0', '0')
@@ -49,6 +56,7 @@ def get_op_tilde_tr(psi: List[tn.Node], k: int, HL: List[tn.Node], HR: List[tn.N
         yellow = bops.contract(red_site, bops.contract(pink, a_left_id, '01', '13'), '01*', '23')
         [u_tilde, s_tilde, v_tilde, te] = bops.svdTruncation(yellow, [0], [1, 2], '>*<')
         yellow_site = bops.contract(red_site, u_tilde, '2', '0')
+        print(k, dir, 'with yellow', np.round(bops.contract(yellow_site, psi_copy[k], '01', '01*').tensor, 8))
         new_A_tensor = np.zeros((A.tensor.shape[0], A.tensor.shape[1], A.tensor.shape[2] + yellow_site.tensor.shape[2]), dtype=complex)
         new_A_tensor[:, :, :A.tensor.shape[2]] = A.tensor
         new_A_tensor[:, :, A.tensor.shape[2]:] = yellow_site.tensor
@@ -65,22 +73,15 @@ def get_op_tilde_tr(psi: List[tn.Node], k: int, HL: List[tn.Node], HR: List[tn.N
         yellow = bops.contract(bops.contract(pink, a_right_id, '30', '13'), red_site, '32', '12*')
         [u_tilde, s_tilde, v_tilde, te] = bops.svdTruncation(yellow, [0, 1], [2], '>*<')
         yellow_site = bops.contract(v_tilde, red_site, '1', '0')
+        print(k, dir, 'with yellow', np.round(bops.contract(yellow_site, psi_copy[k+1], '12', '12*').tensor, 8))
         new_B_tensor = np.zeros((B.tensor.shape[0] + yellow_site.tensor.shape[0], B.tensor.shape[1], B.tensor.shape[2]), dtype=complex)
         new_B_tensor[:B.tensor.shape[0], :, :] = B.tensor
         new_B_tensor[B.tensor.shape[0]:, :, :] = yellow_site.tensor
         new_B = tn.Node(new_B_tensor)
         green_C = bops.contract(Delta, bops.contract(B, new_B, '12', '12*'), '1', '0')
         new_A = bops.contract(A, green_C, '2', '0')
-    # dm = get_dm(psi)
     psi[k] = new_A
     psi[k+1] = new_B
-    # dm_new = get_dm(psi)
-    # psi_copy = bops.copyState(psi)
-    # psi_copy[k].tensor[:, :, :A.tensor.shape[2]] = np.zeros(A.tensor.shape)
-    # dm_grey = get_dm(psi_copy)
-    # test = max(linalg.eigvals(dm_grey))
-    # if test > 0.5:
-    #     b = 1
     HL[k+1] = bops.contract(bops.contract(bops.contract(
         HL[k], new_A, '0', '0'), H[k], '02', '20'), new_A, '02', '01*')
     HR[k] = bops.contract(bops.contract(bops.contract(
