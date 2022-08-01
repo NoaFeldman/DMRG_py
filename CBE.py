@@ -10,12 +10,27 @@ import swap_dmrg as swap
 from typing import List
 
 
+def get_dm(psi):
+    dm = bops.contract(psi[0], psi[1], '2', '0')
+    for i in range(2, len(psi)):
+        dm = bops.contract(dm, psi[i], [i+1], '0')
+    return dm.tensor.reshape([2] * 2 * len(psi)).transpose([i * 2 for i in range(len(psi))] + [i * 2 + 1 for i in range(len(psi))]).reshape([2**len(psi)] * 2)
+
+
 # Controlled bond expansion for DMRG ground state search at single-site costs
 # Andreas Gleis,1 Jheng-Wei Li,1 and Jan von Delft
 
 # Fig 2
-def get_op_tilde_tr(psi: List[tn.Node], k: int, HL: List[tn.Node], HR: List[tn.Node], H: List[tn.Node],
-                    A: tn.Node, Delta: tn.Node, B: tn.Node, dir: str, D:int, w:int) -> tn.Node:
+# Assuming k is the OC
+def get_op_tilde_tr(psi: List[tn.Node], k: int, HL: List[tn.Node], HR: List[tn.Node], H: List[tn.Node], dir, D:int):
+    if k == -1 or k == len(psi) - 1:
+        return
+    if dir == '>>':
+        [A, Delta, te] = bops.svdTruncation(psi[k], [0, 1], [2], '>>')
+        B = psi[k+1]
+    else: # dir == '<<'
+        A = psi[k]
+        [Delta, B, te] = bops.svdTruncation(psi[k + 1], [0], [1, 2], '<<')
     a_left_id = bops.contract(bops.contract(HL[k], A, '0', '0'), H[k], '02', '20')
     a_left_Al = bops.contract(bops.contract(a_left_id, A, '02', '01*'), A, '2', '2')
     a_left = tn.Node(a_left_id.tensor.transpose([1, 3, 0, 2]) - a_left_Al.tensor)
@@ -24,11 +39,12 @@ def get_op_tilde_tr(psi: List[tn.Node], k: int, HL: List[tn.Node], HR: List[tn.N
     a_right_Bl1 = bops.contract(bops.contract(a_right_id, B, '02', '21*'), B, '2', '0')
     a_right = tn.Node(a_right_id.tensor.transpose([1, 3, 2, 0]) - a_right_Bl1.tensor)
 
-    if dir == '>>':
+    if dir == '<<':
         pink = bops.contract(Delta, a_right, '1', '0')
-        [US, V, te] = bops.svdTruncation(pink, [0], [1, 2, 3], '<<', maxBondDim=D)
+        [US, V, te] = bops.svdTruncation(pink, [0], [1, 2, 3], '<<', maxBondDim=1024) #=D)
         blue = bops.contract(a_left, US, '0', '0')
-        [red, V, te] = bops.svdTruncation(blue, [0, 1, 2], [3], '<<', maxBondDim=int(D/w))
+        w = H[k].tensor.shape[-1]
+        [red, V, te] = bops.svdTruncation(blue, [0, 1, 2], [3], '<<', maxBondDim=1024) #int(D/w))
         [red_site, S, V, te] = bops.svdTruncation(red, [1, 2], [0, 3], '>*<')
         yellow = bops.contract(red_site, bops.contract(pink, a_left_id, '01', '13'), '01*', '23')
         [u_tilde, s_tilde, v_tilde, te] = bops.svdTruncation(yellow, [0], [1, 2], '>*<')
@@ -39,11 +55,12 @@ def get_op_tilde_tr(psi: List[tn.Node], k: int, HL: List[tn.Node], HR: List[tn.N
         new_A = tn.Node(new_A_tensor)
         green_C = bops.contract(bops.contract(new_A, A, '01*', '01'), Delta, '1', '0')
         new_B = bops.contract(green_C, B, '1', '0')
-    else: # dir == '<<':
+    else: # dir == '>>':
         pink = bops.contract(a_left, Delta, '0', '0')
-        [U, SV, te] = bops.svdTruncation(pink, [0, 1, 2], [3], '>>', maxBondDim=D)
+        [U, SV, te] = bops.svdTruncation(pink, [0, 1, 2], [3], '>>', maxBondDim=1024) #=D)
         blue = bops.contract(SV, a_right, '1', '0')
-        [U, red, te] = bops.svdTruncation(blue, [0], [1, 2, 3], '>>', maxBondDim=int(D/w))
+        w = H[k].tensor.shape[-1]
+        [U, red, te] = bops.svdTruncation(blue, [0], [1, 2, 3], '>>', maxBondDim=1024) #=int(D/w))
         [U, S, red_site, te] = bops.svdTruncation(red, [0, 1], [2, 3], '>*<')
         yellow = bops.contract(bops.contract(pink, a_right_id, '30', '13'), red_site, '32', '12*')
         [u_tilde, s_tilde, v_tilde, te] = bops.svdTruncation(yellow, [0, 1], [2], '>*<')
@@ -54,9 +71,16 @@ def get_op_tilde_tr(psi: List[tn.Node], k: int, HL: List[tn.Node], HR: List[tn.N
         new_B = tn.Node(new_B_tensor)
         green_C = bops.contract(Delta, bops.contract(B, new_B, '12', '12*'), '1', '0')
         new_A = bops.contract(A, green_C, '2', '0')
-    print(A.shape, new_A.shape, B.shape, new_B.shape)
+    # dm = get_dm(psi)
     psi[k] = new_A
     psi[k+1] = new_B
+    # dm_new = get_dm(psi)
+    # psi_copy = bops.copyState(psi)
+    # psi_copy[k].tensor[:, :, :A.tensor.shape[2]] = np.zeros(A.tensor.shape)
+    # dm_grey = get_dm(psi_copy)
+    # test = max(linalg.eigvals(dm_grey))
+    # if test > 0.5:
+    #     b = 1
     HL[k+1] = bops.contract(bops.contract(bops.contract(
         HL[k], new_A, '0', '0'), H[k], '02', '20'), new_A, '02', '01*')
     HR[k] = bops.contract(bops.contract(bops.contract(
