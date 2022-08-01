@@ -199,7 +199,10 @@ def printNode(node):
 
 
 def copyState(psi, conj=False) -> List[tn.Node]:
-    result = list(tn.copy(psi, conjugate=conj)[0].values())
+    if conj:
+        result = [tn.Node(np.copy(psi[i].tensor).conj()) for i in range(len(psi))]
+    else:
+        result = [tn.Node(np.copy(psi[i].tensor)) for i in range(len(psi))]
     if conj:
         for node in result:
             for edge in node.edges:
@@ -308,7 +311,8 @@ def inner_contract(node: tn.Node, indices: List[int]) -> tn.Node:
 
 
 def svdTruncation(node: tn.Node, leftEdges: List[int], rightEdges: List[int],
-                  dir: str, maxBondDim=1024, leftName='U', rightName='V',  edgeName='default', normalize=False, maxTrunc=15):
+                  dir: str, maxBondDim=1024, minBondDim=0,
+                  leftName='U', rightName='V',  edgeName='default', normalize=False, maxTrunc=15):
     # np.seterr(all='raise')
     maxBondDim = getAppropriateMaxBondDim(maxBondDim,
                                           [node.edges[e] for e in leftEdges], [node.edges[e] for e in rightEdges])
@@ -341,7 +345,7 @@ def svdTruncation(node: tn.Node, leftEdges: List[int], rightEdges: List[int],
     if norm == 0:
         b = 1
     if maxTrunc > 0:
-        meaningful = sum(np.round(np.diag(S.tensor) / norm, maxTrunc) > 0)
+        meaningful = max(minBondDim, sum(np.round(np.diag(S.tensor) / norm, maxTrunc) > 0))
         S.tensor = S.tensor[:meaningful, :meaningful]
         U.tensor = U.tensor.transpose([-1 * i for i in range(1, len(U.tensor.shape) + 1)])[:meaningful, :]. \
             transpose([-1 * i for i in range(1, len(U.tensor.shape) + 1)])
@@ -349,6 +353,7 @@ def svdTruncation(node: tn.Node, leftEdges: List[int], rightEdges: List[int],
         V.tensor = V.tensor[:meaningful, :]
     if normalize:
         S = multNode(S, 1 / norm)
+        truncErr /= norm
     for e in S.edges:
         e.name = edgeName
     if dir == '>>':
@@ -632,3 +637,8 @@ def vector_to_mps(psi, d, N):
         result.append(new_site)
     result.append(orig)
     return result
+
+
+def normalize_mps_of_dm(rho, d=2):
+    if d == 2:
+        rho[-1].tensor /= getOverlap(rho, [tn.Node(np.array([1, 0, 0, 1]).reshape([1, 4, 1])) for i in range(len(rho))])
