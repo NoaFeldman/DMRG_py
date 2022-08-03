@@ -1,3 +1,5 @@
+import os.path
+
 import basicOperations as bops
 import numpy as np
 import DMRG as dmrg
@@ -146,8 +148,8 @@ elif model == 'magic_xxz':
     h_func = get_magic_xxz_dmrg_terms
 elif model == 'magic_xxz_rotations':
     param_name = 'theta'
-    resolution = 0.01
-    params = [np.round(i * resolution, 3) for i in range(range_f - range_i)]
+    resolution = 0.001
+    params = [np.round(i * resolution, 3) for i in range(range_i, range_f)]
     h_func = get_magic_xxz_rotations_dmrg_terms
 elif model == 't_ising':
     param_name = 'h'
@@ -206,6 +208,7 @@ def run():
         else:
             onsite_terms, neighbor_terms = h_func(param)
             try:
+                raise TypeError
                 psi, E0, truncErrs = dmrg.DMRG(psi, onsite_terms, neighbor_terms, accuracy=1e-10)
             except TypeError:
                 H = np.zeros((d**n, d**n), dtype=complex)
@@ -289,94 +292,6 @@ def get_color_gradient(color):
     return result
 
 
-def analyze_basis():
-    f, axs = plt.subplots(3, 1, gridspec_kw={'wspace': 0, 'hspace': 0}, sharex='all')
-
-    # with open(indir + '/magic/results/' + model + '/m2s', 'rb') as f:
-    #     m2s = pickle.load(f)
-    # with open(indir + '/magic/results/' + model + '/mhalves', 'rb') as f:
-    #     mhalves = pickle.load(f)
-    with open(indir + '/magic/results/' + model + 'm2s_' + param_name + 's_' + str(params[0]) + '_' + str(params[-1]), 'rb') as f:
-        m2s = pickle.load(f)
-    with open(indir + '/magic/results/' + model + 'mhalves_' + param_name + 's_' + str(params[0]) + '_' + str(params[-1]), 'rb') as f:
-        mhalves = pickle.load(f)
-    for ti in range(len(thetas)):
-        u_theta = ru.getUTheta(thetas[ti] / np.pi, d=2)
-        for ph_i in range(len(etas)):
-            u_phi = ru.getUPhi(etas[ph_i] / np.pi, d=2)
-            u = np.matmul(u_theta, u_phi)
-            X = np.matmul(u, np.matmul(basic.pauli2X, np.conj(np.transpose(u))))
-            Y = np.matmul(u, np.matmul(basic.pauli2Y, np.conj(np.transpose(u))))
-            Z = np.matmul(u, np.matmul(basic.pauli2Z, np.conj(np.transpose(u))))
-            H = np.matmul(u, np.matmul(t_z, np.conj(np.transpose(u))))
-            f, axs = plt.subplots(3, 1, gridspec_kw={'wspace': 0, 'hspace': 0}, sharex='all')
-            p2s = np.zeros(len(params))
-            szs = np.zeros(len(params))
-            sxs = np.zeros(len(params))
-            sys = np.zeros(len(params))
-            shs = np.zeros(len(params))
-            shszs = np.zeros(len(params))
-            for pi in range(len(params)):
-                param = params[pi]
-                with open(filename(indir, model, param_name, param, n), 'rb') as f:
-                    [psi, m2, m2_optimized, best_basis, mhalf, m2_maximized, worst_basis,
-                     mhalf_optimized, mhalf_best_basis, mhalf_maximized, mhalf_worst_basis] = pickle.load(f)
-                p2s[pi] = bops.getRenyiEntropy(psi, 2, int(n / 2))
-                szs[pi] = sum([bops.getExpectationValue(psi, [tn.Node(np.eye(2)) for i in range(j)] + \
-                                                        [tn.Node(Z)] + \
-                                                        [tn.Node(np.eye(2)) for i in range(n - 1 - j)]) for j in
-                               range(n)])
-                    # sum([bops.getExpectationValue(psi, [tn.Node(np.eye(2)) for i in range(j)] + \
-                    #                                     [tn.Node(Z), tn.Node(Z)] + \
-                    #                                     [tn.Node(np.eye(2)) for i in range(n - 2 - j)]) for j in
-                    #            range(n - 1)])
-                sxs[pi] = sum([bops.getExpectationValue(psi, [tn.Node(np.eye(2)) for i in range(j)] + \
-                                                        [tn.Node(X)] + \
-                                                        [tn.Node(np.eye(2)) for i in range(n - 1 - j)]) for j in
-                               range(n)])
-                    # sum([bops.getExpectationValue(psi, [tn.Node(np.eye(2)) for i in range(j)] + \
-                    #                                     [tn.Node(X), tn.Node(X)] + \
-                    #                                     [tn.Node(np.eye(2)) for i in range(n - 2 - j)]) for j in
-                    #            range(n - 1)])
-                sys[pi] = sum([bops.getExpectationValue(psi, [tn.Node(np.eye(2)) for i in range(j)] + \
-                                                        [tn.Node(Y)] + \
-                                                        [tn.Node(np.eye(2)) for i in range(n - 1 - j)]) for j in
-                               range(n)])
-                    # sum([bops.getExpectationValue(psi, [tn.Node(np.eye(2)) for i in range(j)] + \
-                    #                                     [tn.Node(Y), tn.Node(Y)] + \
-                    #                                     [tn.Node(np.eye(2)) for i in range(n - 2 - j)]) for j in
-                    #            range(n - 1)])
-                shs[pi] = sum([bops.getExpectationValue(psi, [tn.Node(np.eye(2)) for i in range(j)] + \
-                                                        [tn.Node(H)] + \
-                                                        [tn.Node(np.eye(2)) for i in range(n - 1 - j)]) for j in
-                               range(n)])
-                    # sum([bops.getExpectationValue(psi, [tn.Node(np.eye(2)) for i in range(j)] + \
-                    #                                     [tn.Node(H), tn.Node(H)] + \
-                    #                                     [tn.Node(np.eye(2)) for i in range(n - 2 - j)]) for j in
-                    #            range(n - 1)])
-                shszs[pi] = sum([bops.getExpectationValue(psi, [tn.Node(np.eye(2)) for i in range(j)] + \
-                                                          [tn.Node(H), tn.Node(Z)] + \
-                                                          [tn.Node(np.eye(2)) for i in range(n - 2 - j)]) for j in
-                                 range(n - 1)])
-            axs[0].plot(params, p2s)
-            axs[0].plot(params, szs / n)
-            axs[0].plot(params, sxs / n)
-            axs[0].plot(params, sys / n, '--k')
-            axs[0].plot(params, shs / n, ':k')
-            axs[0].plot(params, shszs / n)
-            axs[0].legend(['p2', 'szszs', 'sxsx', 'sysy', 'shsh', 'shsz'])
-
-            for ei in range(len(etas)):
-                axs[1].plot(params, m2s[:, ti, ph_i, ei])
-                axs[2].plot(params, mhalves[:, ti, ph_i, ei])
-            plt.legend([str(eta / np.pi) for eta in etas])
-            plt.title(str(ti) + ' ' + str(ph_i))
-            plt.show()
-    plt.xlabel(param_name)
-    plt.ylabel('r$m_2$')
-    plt.show()
-
-
 def analyze_kitaev_2d():
     import matplotlib.pyplot as plt
     ff, axs = plt.subplots(4, 1, gridspec_kw={'wspace': 0, 'hspace': 0}, sharex='all')
@@ -449,20 +364,35 @@ def analyze_kitaev_ts():
     plt.show()
 
 
-def analyze_thin():
+def analyze():
     import matplotlib.pyplot as plt
-    f, axs = plt.subplots(2, 1)
+    f, axs = plt.subplots(4, 1)
     p2s = np.zeros(len(params))
     m2s = np.zeros(len(params))
+    mhalves = np.zeros(len(params))
+    m2s_avgs = np.zeros(len(params))
     for pi in range(len(params)):
         param = params[pi]
+        if not os.path.exists(filename(indir, model, param_name, param, n)):
+            continue
         with open(filename(indir, model, param_name, param, n), 'rb') as f:
             a = pickle.load(f)
             psi = a[0]
             m2 = a[1]
+            mhalf = a[2]
+            m2_avg = a[3]
         p2s[pi] = bops.getRenyiEntropy(psi, 2, int(len(psi) / 2))
         m2s[pi] = m2
+        mhalves[pi] = mhalf
+        m2s_avgs[pi] = m2_avg
     axs[0].plot(params, p2s)
+    axs[0].set_ylabel(r'$p_2$')
     axs[1].plot(params, m2s)
+    axs[1].set_ylabel(r'$M_2$')
+    axs[2].plot(params, mhalves)
+    axs[2].set_ylabel(r'$M_{1/2}$')
+    axs[3].plot(params, m2s_avgs)
+    axs[3].set_ylabel(r'$\overline{M_2}$')
+    plt.xlabel(r'$\theta$')
     plt.show()
 run()
