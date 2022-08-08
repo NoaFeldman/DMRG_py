@@ -8,6 +8,7 @@ import basicOperations as bops
 import scipy.linalg as linalg
 import swap_dmrg as swap
 from typing import List
+import time
 
 def get_gnm(gamma, k, theta, nearest_neighbors_num, case):
     if case == 'dicke':
@@ -194,6 +195,11 @@ def get_photon_green_L(n, Omega, Gamma, k, theta, sigma, opt='NN', case='kernel'
     return L
 
 
+def get_density_matrix_from_mps(psi, N):
+    return bops.getExplicitVec(psi, d=4).reshape([2] * 2 * N).\
+        transpose([2 * i for i in range(N)] + [2 * i + 1 for i in range(N)]).reshape([2**N, 2**N])
+
+
 def filenames(newdir, case, N, Omega, nn_num, ti, method, bond_dim):
     if method == 'tdvp':
         state_filename = newdir + '/mid_state_' + case + '_N_' + str(N) \
@@ -206,6 +212,29 @@ def filenames(newdir, case, N, Omega, nn_num, ti, method, bond_dim):
         data_filename = newdir + '/swap_' + case + '_N_' + str(N) \
                         + '_Omega_' + str(Omega) + '_nn_' + str(nn_num) + '_bond_' + str(bond_dim)
     return state_filename, data_filename
+
+def get_j_expect(rho, N, sigma):
+    res = 0
+    for si in range(N):
+        res += bops.getOverlap(rho,
+                    [tn.Node(I) for i in range(si)] + [tn.Node(np.matmul(sigma.T, sigma).reshape([1, d ** 2, 1]))]
+                    + [tn.Node(I) for i in range(si + 1, N)])
+        for sj in range(N):
+            if si < sj:
+                res += bops.getOverlap(rho,
+                                    [tn.Node(I) for i in range(si)] + [tn.Node(sigma.T.reshape([1, d ** 2, 1]))]
+                                    + [tn.Node(I) for i in range(si + 1, sj)] + [
+                                        tn.Node(sigma.reshape([1, d ** 2, 1]))]
+                                    + [tn.Node(I) for i in range(sj + 1, N)])
+            elif sj < si:
+                res += bops.getOverlap(rho,
+                                    [tn.Node(I) for i in range(sj)] + [
+                                        tn.Node(sigma.T.reshape([1, d ** 2, 1]))]
+                                    + [tn.Node(I) for i in range(sj + 1, si)] + [
+                                        tn.Node(sigma.reshape([1, d ** 2, 1]))]
+                                    + [tn.Node(I) for i in range(si + 1, N)])
+    return res
+
 
 d = 2
 Gamma = 1
@@ -222,14 +251,13 @@ Omega = float(sys.argv[3]) / Gamma
 case = sys.argv[4]
 outdir = sys.argv[5]
 timesteps = int(sys.argv[6])
-T = 10
-dt = T / timesteps
+dt = 1e-2
 save_each = 10
 results_to = sys.argv[7]
 sim_method = sys.argv[8]
 bond_dim = int(sys.argv[9])
 
-newdir = outdir + '/' + sim_method + '_' + case + '_N_' + str(N) + '_Omega_' + str(Omega) + '_nn_' + str(nn_num) + '_timesteps_' + str(timesteps)
+newdir = outdir + '/' + sim_method + '_' + case + '_N_' + str(N) + '_Omega_' + str(Omega) + '_nn_' + str(nn_num) + '_bd_' + str(bond_dim)
 try:
     os.mkdir(newdir)
 except FileExistsError:
@@ -241,6 +269,7 @@ if results_to == 'plot':
 L = get_photon_green_L(N, Omega, Gamma, k, theta, sigma, case=case, nearest_neighbors_num=nn_num)
 psi = [tn.Node(np.array([1, 0, 0, 0]).reshape([1, d**2, 1])) for n in range(N)]
 if N <= 6:
+    rhos = []
     Deltas, gammas = get_gnm(Gamma, k, theta, nn_num, case)
     if case == 'kernel':
         Deltas = np.array([0] + list(Deltas))
@@ -282,6 +311,7 @@ if N <= 6:
     for ti in range(timesteps):
         J_expect_L[ti] = np.abs(np.trace(np.matmul(JdJ, rho_vec.reshape([d**N, d**N]))))
         rho_vec = np.matmul(evolver_L, rho_vec)
+        rhos.append(rho_vec)
 
     if results_to == 'plot':
         plt.plot(J_expect_L)
@@ -307,11 +337,12 @@ if sim_method == 'swap':
         terms.append(curr)
     neighbor_trotter_ops = swap.get_neighbor_trotter_ops([term.T for term in terms], 1j * dt, d**2)
 
-sigma_expect = np.zeros(timesteps)
-sigma_T_expect = np.zeros(timesteps)
-sigma_X_expect = np.zeros(timesteps)
-sigma_Z_expect = np.zeros(timesteps)
-J_expect = np.zeros(timesteps)
+sigma_expect = np.zeros(timesteps, dtype=complex)
+sigma_T_expect = np.zeros(timesteps, dtype=complex)
+sigma_X_expect = np.zeros(timesteps, dtype=complex)
+sigma_Z_expect = np.zeros(timesteps, dtype=complex)
+J_expect = np.zeros(timesteps, dtype=complex)
+J_expect_2 = np.zeros(timesteps, dtype=complex)
 
 initial_ti = 0
 for file in os.listdir(newdir):
@@ -320,49 +351,68 @@ for file in os.listdir(newdir):
         initial_ti = ti + 1
         with open(newdir + '/' + file, 'rb') as f:
             [ti, psi, projectors_left, projectors_right] = pickle.load(f)
-            projectors_left, projectors_right = tdvp.get_initial_projectors(psi, L)
+
+psi_0 = bops.copyState(psi)
+psi_2 = bops.copyState(psi)
+hl_2 = bops.copyState(projectors_left)
+hr_2 = bops.copyState(projectors_right)
+
+runtimes_1 = np.zeros(timesteps)
+runtimes_2 = np.zeros(timesteps)
 
 for ti in range(initial_ti, timesteps):
     print('---')
     print(ti)
-    for si in range(N):
-        J_expect[ti] += bops.getOverlap(psi,
-                            [tn.Node(I) for i in range(si)] + [tn.Node(np.matmul(sigma.T, sigma).reshape([1, d**2, 1]))]
-                                        + [tn.Node(I) for i in range(si + 1, N)])
-        for sj in range(N):
-            if si < sj:
-                J_expect[ti] += bops.getOverlap(psi,
-                                [tn.Node(I) for i in range(si)] + [tn.Node(sigma.T.reshape([1, d**2, 1]))]
-                                                + [tn.Node(I) for i in range(si + 1, sj)] + [tn.Node(sigma.reshape([1, d**2, 1]))]
-                                                + [tn.Node(I) for i in range(sj +1, N)])
-            elif sj < si:
-                J_expect[ti] += bops.getOverlap(psi,
-                                                [tn.Node(I) for i in range(sj)] + [
-                                                    tn.Node(sigma.T.reshape([1, d ** 2, 1]))]
-                                                + [tn.Node(I) for i in range(sj + 1, si)] + [
-                                                    tn.Node(sigma.reshape([1, d ** 2, 1]))]
-                                                + [tn.Node(I) for i in range(si + 1, N)])
-    sigma_expect[ti] += bops.getOverlap(psi,
+    J_expect[ti] = get_j_expect(psi, N, sigma)
+    J_expect_2[ti] = get_j_expect(psi_2, N, sigma) # np.abs(np.trace(np.matmul(JdJ, get_density_matrix_from_mps(psi_2, N)))) #
+    sigma_expect[ti] = bops.getOverlap(psi,
         [tn.Node(I) for i in range(int(N / 2))] + [tn.Node(sigma.reshape([1, d ** 2, 1]))] + [tn.Node(I) for i in range(int(N / 2) - 1)])
-    sigma_T_expect[ti] += bops.getOverlap(psi,
+    sigma_T_expect[ti] = bops.getOverlap(psi,
         [tn.Node(I) for i in range(int(N / 2))] + [tn.Node(sigma.T.reshape([1, d ** 2, 1]))] + [tn.Node(I) for i in range(int(N / 2) - 1)])
-    sigma_X_expect[ti] += bops.getOverlap(psi,
+    sigma_X_expect[ti] = bops.getOverlap(psi,
         [tn.Node(I) for i in range(int(N / 2))] + [tn.Node(X.reshape([1, d ** 2, 1]))] + [tn.Node(I) for i in range(int(N / 2) - 1)])
-    sigma_Z_expect[ti] += bops.getOverlap(psi,
+    sigma_Z_expect[ti] = bops.getOverlap(psi,
         [tn.Node(I) for i in range(int(N / 2))] + [tn.Node(Z.reshape([1, d ** 2, 1]))] + [tn.Node(I) for i in range(int(N / 2) - 1)])
     bond_dims[ti] = psi[int(len(psi)/2)].tensor.shape[0]
     if sim_method == 'tdvp':
-        tdvp.tdvp_sweep(psi, L, projectors_left, projectors_right, dt / 2, max_bond_dim=bond_dim, num_of_sites=2)
+        tstart = time.time()
+        tdvp.tdvp_sweep(psi, L, projectors_left, projectors_right, dt / 2, max_bond_dim=bond_dim, num_of_sites=1)
+        tf = time.time()
+        runtimes_1[ti] = tf - tstart
+        tstart = time.time()
+        tdvp.tdvp_sweep(psi_2, L, hl_2, hr_2, dt / 2, max_bond_dim=bond_dim, num_of_sites=2)
+        tf = time.time()
+        runtimes_2[ti] = tf - tstart
+        # for k in range(len(psi) - 1, -1, -1):
+        #     te = tdvp.tdvp_step(psi, L, k, projectors_left, projectors_right, '<<', dt, bond_dim, num_of_sites=1)
+        #     if len(te) > 0 and np.max(te) > 1e-12: print('<<', 1, np.max(te))
+        # for k in range(len(psi_2) - 2, -1, -1):
+        #     te = tdvp.tdvp_step(psi_2, L, k, hl_2, hr_2, '<<', dt, bond_dim, num_of_sites=2)
+        #     if len(te) > 0 and np.max(te) > 1e-12: print('<<', 2, np.max(te))
+        # rho = get_density_matrix_from_mps(psi, N)
+        # rho_2 = get_density_matrix_from_mps(psi_2, N)
+        # print('<< fidelity: ' + str(np.abs(linalg.sqrtm(np.matmul(linalg.sqrtm(rho), np.matmul(rho_2, linalg.sqrtm(rho)))).trace())**2))
+        # for k in range(len(psi) - 1 + 1):
+        #     te = tdvp.tdvp_step(psi, L, k, projectors_left, projectors_right, '>>', dt, bond_dim, num_of_sites=1)
+        #     if len(te) > 0 and np.max(te) > 1e-12: print('>>', 1, np.max(te))
+        # for k in range(len(psi) - 2 + 1):
+        #     te = tdvp.tdvp_step(psi_2, L, k, hl_2, hr_2, '>>', dt, bond_dim, num_of_sites=2)
+        #     if len(te) > 0 and np.max(te) > 1e-12: print('>>', 2, np.max(te))
+        # rho = get_density_matrix_from_mps(psi, N)
+        # rho_2 = get_density_matrix_from_mps(psi_2, N)
+        # print('>> fidelity: ' + str(np.abs(linalg.sqrtm(np.matmul(linalg.sqrtm(rho), np.matmul(rho_2, linalg.sqrtm(rho)))).trace())**2))
     elif sim_method == 'swap':
         swap.trotter_sweep(psi, trotter_single_op, neighbor_trotter_ops, swap_op)
     if ti > 0 and ti % save_each != 1:
         old_state_filename, old_data_filename = filenames(newdir, case, N, Omega, nn_num, ti - 1, sim_method, bond_dim)
         os.remove(old_state_filename)
     state_filename, data_filename = filenames(newdir, case, N, Omega, nn_num, ti, sim_method, bond_dim)
-    with open(state_filename, 'wb') as f:
+    with open(state_filename + '_1s', 'wb') as f:
         pickle.dump([ti, psi, projectors_left, projectors_right], f)
+    with open(state_filename + '_2s', 'wb') as f:
+        pickle.dump([ti, psi_2, hl_2, hr_2], f)
 
 if results_to == 'plot':
-    plt.plot(np.array(range(timesteps)), np.abs(J_expect), ':')
-    plt.plot(np.array(range(timesteps)), np.abs(J_expect) / 2, ':')
+    plt.plot(np.array(range(timesteps)), np.abs(J_expect), '--')
+    plt.plot(np.array(range(timesteps)), np.abs(J_expect_2), ':')
     plt.show()

@@ -68,7 +68,7 @@ def apply_time_evolver(arnoldi_T: np.array, arnoldi_basis: List[tn.Node], M: tn.
 def tdvp_step(psi: List[tn.Node], H: List[tn.Node], k: int,
               HL: List[tn.Node], HR: List[tn.Node], dir: str, dt, max_bond_dim, num_of_sites, is_density_matrix=True):
     if num_of_sites == 1:
-        left_ind = k # - int(dir == '>>')
+        left_ind = k - int(dir == '<<')
         cbe.get_op_tilde_tr(psi, left_ind, HL, HR, H, dir, D=max_bond_dim)
 
     T, basis = arnoldi(HL, HR, H, psi, k, num_of_sites)
@@ -89,7 +89,7 @@ def tdvp_step(psi: List[tn.Node], H: List[tn.Node], k: int,
             # TODO maybe I need to lose C, and add A instead of M for num_of_sites = 1?
             psi[len(psi) - 1] = M
             if is_density_matrix:
-                bops.normalize_mps_of_dm(psi, k)
+                bops.normalize_mps_of_dm(psi)
             return te
         HL[k + 1] = bops.contract(bops.contract(bops.contract(
             HL[k], A, '0', '0'), H[k], '02', '20'), A, '02', '01*')
@@ -105,7 +105,7 @@ def tdvp_step(psi: List[tn.Node], H: List[tn.Node], k: int,
             # TODO maybe I need to lose C, and add B instead of M for num_of_sites = 1?
             psi[0] = M
             if is_density_matrix:
-                bops.normalize_mps_of_dm(psi, k)
+                bops.normalize_mps_of_dm(psi)
             return te
         HR[B_ind - 1] = bops.contract(bops.contract(bops.contract(
             B, HR[B_ind], '2', '0'), H[B_ind], '12', '03'), B, '21', '12*')
@@ -124,7 +124,7 @@ def tdvp_step(psi: List[tn.Node], H: List[tn.Node], k: int,
         elif dir == '<<':
             psi[k - 1] = bops.contract(psi[k - 1], C, '2', '0')
     if is_density_matrix:
-        bops.normalize_mps_of_dm(psi, M_ind - 1)
+        bops.normalize_mps_of_dm(psi)
     return te
 
 
