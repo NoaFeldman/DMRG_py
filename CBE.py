@@ -23,41 +23,41 @@ def get_dm(psi):
 # Fig 2
 # Assuming k is the OC
 def get_op_tilde_tr(psi: List[tn.Node], k: int, HL: List[tn.Node], HR: List[tn.Node], H: List[tn.Node], dir, D:int):
-    psi_copy = bops.copyState(psi)
     if k == -1 or k == len(psi) - 1:
         return
-    if dir == '>>':
-        print(dir, k, 'orthogonality', np.round(bops.contract(psi[k+1], psi[k+1], '12', '12*').tensor, 10))
-        [A, Delta, te] = bops.svdTruncation(psi[k], [0, 1], [2], '>>')
-        B = psi[k+1]
-    else: # dir == '<<'
-        print(dir, k, 'orthogonality', np.round(bops.contract(psi[k], psi[k], '01', '01*').tensor, 10))
-        A = psi[k]
-        [Delta, B, te] = bops.svdTruncation(psi[k + 1], [0], [1, 2], '<<')
+    M = bops.contract(psi[k], psi[k+1], '2', '0')
+    [A, Delta, B, te] = bops.svdTruncation(M, [0, 1], [2, 3], '>*<')
+
     a_left_id = bops.contract(bops.contract(HL[k], A, '0', '0'), H[k], '02', '20')
     a_left_Al = bops.contract(bops.contract(a_left_id, A, '02', '01*'), A, '2', '2')
     a_left = tn.Node(a_left_id.tensor.transpose([1, 3, 0, 2]) - a_left_Al.tensor)
-    if dir == '>>' and np.amax(a_left.tensor) < 1e-13:
-        return
 
     a_right_id = bops.contract(bops.contract(HR[k+1], B, '0', '2'), H[k+1], '03', '30')
     a_right_Bl1 = bops.contract(bops.contract(a_right_id, B, '02', '21*'), B, '2', '0')
     a_right = tn.Node(a_right_id.tensor.transpose([1, 3, 2, 0]) - a_right_Bl1.tensor)
-    if dir == '<<' and np.amax(a_right.tensor) < 1e-13:
+    if (np.amax(a_left.tensor) < 1e-13 and dir == '<<') or (np.amax(a_right.tensor) < 1e-13 and dir == '>>'):
         return
 
-    if dir == '>>':
+    if dir == '<<':
         pink = bops.contract(Delta, a_right, '1', '0')
-        [US, V, te] = bops.svdTruncation(pink, [0], [1, 2, 3], '<<', maxBondDim=1024) #=D)
+        [US, V, te] = bops.svdTruncation(pink, [0], [1, 2, 3], '<<', maxBondDim=D)
         blue = bops.contract(a_left, US, '0', '0')
         w = H[k].tensor.shape[-1]
-        [red, V, te] = bops.svdTruncation(blue, [0, 1, 2], [3], '<<', maxBondDim=1024) #int(D/w))
-        [red_site, S, V, te] = bops.svdTruncation(red, [1, 2], [0, 3], '>*<')
+        [red, V, te] = bops.svdTruncation(blue, [0, 1, 2], [3], '<<', maxBondDim=int(np.ceil(D/w)))
+        [red_site, S, V, te] = bops.svdTruncation(red, [1, 2], [0, 3], '>*<', maxTrunc=12)
         yellow = bops.contract(red_site, bops.contract(pink, a_left_id, '01', '13'), '01*', '23')
-        [u_tilde, s_tilde, v_tilde, te] = bops.svdTruncation(yellow, [0], [1, 2], '>*<')
+        [u_tilde, s_tilde, v_tilde, te] = bops.svdTruncation(yellow, [0], [1, 2], '>*<', maxTrunc=12)
         yellow_site = bops.contract(red_site, u_tilde, '2', '0')
-        print(k, dir, 'with yellow', np.round(bops.contract(yellow_site, psi_copy[k], '01', '01*').tensor, 8))
-        new_A_tensor = np.zeros((A.tensor.shape[0], A.tensor.shape[1], A.tensor.shape[2] + yellow_site.tensor.shape[2]), dtype=complex)
+        # if np.amax(np.abs(bops.contract(yellow_site, psi_copy[k], '01', '01*').tensor)) > 1e-6:
+        #     tst = [np.amax(np.abs(bops.contract(a_left, psi[k], '23', '01*').tensor)),
+        #            np.amax(np.abs(bops.contract(a_right, psi[k+1], '23', '12*').tensor)),
+        #            np.amax(np.abs(a_left.tensor)), np.amax(np.abs(a_right.tensor)),
+        #            np.amax(np.abs(bops.contract(blue, psi[k], '12', '01*').tensor)),
+        #            np.amax(np.abs(bops.contract(red, psi[k], '12', '01*').tensor)),
+        #            np.amax(np.abs(bops.contract(red_site, psi[k], '01', '01*').tensor))]
+        #     b = 1
+        new_A_tensor = np.zeros((A.tensor.shape[0], A.tensor.shape[1],
+                                 A.tensor.shape[2] + yellow_site.tensor.shape[2]), dtype=complex)
         new_A_tensor[:, :, :A.tensor.shape[2]] = A.tensor
         new_A_tensor[:, :, A.tensor.shape[2]:] = yellow_site.tensor
         new_A = tn.Node(new_A_tensor)
@@ -65,16 +65,25 @@ def get_op_tilde_tr(psi: List[tn.Node], k: int, HL: List[tn.Node], HR: List[tn.N
         new_B = bops.contract(green_C, B, '1', '0')
     else: # dir == '>>':
         pink = bops.contract(a_left, Delta, '0', '0')
-        [U, SV, te] = bops.svdTruncation(pink, [0, 1, 2], [3], '>>', maxBondDim=1024) #=D)
+        [U, SV, te] = bops.svdTruncation(pink, [0, 1, 2], [3], '>>', maxBondDim=D)
         blue = bops.contract(SV, a_right, '1', '0')
         w = H[k].tensor.shape[-1]
-        [U, red, te] = bops.svdTruncation(blue, [0], [1, 2, 3], '>>', maxBondDim=1024) #=int(D/w))
-        [U, S, red_site, te] = bops.svdTruncation(red, [0, 1], [2, 3], '>*<')
+        [U, red, te] = bops.svdTruncation(blue, [0], [1, 2, 3], '>>', maxBondDim=int(np.ceil(D/w)))
+        [U, S, red_site, te] = bops.svdTruncation(red, [0, 1], [2, 3], '>*<', maxTrunc=12)
         yellow = bops.contract(bops.contract(pink, a_right_id, '30', '13'), red_site, '32', '12*')
-        [u_tilde, s_tilde, v_tilde, te] = bops.svdTruncation(yellow, [0, 1], [2], '>*<')
+        [u_tilde, s_tilde, v_tilde, te] = bops.svdTruncation(yellow, [0, 1], [2], '>*<', maxTrunc=12)
         yellow_site = bops.contract(v_tilde, red_site, '1', '0')
-        print(k, dir, 'with yellow', np.round(bops.contract(yellow_site, psi_copy[k+1], '12', '12*').tensor, 8))
-        new_B_tensor = np.zeros((B.tensor.shape[0] + yellow_site.tensor.shape[0], B.tensor.shape[1], B.tensor.shape[2]), dtype=complex)
+        # if np.amax(np.abs(bops.contract(yellow_site, psi_copy[k+1], '12', '12*').tensor)) > 1e-6:
+        #     tst = [np.amax(np.abs(bops.contract(a_left, psi[k], '23', '01*').tensor)),
+        #      np.amax(np.abs(bops.contract(a_right, psi[k + 1], '23', '12*').tensor)),
+        #      np.amax(np.abs(a_left.tensor)),
+        #      np.amax(np.abs(a_right.tensor)),
+        #      np.amax(np.abs(bops.contract(blue, psi[k+1], '23', '12*').tensor)),
+        #      np.amax(np.abs(bops.contract(red, psi[k+1], '23', '12*').tensor)),
+        #      np.amax(np.abs(bops.contract(red_site, psi[k+1], '12', '12*').tensor))]
+        #     b = 1
+        new_B_tensor = np.zeros((B.tensor.shape[0] + yellow_site.tensor.shape[0],
+                                 B.tensor.shape[1], B.tensor.shape[2]), dtype=complex)
         new_B_tensor[:B.tensor.shape[0], :, :] = B.tensor
         new_B_tensor[B.tensor.shape[0]:, :, :] = yellow_site.tensor
         new_B = tn.Node(new_B_tensor)
