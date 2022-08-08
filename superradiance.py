@@ -266,6 +266,7 @@ except FileExistsError:
 if results_to == 'plot':
     import matplotlib.pyplot as plt
 
+# L_exp = get_photon_green_L_exp(N, Omega, Gamma, k, theta, sigma, case, nn_num)
 L = get_photon_green_L(N, Omega, Gamma, k, theta, sigma, case=case, nearest_neighbors_num=nn_num)
 psi = [tn.Node(np.array([1, 0, 0, 0]).reshape([1, d**2, 1])) for n in range(N)]
 if N <= 6:
@@ -405,7 +406,8 @@ for ti in range(initial_ti, timesteps):
         swap.trotter_sweep(psi, trotter_single_op, neighbor_trotter_ops, swap_op)
     if ti > 0 and ti % save_each != 1:
         old_state_filename, old_data_filename = filenames(newdir, case, N, Omega, nn_num, ti - 1, sim_method, bond_dim)
-        os.remove(old_state_filename)
+        os.remove(old_state_filename + '_1s')
+        os.remove(old_state_filename + '_2s')
     state_filename, data_filename = filenames(newdir, case, N, Omega, nn_num, ti, sim_method, bond_dim)
     with open(state_filename + '_1s', 'wb') as f:
         pickle.dump([ti, psi, projectors_left, projectors_right], f)
