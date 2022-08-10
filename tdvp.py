@@ -132,11 +132,11 @@ def tdvp_sweep(psi: List[tn.Node], H: List[tn.Node], HL: List[tn.Node], HR: List
                dt, max_bond_dim, num_of_sites, max_trunc=6):
     max_te = 0
     for k in range(len(psi) - num_of_sites, -1, -1):
-        te = tdvp_step(psi, H, k, HL, HR, '<<', dt, max_bond_dim, num_of_sites=num_of_sites, w_corrector=w_corrector)
+        te = tdvp_step(psi, H, k, HL, HR, '<<', dt, max_bond_dim, num_of_sites=num_of_sites, max_trunc=max_trunc)
         if len(te) > 0 and np.max(te) > max_te:
             max_te = te[0]
     for k in range(len(psi) - num_of_sites + 1):
-        te = tdvp_step(psi, H, k, HL, HR, '>>', dt, max_bond_dim, num_of_sites=num_of_sites, w_corrector=w_corrector)
+        te = tdvp_step(psi, H, k, HL, HR, '>>', dt, max_bond_dim, num_of_sites=num_of_sites, max_trunc=max_trunc)
         if len(te) > 0 and np.max(te) > max_te:
             max_te = te[0]
     return max_te
