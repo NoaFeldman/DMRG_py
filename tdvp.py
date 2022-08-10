@@ -65,11 +65,11 @@ def apply_time_evolver(arnoldi_T: np.array, arnoldi_basis: List[tn.Node], M: tn.
     return tn.Node(result)
 
 # k is OC, pair is [k, k+1]
-def tdvp_step(psi: List[tn.Node], H: List[tn.Node], k: int,
-              HL: List[tn.Node], HR: List[tn.Node], dir: str, dt, max_bond_dim, num_of_sites, is_density_matrix=True):
+def tdvp_step(psi: List[tn.Node], H: List[tn.Node], k: int, HL: List[tn.Node], HR: List[tn.Node],
+              dir: str, dt, max_bond_dim, num_of_sites, is_density_matrix=True, w_corrector=1):
     if num_of_sites == 1:
         left_ind = k - int(dir == '<<')
-        cbe.get_op_tilde_tr(psi, left_ind, HL, HR, H, dir, D=max_bond_dim)
+        cbe.get_op_tilde_tr(psi, left_ind, HL, HR, H, dir, D=max_bond_dim, w_corrector=w_corrector)
 
     T, basis = arnoldi(HL, HR, H, psi, k, num_of_sites)
     if num_of_sites == 2:
@@ -109,7 +109,7 @@ def tdvp_step(psi: List[tn.Node], H: List[tn.Node], k: int,
             return te
         HR[B_ind - 1] = bops.contract(bops.contract(bops.contract(
             B, HR[B_ind], '2', '0'), H[B_ind], '12', '03'), B, '21', '12*')
-    if len(te) > 0: print(max(te))
+    # if len(te) > 0: print('tdvp_step, line 112', num_of_sites, max(te))
 
     if num_of_sites == 2:
         psi[M_ind] = bops.copyState([M])[0]
@@ -128,15 +128,15 @@ def tdvp_step(psi: List[tn.Node], H: List[tn.Node], k: int,
     return te
 
 
-def tdvp_sweep(psi: List[tn.Node], H: List[tn.Node],
-               projectors_left: List[tn.Node], projectors_right: List[tn.Node], dt, max_bond_dim, num_of_sites):
+def tdvp_sweep(psi: List[tn.Node], H: List[tn.Node], HL: List[tn.Node], HR: List[tn.Node],
+               dt, max_bond_dim, num_of_sites, max_trunc=6):
     max_te = 0
     for k in range(len(psi) - num_of_sites, -1, -1):
-        te = tdvp_step(psi, H, k, projectors_left, projectors_right, '<<', dt, max_bond_dim, num_of_sites=num_of_sites)
+        te = tdvp_step(psi, H, k, HL, HR, '<<', dt, max_bond_dim, num_of_sites=num_of_sites, w_corrector=w_corrector)
         if len(te) > 0 and np.max(te) > max_te:
             max_te = te[0]
     for k in range(len(psi) - num_of_sites + 1):
-        te = tdvp_step(psi, H, k, projectors_left, projectors_right, '>>', dt, max_bond_dim, num_of_sites=num_of_sites)
+        te = tdvp_step(psi, H, k, HL, HR, '>>', dt, max_bond_dim, num_of_sites=num_of_sites, w_corrector=w_corrector)
         if len(te) > 0 and np.max(te) > max_te:
             max_te = te[0]
     return max_te

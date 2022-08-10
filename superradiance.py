@@ -188,10 +188,10 @@ def get_photon_green_L(n, Omega, Gamma, k, theta, sigma, opt='NN', case='kernel'
         for pi in range(len(pairs)):
             mid_tensor[:, :, pi + 1, pi + 1] = exp_coeffs[pi] * np.eye(d**2)
     L = [tn.Node(left_tensor)] + [tn.Node(mid_tensor) for i in range(n - 2)] + [tn.Node(right_tensor)]
-    for i in range(len(L) - 1):
-        [r, l, te] = bops.svdTruncation(bops.contract(L[i], L[i+1], '3', '2'), [0, 1, 2], [3, 4, 5], '>>')
-        L[i] = r
-        L[i+1] = bops.permute(l, [1, 2, 0, 3])
+    # for i in range(len(L) - 1):
+    #     [r, l, te] = bops.svdTruncation(bops.contract(L[i], L[i+1], '3', '2'), [0, 1, 2], [3, 4, 5], '>>')
+    #     L[i] = r
+    #     L[i+1] = bops.permute(l, [1, 2, 0, 3])
     return L
 
 
@@ -200,17 +200,11 @@ def get_density_matrix_from_mps(psi, N):
         transpose([2 * i for i in range(N)] + [2 * i + 1 for i in range(N)]).reshape([2**N, 2**N])
 
 
-def filenames(newdir, case, N, Omega, nn_num, ti, method, bond_dim):
-    if method == 'tdvp':
-        state_filename = newdir + '/mid_state_' + case + '_N_' + str(N) \
-            + '_Omega_' + str(Omega) + '_nn_' + str(nn_num) + '_ti_' + str(ti) + '_bond_' + str(bond_dim)
-        data_filename = newdir + '/tdvp_' + case + '_N_' + str(N) \
-                          + '_Omega_' + str(Omega) + '_nn_' + str(nn_num) + '_bond_' + str(bond_dim)
-    elif method == 'swap':
-        state_filename = newdir + '/swap_mid_state_' + case + '_N_' + str(N) \
-                         + '_Omega_' + str(Omega) + '_nn_' + str(nn_num) + '_ti_' + str(ti) + '_bond_' + str(bond_dim)
-        data_filename = newdir + '/swap_' + case + '_N_' + str(N) \
-                        + '_Omega_' + str(Omega) + '_nn_' + str(nn_num) + '_bond_' + str(bond_dim)
+def filenames(newdir, case, N, Omega, nn_num, ti, bond_dim):
+    state_filename = newdir + '/mid_state_' + case + '_N_' + str(N) \
+        + '_Omega_' + str(Omega) + '_nn_' + str(nn_num) + '_ti_' + str(ti) + '_bond_' + str(bond_dim)
+    data_filename = newdir + '/tdvp_N_' + str(N) \
+                      + '_Omega_' + str(Omega) + '_nn_' + str(nn_num) + '_bond_' + str(bond_dim)
     return state_filename, data_filename
 
 def get_j_expect(rho, N, sigma):
@@ -254,10 +248,9 @@ timesteps = int(sys.argv[6])
 dt = 1e-2
 save_each = 10
 results_to = sys.argv[7]
-sim_method = sys.argv[8]
-bond_dim = int(sys.argv[9])
+bond_dim = int(sys.argv[8])
 
-newdir = outdir + '/' + sim_method + '_' + case + '_N_' + str(N) + '_Omega_' + str(Omega) + '_nn_' + str(nn_num) + '_bd_' + str(bond_dim)
+newdir = outdir + '/' + case + '_N_' + str(N) + '_Omega_' + str(Omega) + '_nn_' + str(nn_num) + '_bd_' + str(bond_dim)
 try:
     os.mkdir(newdir)
 except FileExistsError:
@@ -324,97 +317,95 @@ I = np.eye(2).reshape([1, d**2, 1])
 J_expect = np.zeros(timesteps, dtype=complex)
 bond_dims = np.zeros(timesteps, dtype=complex)
 
-
 projectors_left, projectors_right = tdvp.get_initial_projectors(psi, L)
-if sim_method == 'swap':
-    swap_op = tn.Node(np.eye(d**4).reshape([d**2] * 4).transpose([0, 1, 3, 2]))
-    trotter_single_op = swap.get_single_trotter_op(get_single_L_term(Omega, Gamma, sigma).T, 1j * dt)
-    pairs = get_pair_L_terms(Deltas, gammas, nn_num, sigma)
-    terms = []
-    for ni in range(nn_num):
-        curr = np.kron(pairs[0][0][ni], pairs[0][1])
-        for pi in range(1, len(pairs)):
-            curr += np.kron(pairs[pi][0][ni], pairs[pi][1])
-        terms.append(curr)
-    neighbor_trotter_ops = swap.get_neighbor_trotter_ops([term.T for term in terms], 1j * dt, d**2)
 
-sigma_expect = np.zeros(timesteps, dtype=complex)
-sigma_T_expect = np.zeros(timesteps, dtype=complex)
-sigma_X_expect = np.zeros(timesteps, dtype=complex)
-sigma_Z_expect = np.zeros(timesteps, dtype=complex)
-J_expect = np.zeros(timesteps, dtype=complex)
-J_expect_2 = np.zeros(timesteps, dtype=complex)
 
-initial_ti = 0
-for file in os.listdir(newdir):
-    ti = int(file.split('_')[file.split('_').index('ti') + 1])
-    if ti > initial_ti:
-        initial_ti = ti + 1
-        with open(newdir + '/' + file, 'rb') as f:
-            [ti, psi, projectors_left, projectors_right] = pickle.load(f)
-
-psi_0 = bops.copyState(psi)
+psi_1_corrected_w = bops.copyState(psi)
+hl_1_corrected = bops.copyState(projectors_left)
+hr_1_corrected = bops.copyState(projectors_right)
 psi_2 = bops.copyState(psi)
 hl_2 = bops.copyState(projectors_left)
 hr_2 = bops.copyState(projectors_right)
 
 runtimes_1 = np.zeros(timesteps)
+runtimes_1_corrected = np.zeros(timesteps)
 runtimes_2 = np.zeros(timesteps)
+
+initial_ti = 0
+for file in os.listdir(newdir):
+    if file[-3:] == '_1s':
+        ti = int(file.split('_')[file.split('_').index('ti') + 1])
+        if ti + 1 > initial_ti:
+            initial_ti = ti + 1
+            with open(newdir + '/' + file, 'rb') as f:
+                data = pickle.load(f)
+                [ti, psi, projectors_left, projectors_right] = data[:4]
+                runtimes_1[:len(data[4])] = data[4]
+initial_ti = 0
+for file in os.listdir(newdir):
+    if file[-3:] == '_2s':
+        ti = int(file.split('_')[file.split('_').index('ti') + 1])
+        if ti + 1 > initial_ti:
+            initial_ti = ti + 1
+            with open(newdir + '/' + file, 'rb') as f:
+                data = pickle.load(f)
+                [ti, psi_2, hl_2, hr_2] = data[:4]
+                runtimes_2[:len(data[4])] = data[4]
+initial_ti = 0
+for file in os.listdir(newdir):
+    if file[-6:] == '_1s_low_preselection':
+        ti = int(file.split('_')[file.split('_').index('ti') + 1])
+        if ti + 1 > initial_ti:
+            initial_ti = ti + 1
+            with open(newdir + '/' + file, 'rb') as f:
+                data = pickle.load(f)
+                [ti, psi_1_corrected_w, hl_1_corrected, hr_1_corrected] = data[:4]
+                runtimes_1_corrected[:len(data[4])] = data[4]
+
 
 for ti in range(initial_ti, timesteps):
     print('---')
     print(ti)
-    J_expect[ti] = get_j_expect(psi, N, sigma)
-    J_expect_2[ti] = get_j_expect(psi_2, N, sigma) # np.abs(np.trace(np.matmul(JdJ, get_density_matrix_from_mps(psi_2, N)))) #
-    sigma_expect[ti] = bops.getOverlap(psi,
-        [tn.Node(I) for i in range(int(N / 2))] + [tn.Node(sigma.reshape([1, d ** 2, 1]))] + [tn.Node(I) for i in range(int(N / 2) - 1)])
-    sigma_T_expect[ti] = bops.getOverlap(psi,
-        [tn.Node(I) for i in range(int(N / 2))] + [tn.Node(sigma.T.reshape([1, d ** 2, 1]))] + [tn.Node(I) for i in range(int(N / 2) - 1)])
-    sigma_X_expect[ti] = bops.getOverlap(psi,
-        [tn.Node(I) for i in range(int(N / 2))] + [tn.Node(X.reshape([1, d ** 2, 1]))] + [tn.Node(I) for i in range(int(N / 2) - 1)])
-    sigma_Z_expect[ti] = bops.getOverlap(psi,
-        [tn.Node(I) for i in range(int(N / 2))] + [tn.Node(Z.reshape([1, d ** 2, 1]))] + [tn.Node(I) for i in range(int(N / 2) - 1)])
-    bond_dims[ti] = psi[int(len(psi)/2)].tensor.shape[0]
-    if sim_method == 'tdvp':
-        tstart = time.time()
-        tdvp.tdvp_sweep(psi, L, projectors_left, projectors_right, dt / 2, max_bond_dim=bond_dim, num_of_sites=1)
-        tf = time.time()
-        runtimes_1[ti] = tf - tstart
-        tstart = time.time()
-        tdvp.tdvp_sweep(psi_2, L, hl_2, hr_2, dt / 2, max_bond_dim=bond_dim, num_of_sites=2)
-        tf = time.time()
-        runtimes_2[ti] = tf - tstart
-        # for k in range(len(psi) - 1, -1, -1):
-        #     te = tdvp.tdvp_step(psi, L, k, projectors_left, projectors_right, '<<', dt, bond_dim, num_of_sites=1)
-        #     if len(te) > 0 and np.max(te) > 1e-12: print('<<', 1, np.max(te))
-        # for k in range(len(psi_2) - 2, -1, -1):
-        #     te = tdvp.tdvp_step(psi_2, L, k, hl_2, hr_2, '<<', dt, bond_dim, num_of_sites=2)
-        #     if len(te) > 0 and np.max(te) > 1e-12: print('<<', 2, np.max(te))
-        # rho = get_density_matrix_from_mps(psi, N)
-        # rho_2 = get_density_matrix_from_mps(psi_2, N)
-        # print('<< fidelity: ' + str(np.abs(linalg.sqrtm(np.matmul(linalg.sqrtm(rho), np.matmul(rho_2, linalg.sqrtm(rho)))).trace())**2))
-        # for k in range(len(psi) - 1 + 1):
-        #     te = tdvp.tdvp_step(psi, L, k, projectors_left, projectors_right, '>>', dt, bond_dim, num_of_sites=1)
-        #     if len(te) > 0 and np.max(te) > 1e-12: print('>>', 1, np.max(te))
-        # for k in range(len(psi) - 2 + 1):
-        #     te = tdvp.tdvp_step(psi_2, L, k, hl_2, hr_2, '>>', dt, bond_dim, num_of_sites=2)
-        #     if len(te) > 0 and np.max(te) > 1e-12: print('>>', 2, np.max(te))
-        # rho = get_density_matrix_from_mps(psi, N)
-        # rho_2 = get_density_matrix_from_mps(psi_2, N)
-        # print('>> fidelity: ' + str(np.abs(linalg.sqrtm(np.matmul(linalg.sqrtm(rho), np.matmul(rho_2, linalg.sqrtm(rho)))).trace())**2))
-    elif sim_method == 'swap':
-        swap.trotter_sweep(psi, trotter_single_op, neighbor_trotter_ops, swap_op)
+    tstart = time.time()
+    tdvp.tdvp_sweep(psi, L, projectors_left, projectors_right, dt / 2, max_bond_dim=bond_dim, num_of_sites=1)
+    tf = time.time()
+    runtimes_1[ti] = tf - tstart
+    tstart = time.time()
+    tdvp.tdvp_sweep(psi_1_corrected_w, L, hl_1_corrected, hr_1_corrected, dt / 2, max_bond_dim=bond_dim, num_of_sites=1,
+                    max_trunc=12)
+    tf = time.time()
+    runtimes_1_corrected[ti] = tf - tstart
+    tstart = time.time()
+    tdvp.tdvp_sweep(psi_2, L, hl_2, hr_2, dt / 2, max_bond_dim=int(bond_dim/2), num_of_sites=2)
+    tf = time.time()
+    runtimes_2[ti] = tf - tstart
+    print('times = ' + str([runtimes_1[ti], runtimes_2[ti], runtimes_1_corrected[ti]]))
     if ti > 0 and ti % save_each != 1:
-        old_state_filename, old_data_filename = filenames(newdir, case, N, Omega, nn_num, ti - 1, sim_method, bond_dim)
+        old_state_filename, old_data_filename = filenames(newdir, case, N, Omega, nn_num, ti - 1, bond_dim)
         os.remove(old_state_filename + '_1s')
         os.remove(old_state_filename + '_2s')
-    state_filename, data_filename = filenames(newdir, case, N, Omega, nn_num, ti, sim_method, bond_dim)
+        os.remove(old_state_filename + '_1s_low_preselection')
+    state_filename, data_filename = filenames(newdir, case, N, Omega, nn_num, ti, bond_dim)
     with open(state_filename + '_1s', 'wb') as f:
-        pickle.dump([ti, psi, projectors_left, projectors_right], f)
+        pickle.dump([ti, psi, projectors_left, projectors_right, runtimes_1], f)
+    with open(state_filename + '_1s_low_preselection', 'wb') as f:
+        pickle.dump([ti, psi_1_corrected_w, hl_1_corrected, hr_1_corrected, runtimes_1_corrected], f)
     with open(state_filename + '_2s', 'wb') as f:
-        pickle.dump([ti, psi_2, hl_2, hr_2], f)
+        pickle.dump([ti, psi_2, hl_2, hr_2, runtimes_2], f)
 
 if results_to == 'plot':
-    plt.plot(np.array(range(timesteps)), np.abs(J_expect), '--')
-    plt.plot(np.array(range(timesteps)), np.abs(J_expect_2), ':')
+    J_expect_1 = np.zeros(int(timesteps / save_each))
+    J_expect_2 = np.zeros(int(timesteps / save_each))
+    J_expect_1_corrected = np.zeros(int(timesteps / save_each))
+    for ti in range(0, int(timesteps / save_each)):
+        state_filename, data_filename = filenames(newdir, case, N, Omega, nn_num, ti * save_each, bond_dim)
+        psi = pickle.load(open(state_filename + '_1s', 'rb'))[1]
+        J_expect_1[ti] = get_j_expect(psi, N, sigma)
+        psi_2 = pickle.load(open(state_filename + '_2s', 'rb'))[1]
+        J_expect_2[ti] = get_j_expect(psi_2, N, sigma)
+        psi_1_corrected_w = pickle.load(open(state_filename + '_1s_low_preselection', 'rb'))[1]
+        J_expect_1_corrected[ti] = get_j_expect(psi_1_corrected_w, N, sigma)
+    plt.plot(np.array(range(int(timesteps / save_each))) * dt * save_each, J_expect_1)
+    plt.plot(np.array(range(int(timesteps / save_each))) * dt * save_each, J_expect_2, '--')
+    plt.plot(np.array(range(int(timesteps / save_each))) * dt * save_each, J_expect_1_corrected, ':')
     plt.show()

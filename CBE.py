@@ -22,7 +22,7 @@ def get_dm(psi):
 
 # Fig 2
 # Assuming k is the OC
-def get_op_tilde_tr(psi: List[tn.Node], k: int, HL: List[tn.Node], HR: List[tn.Node], H: List[tn.Node], dir, D:int):
+def get_op_tilde_tr(psi: List[tn.Node], k: int, HL: List[tn.Node], HR: List[tn.Node], H: List[tn.Node], dir, D:int, max_trunc=6):
     if k == -1 or k == len(psi) - 1:
         return
     M = bops.contract(psi[k], psi[k+1], '2', '0')
@@ -43,19 +43,11 @@ def get_op_tilde_tr(psi: List[tn.Node], k: int, HL: List[tn.Node], HR: List[tn.N
         [US, V, te] = bops.svdTruncation(pink, [0], [1, 2, 3], '<<', maxBondDim=D)
         blue = bops.contract(a_left, US, '0', '0')
         w = H[k].tensor.shape[-1]
-        [red, V, te] = bops.svdTruncation(blue, [0, 1, 2], [3], '<<', maxBondDim=int(np.ceil(D/w)))
+        [red, V, te] = bops.svdTruncation(blue, [0, 1, 2], [3], '<<', maxTrunc=max_trunc) # maxBondDim=int(np.ceil(w_corrector * D/w)))
         [red_site, S, V, te] = bops.svdTruncation(red, [1, 2], [0, 3], '>*<', maxTrunc=12)
         yellow = bops.contract(red_site, bops.contract(pink, a_left_id, '01', '13'), '01*', '23')
         [u_tilde, s_tilde, v_tilde, te] = bops.svdTruncation(yellow, [0], [1, 2], '>*<', maxTrunc=12)
         yellow_site = bops.contract(red_site, u_tilde, '2', '0')
-        # if np.amax(np.abs(bops.contract(yellow_site, psi_copy[k], '01', '01*').tensor)) > 1e-6:
-        #     tst = [np.amax(np.abs(bops.contract(a_left, psi[k], '23', '01*').tensor)),
-        #            np.amax(np.abs(bops.contract(a_right, psi[k+1], '23', '12*').tensor)),
-        #            np.amax(np.abs(a_left.tensor)), np.amax(np.abs(a_right.tensor)),
-        #            np.amax(np.abs(bops.contract(blue, psi[k], '12', '01*').tensor)),
-        #            np.amax(np.abs(bops.contract(red, psi[k], '12', '01*').tensor)),
-        #            np.amax(np.abs(bops.contract(red_site, psi[k], '01', '01*').tensor))]
-        #     b = 1
         new_A_tensor = np.zeros((A.tensor.shape[0], A.tensor.shape[1],
                                  A.tensor.shape[2] + yellow_site.tensor.shape[2]), dtype=complex)
         new_A_tensor[:, :, :A.tensor.shape[2]] = A.tensor
@@ -68,20 +60,11 @@ def get_op_tilde_tr(psi: List[tn.Node], k: int, HL: List[tn.Node], HR: List[tn.N
         [U, SV, te] = bops.svdTruncation(pink, [0, 1, 2], [3], '>>', maxBondDim=D)
         blue = bops.contract(SV, a_right, '1', '0')
         w = H[k].tensor.shape[-1]
-        [U, red, te] = bops.svdTruncation(blue, [0], [1, 2, 3], '>>', maxBondDim=int(np.ceil(D/w)))
+        [U, red, te] = bops.svdTruncation(blue, [0], [1, 2, 3], '>>',  maxTrunc=max_trunc) # maxBondDim=int(np.ceil(w_corrector * D/w)))
         [U, S, red_site, te] = bops.svdTruncation(red, [0, 1], [2, 3], '>*<', maxTrunc=12)
         yellow = bops.contract(bops.contract(pink, a_right_id, '30', '13'), red_site, '32', '12*')
         [u_tilde, s_tilde, v_tilde, te] = bops.svdTruncation(yellow, [0, 1], [2], '>*<', maxTrunc=12)
         yellow_site = bops.contract(v_tilde, red_site, '1', '0')
-        # if np.amax(np.abs(bops.contract(yellow_site, psi_copy[k+1], '12', '12*').tensor)) > 1e-6:
-        #     tst = [np.amax(np.abs(bops.contract(a_left, psi[k], '23', '01*').tensor)),
-        #      np.amax(np.abs(bops.contract(a_right, psi[k + 1], '23', '12*').tensor)),
-        #      np.amax(np.abs(a_left.tensor)),
-        #      np.amax(np.abs(a_right.tensor)),
-        #      np.amax(np.abs(bops.contract(blue, psi[k+1], '23', '12*').tensor)),
-        #      np.amax(np.abs(bops.contract(red, psi[k+1], '23', '12*').tensor)),
-        #      np.amax(np.abs(bops.contract(red_site, psi[k+1], '12', '12*').tensor))]
-        #     b = 1
         new_B_tensor = np.zeros((B.tensor.shape[0] + yellow_site.tensor.shape[0],
                                  B.tensor.shape[1], B.tensor.shape[2]), dtype=complex)
         new_B_tensor[:B.tensor.shape[0], :, :] = B.tensor
