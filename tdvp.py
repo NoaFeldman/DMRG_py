@@ -69,7 +69,7 @@ def tdvp_step(psi: List[tn.Node], H: List[tn.Node], k: int, HL: List[tn.Node], H
               dir: str, dt, max_bond_dim, num_of_sites, is_density_matrix=True, max_trunc=6):
     if num_of_sites == 1:
         left_ind = k - int(dir == '<<')
-        cbe.get_op_tilde_tr(psi, left_ind, HL, HR, H, dir, D=max_bond_dim, w_corrector=w_corrector)
+        cbe.get_op_tilde_tr(psi, left_ind, HL, HR, H, dir, D=max_bond_dim, max_trunc=max_trunc)
 
     T, basis = arnoldi(HL, HR, H, psi, k, num_of_sites)
     if num_of_sites == 2:
