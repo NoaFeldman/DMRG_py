@@ -1,5 +1,4 @@
 import os.path
-
 import basicOperations as bops
 import numpy as np
 import DMRG as dmrg
@@ -45,9 +44,9 @@ def get_xy_dmrg_terms(gamma):
 t_z = np.array([[0, np.exp(1j * np.pi / 4)], [np.exp(-1j * np.pi / 4), 0]])
 hadamard = np.array([[1, 1, ], [1, -1]]) / np.sqrt(2)
 rotated_t_gate = np.matmul(hadamard, np.matmul(t_z, hadamard))
-def get_magic_ising_dmrg_terms(h):
-    onsite_terms = [- h * t_z for i in range(n)]
-    neighbor_terms = [- np.kron(basic.pauli2Z, basic.pauli2Z) for i in range(n - 1)]
+def get_magic_ising_dmrg_terms(theta):
+    onsite_terms = [- np.diag([1, np.exp(1j * np.pi * theta)]) for i in range(n)]
+    neighbor_terms = [- np.kron(basic.pauli2X, basic.pauli2X) for i in range(n - 1)]
     return onsite_terms, neighbor_terms
 
 def get_magic_xxz_dmrg_terms(delta):
@@ -156,8 +155,8 @@ elif model == 't_ising':
     params = [np.round(i * 0.1, 1) for i in range(range_i, range_f)]
     h_func = get_t_ising_dmrg_terms
 elif model == 'ising_magic':
-    param_name = 'h'
-    params = [np.round(i * 0.1, 1) for i in range(20)]
+    param_name = 'theta'
+    params = [np.round(i * 0.005, 8) for i in range(range_i, range_f)]
     h_func = get_magic_ising_dmrg_terms
 elif model == 'xy':
     param_name = 'gamma'
@@ -169,7 +168,7 @@ elif model == 'xy_magic':
     h_func = get_xy_magic_dmrg_terms
 elif model == 'kitaev':
     param_name = 'mu_t'
-    mu_range = list(range(8, 12, 2))
+    mu_range = list(range(10, 12, 2))
     t_range = list(range(-40, 40, 2))
     # mu_range = list(range(-40, 40, 2))
     # t_range = np.array(range(range_i, range_f, 2))
@@ -191,6 +190,7 @@ def run():
     mhalves = np.zeros((len(params), len(thetas), len(phis), len(etas)))
     for pi in range(len(params)):
         param = params[pi]
+        print(param)
         final_file_name = filename(indir, model, param_name, param, n)
         if path.exists(final_file_name):
             with open(final_file_name, 'rb') as f:
@@ -199,6 +199,9 @@ def run():
                 continue
             else:
                 psi_orig, m2, mhalf = form
+                if psi_orig[int(n / 2)].tensor.shape[0] > 4:
+                    psi = bops.relaxState(psi_orig, 4)
+                    print(bops.getOverlap(psi, psi_orig))
                 m2_avg = magicRenyi.getSecondRenyiAverage(psi, int(n / 2), d)
                 print('m2_avg = ' + str(m2_avg))
                 print(psi[int(n / 2)].tensor.shape)
@@ -240,42 +243,6 @@ def run():
             print(param)
             with open(filename(indir, model, param_name, param, n), 'wb') as f:
                 pickle.dump([psi_orig, m2, mhalf, m2_avg], f)
-
-
-def analyze_scaling():
-    ns = [8, 12, 16, 20]
-    Szs = np.zeros((len(ns), len(params)))
-    p2s = np.zeros((len(ns), len(params)))
-    m2s = np.zeros((len(ns), len(params)))
-    m2s_maximized = np.zeros((len(ns), len(params)))
-    m2s_optimized = np.zeros((len(ns), len(params)))
-    mhalves = np.zeros((len(ns), len(params)))
-    mhalves_maximized = np.zeros((len(ns), len(params)))
-    mhalves_optimized = np.zeros((len(ns), len(params)))
-    f, axs = plt.subplots(2, gridspec_kw={'wspace': 0, 'hspace': 0}, sharex='all')
-    for pi in [4 * j for j in range(int(len(params) / 4))]:
-        param = params[pi]
-        for ni in range(len(ns)):
-            n = ns[ni]
-            with open(filename(indir, model, param_name, param, n), 'rb') as f:
-                [psi, m2, m2_optimized, best_basis, mhalf, m2_maximized, worst_basis,
-                 mhalf_optimized, mhalf_best_basis, mhalf_maximized, mhalf_worst_basis] = pickle.load(f)
-            Szs[ni, pi] = sum([bops.getExpectationValue(psi, [tn.Node(np.eye(2)) for i in range(j)] + \
-                            [tn.Node(basic.pauli2Z)] + [tn.Node(np.eye(2)) for i in range(n - 1 - j)])
-                               for j in range(n)])
-            p2s[ni, pi] = bops.getRenyiEntropy(psi, 2, int(n/2))
-            m2s[ni, pi] = m2
-            m2s_optimized[ni, pi] = m2_optimized
-            m2s_maximized[ni, pi] = m2_maximized
-            mhalves[ni, pi] = mhalf
-            mhalves_maximized[ni, pi] = mhalf_maximized
-            mhalves_optimized[ni, pi] = mhalf_optimized
-        color = ["#"+''.join([random.choice('ABCDEF0123456789') for i in range(6)])]
-        axs[0].plot(ns, p2s[:, pi], color=color[0])
-        axs[1].plot(ns, m2s[:, pi], color=color[0])
-        axs[1].plot(ns, m2s_optimized[:, pi], '--k', color=color[0])
-        axs[1].plot(ns, m2s_maximized[:, pi], ':k', color=color[0])
-    plt.show()
 
 
 def darken(color, i):
@@ -330,40 +297,6 @@ def analyze_kitaev_2d():
     plt.show()
 
 
-def analyze_kitaev_ts():
-    import matplotlib.pyplot as plt
-    ff, axs = plt.subplots(3, 1, gridspec_kw={'wspace': 0, 'hspace': 0}, sharex='all')
-    ns = [6, 8, 10, 12, 16]
-    mu = 5.0
-    ts = [p[1] for p in params]
-    legends = []
-    for n in ns:
-        curr_ts = []
-        p2s = []
-        m2s = []
-        mhalves = []
-        for ti in range(len(ts)):
-            t = ts[ti]
-            try:
-                with open(filename(indir, model, param_name, [mu, t], n), 'rb') as f:
-                    [psi_orig, m2, mhalf] = pickle.load(f)
-                    if psi_orig[int(n / 2)].tensor.shape[0] > 4:
-                        psi = bops.relaxState(psi_orig, 4)
-                        print(bops.getOverlap(psi, psi_orig))
-                    curr_ts.append(t)
-                    p2s.append(bops.getRenyiEntropy(psi, 2, int(len(psi) / 2)))
-                    m2s.append(m2)
-                    mhalves.append(mhalf)
-            except FileNotFoundError:
-                pass
-        axs[0].scatter(curr_ts, p2s)
-        axs[1].scatter(curr_ts, m2s)
-        axs[2].scatter(curr_ts, mhalves)
-        legends.append(str(n))
-    plt.legend(legends)
-    plt.show()
-
-
 def analyze():
     import matplotlib.pyplot as plt
     f, axs = plt.subplots(4, 1)
@@ -393,6 +326,60 @@ def analyze():
     axs[2].set_ylabel(r'$M_{1/2}$')
     axs[3].plot(params, m2s_avgs)
     axs[3].set_ylabel(r'$\overline{M_2}$')
-    plt.xlabel(r'$\theta$')
+    plt.xlabel(param_name)
     plt.show()
+
+
+# Eq. (7) https://arxiv.org/pdf/2205.02247.pdf
+def extract_alpha_beta(ns, param, plot=False):
+    m2s = np.zeros(len(ns))
+    mhalves = np.zeros(len(ns))
+    file_exists = np.ones(len(ns))
+    for ni in range(len(ns)):
+        n = ns[ni]
+        if os.path.exists(filename(indir, model, param_name, param, n)):
+            data = pickle.load(open(filename(indir, model, param_name, param, n), 'rb'))
+            print(n, len(data))
+            m2s[ni] = data[1]
+            mhalves[ni] = data[2]
+        else:
+            file_exists[ni] = 0
+    curr_ns = np.array(ns)[np.where(file_exists != 0)[0][:]]
+    curr_m2s = m2s[np.where(file_exists!=0)[0][:]]
+    curr_mhalves = mhalves[np.where(file_exists!=0)[0][:]]
+    coeff_2 = np.polyfit(curr_ns, curr_m2s, 1)
+    coeff_half = np.polyfit(curr_ns, curr_mhalves, 1)
+    if plot:
+        import matplotlib.pyplot as plt
+        plt.scatter(curr_ns, curr_m2s)
+        plt.plot(curr_ns, coeff_2[0] * np.array(curr_ns) + coeff_2[1])
+        plt.scatter(curr_ns, curr_mhalves)
+        plt.plot(curr_ns, coeff_half[0] * np.array(curr_ns) + coeff_half[1])
+        plt.title(str(param))
+        plt.show()
+    return list(coeff_2) + list(coeff_half)
+
+
+def analyze_kitaev():
+    ns = [8, 10, 12, 14, 16]
+    p2s = np.zeros(len(params))
+    alphas_2 = np.zeros(len(params))
+    betas_2 = np.zeros(len(params))
+    alphas_half = np.zeros(len(params))
+    betas_half = np.zeros(len(params))
+    for pi in range(len(params)):
+        param = params[pi]
+        alphas_2[pi], betas_2[pi], alphas_half[pi], betas_half[pi] = extract_alpha_beta(ns, param)
+        p2s[pi] = bops.getRenyiEntropy(pickle.load(open(filename(indir, model, param_name, param, 12), 'rb'))[0], 2, 6)
+    import matplotlib.pyplot as plt
+    plt.plot([param[1] for param in params], p2s)
+    plt.plot([param[1] for param in params], alphas_2)
+    plt.plot([param[1] for param in params], betas_2)
+    plt.plot([param[1] for param in params], alphas_half)
+    plt.plot([param[1] for param in params], betas_half)
+    plt.xlabel(r'$t$')
+    plt.legend([r'$p_2$', r'$\alpha_2$', r'$\beta_2$', r'$\alpha_{1/2}$', r'$\beta_{1/2}$'])
+    plt.show()
+
 run()
+analyze_kitaev()
