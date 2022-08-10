@@ -66,7 +66,7 @@ def apply_time_evolver(arnoldi_T: np.array, arnoldi_basis: List[tn.Node], M: tn.
 
 # k is OC, pair is [k, k+1]
 def tdvp_step(psi: List[tn.Node], H: List[tn.Node], k: int, HL: List[tn.Node], HR: List[tn.Node],
-              dir: str, dt, max_bond_dim, num_of_sites, is_density_matrix=True, w_corrector=1):
+              dir: str, dt, max_bond_dim, num_of_sites, is_density_matrix=True, max_trunc=6):
     if num_of_sites == 1:
         left_ind = k - int(dir == '<<')
         cbe.get_op_tilde_tr(psi, left_ind, HL, HR, H, dir, D=max_bond_dim, w_corrector=w_corrector)
