@@ -9,379 +9,11 @@ from typing import List
 import os
 import sys
 import basicAnalysis as bans
+import gc
 
 X = np.array([[0, 1], [1, 0]])
 I = np.eye(2)
-def toric_code(g=0.0):
-    #
-    #    O
-    #    |
-    #  __*__O
-    #    |
-    # bond left, bond down, * in, O up in, O down in, * out, O up out, O down out
-    tensor_op_bottom_left = np.zeros((2, 2, 1, 2, 2, 1, 2, 2), dtype=complex)
-    for i in range(2):
-        for j in range(2):
-            # identity
-            tensor_op_bottom_left[0, 0, 0, i, j, 0, i, j] = 1
-            # X
-            tensor_op_bottom_left[1, 1, 0, i, j, 0, i ^ 1, j ^ 1] = 1
-    # |
-    # O
-    # bond up, O in, O out
-    tensor_op_top = np.zeros((2, 2, 2), dtype=complex)
-    for i in range(2):
-        tensor_op_top[0, i, i] = 1
-        tensor_op_top[1, i, i ^ 1] = 1
-    # O--
-    # bond left, O in, O out
-    tensor_op_right = np.zeros((2, 2, 2), dtype=complex)
-    for i in range(2):
-        tensor_op_right[0, i, i] = 1
-        tensor_op_right[1, i, i ^ 1] = 1
-
-    op_bottom_left = tn.Node(tensor_op_bottom_left)
-    op_top = tn.Node(tensor_op_top)
-    op_right = tn.Node(tensor_op_right)
-
-    tensor_base_site = np.zeros((1, 2, 2), dtype=complex)
-    tensor_base_site[0, 0, 0] = 1
-    base_site = tn.Node(tensor_base_site)
-
-    #     0
-    #     |
-    # 3--- ---1
-    #     |
-    #     2
-    A = bops.permute(bops.contract(bops.contract(bops.contract(
-        base_site, op_bottom_left, '012', '234'), op_top, '3', '1'), op_right, '3', '1'), [3, 5, 1, 0, 2, 4, 6])
-    B = bops.permute(bops.contract(bops.contract(bops.contract(
-        base_site, op_top, '1', '1'), op_right, '1', '1'), op_bottom_left, '024', '234'), [0, 1, 3, 2, 4, 5, 6])
-
-    single_site_tension = tn.Node(np.diag([1+g, 1]))
-    A = bops.contract(bops.contract(A, single_site_tension, '5', '0'), single_site_tension, '5', '0')
-    B = bops.contract(bops.contract(B, single_site_tension, '5', '0'), single_site_tension, '5', '0')
-
-    A = tn.Node(A.tensor.reshape([2, 2, 2, 2, 4]))
-    B = tn.Node(B.tensor.reshape([2, 2, 2, 2, 4]))
-
-    upRow, downRow, leftRow, rightRow, openA, openB = peps.applyBMPS(A, B, d=4)
-    with open('results/toricBoundaries_gauge_' + str(g), 'wb') as f:
-        pickle.dump([upRow, downRow, leftRow, rightRow, openA, openB, A, B], f)
-    circle = bops.contract(bops.contract(bops.contract(
-        upRow, rightRow, '3', '0'), downRow, '5', '0'), leftRow, '70', '03')
-    M = bops.contract(bops.contract(bops.contract(bops.contract(
-        circle, openB, '07', '14'), openA, '017', '124'), openA, '523', '134'), openB, '5018', '1234')
-    mat = np.round(np.real(M.tensor.transpose([0, 2, 4, 6, 1, 3, 5, 7]). reshape([4**4, 4**4]) / 0.03125), 10)
-    b = 1
-
-# w and h are the dimensions of the system *tensor-wise* and not site-wise (when each tensor is two sites).
-# list_of_sectors is a list of lists, from left to write and top to bottom.
-# For a w*h system, the first w lists are of length 1+h (including edges).
-# The last list is of length h, only right edges.
-def get_local_vectors(w, h, list_of_sectors, free_site_choices):
-    int_results = np.zeros((2 * w, h))
-
-    # left edge sectors
-    int_results[0, 0] = 1 if list_of_sectors[0][0] == 1 else -1
-    for ri in range(h - 1):
-        int_results[1, ri] = free_site_choices.pop()
-        int_results[0, ri + 1] = list_of_sectors[0][ri + 1]
-    int_results[1, h - 1] = list_of_sectors[1][h]
-
-    # bulk columns
-    for ci in range(1, w):
-        int_results[2 * ci, 0] = list_of_sectors[ci + 1][0] / (int_results[2 * (ci - 1), 0] * int_results[2 * ci - 1, 0])
-        for ri in range(h - 1):
-            if ci == w - 1:
-                if ri == 0:
-                    int_results[2 * ci + 1, ri] = list_of_sectors[ci + 1][0] / int_results[2 * ci, 0]
-                else:
-                    int_results[2 * ci + 1, ri] = list_of_sectors[ci + 1][ri] / (int_results[2 * ci, ri] *
-                                                                                 int_results[2 * ci + 1, ri - 1])
-            else:
-                int_results[2 * ci + 1, ri] = free_site_choices.pop()
-            int_results[2 * ci, ri + 1] = list_of_sectors[ci][ri + 1] / \
-                                          (int_results[2 * ci - 1, ri] *
-                                           int_results[2 * ci - 1, ri + 1] *
-                                           int_results[2 * ci - 2, ri + 1])
-        int_results[2 * ci + 1, h - 1] = list_of_sectors[ci + 1][-1]
-    results = [None for i in range(w * h)]
-    for wi in range(w):
-        for hi in range(h):
-            top_vec = up_spin if int_results[2 * wi, hi] == 1 else down_spin
-            right_vec = up_spin if int_results[2 * wi + 1, hi] == 1 else down_spin
-            curr = np.kron(top_vec, right_vec)
-            results[hi + wi * h] = curr
-    return results
-
-
-up_spin = np.array([1, 0]) * np.sqrt(2)
-down_spin = np.array([0, 1]) * np.sqrt(2)
-def get_random_local_vectors(w, h, list_of_sectors, bulk_ints=None) -> List[np.array]:
-    if bulk_ints is None:
-        bulk_ints = [np.random.randint(2) * 2 - 1 for i in range((h-1) * (w - 1))]
-    results = get_local_vectors(w, h, list_of_sectors, bulk_ints)
-    return results
-
-
-def get_boundary_sectors(w, h, boundary_identifier):
-    # After all of the boundary sections but one are set, the last one is determined by them
-    boundary_length = 2 * (w + h - 1)
-    boundary_sectors = [int(c) * 2 - 1 for c in bin(boundary_identifier).split('b')[1]]
-    boundary_sectors = [-1] * (boundary_length - len(boundary_sectors)) + boundary_sectors
-    boundary_sectors.append(np.prod(boundary_sectors))
-    return boundary_sectors
-
-# boundary_sectors are the sector eigenvalues on the boundary from the top left corner and down the left edge,
-# then top-bottom for the middle, and then top to bottom in the right edge.
-def get_list_of_sectors(w, h, boundary_identifier):
-    boundary_sectors = get_boundary_sectors(w, h, boundary_identifier)
-    res = [[boundary_sectors[i] for i in range(h)]]
-    for i in range(1, w):
-        res.append([boundary_sectors[h - 2 + i * 2]] + [1] * (h - 1) + [boundary_sectors[h - 1 + i * 2]])
-    res.append([boundary_sectors[i] for i in range(-(h+1), 0)])
-    return res
-
-
-def get_random_operators(w, h, n, list_of_sectors, bulk_ints=None):
-    random_local_vectors = [None for ni in range(n)]
-    for ni in range(n):
-        if bulk_ints is None:
-            random_local_vectors[ni] = get_random_local_vectors(w, h, list_of_sectors)
-        else:
-            random_local_vectors[ni] = get_random_local_vectors(w, h, list_of_sectors, bulk_ints[ni])
-    results = [None for ni in range(n)]
-    for ni in range(n):
-        results[ni] = [tn.Node(np.outer(random_local_vectors[ni][si], random_local_vectors[(ni + 1) % n][si]))
-                       for si in range(w * h)]
-    return results
-
-
-def get_explicit_block(w, h, g, boundary_identifier=0):
-    num_of_free_site_choices = (h - 1) * (w - 1)
-    block_size = 2**num_of_free_site_choices
-    ops = [[None for i in range(block_size)] for j in range(block_size)]
-    list_of_sectors = get_list_of_sectors(w, h, boundary_identifier)
-    for i in range(block_size):
-        for j in range(i, block_size):
-            choices_i = [int(c) * 2 - 1 for c in bin(i).split('b')[1]]
-            choices_i = [-1] * (num_of_free_site_choices - len(choices_i)) + choices_i
-            choices_j = [int(c) * 2 - 1 for c in bin(j).split('b')[1]]
-            choices_j = [-1] * (num_of_free_site_choices - len(choices_j)) + choices_j
-            ops[i][j] = get_random_operators(w, h, 2, list_of_sectors, [choices_i, choices_j])[0]
-
-    with open('results/toricBoundaries_gauge_' + str(np.round(g, 8)), 'rb') as f:
-        [upRow, downRow, leftRow, rightRow, openA, openB, A, B] = pickle.load(f)
-    [cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>')
-    [cDown, dDown, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>')
-    norm = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, h, w,
-                                  [tn.Node(np.eye(4)) for i in range(w * h)])
-    leftRow = bops.multNode(leftRow, 1 / norm)
-
-    res = np.zeros((block_size, block_size), dtype=complex)
-    for i in range(block_size):
-        for j in range(i, block_size):
-            res[i, j] = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h,
-                                  ops[i][j])
-            res[j, i] = np.conj(res[i, j])
-    res /= 2**(2*w*h)
-    return res
-
-
-def get_Z_plaquette_projector():
-    #
-    #    O
-    #    |
-    #  __*__O
-    #    |
-    # bond down, bond left, in, out
-    tensor_op_bottom_left = np.zeros((2, 2, 4, 4), dtype=complex)
-    for i in range(2):
-        tensor_op_bottom_left[0, 0, i + 2 * i, i + 2 * i] = 1
-        tensor_op_bottom_left[1, 1, i + 2 * i, i + 2 * i] = 1
-        tensor_op_bottom_left[0, 1, i + 2 * (i^1), i + 2 * (i^1)] = 1
-        tensor_op_bottom_left[1, 0, i + 2 * (i ^ 1), i + 2 * (i ^ 1)] = 1
-    # |
-    # O
-    #    O____
-    # bond up, bond right, O top in, O right in, O top out, O right out
-    tensor_op_top_right = np.zeros((2, 2, 2, 2, 2, 2), dtype=complex)
-    for i in range(2):
-        for j in range(2):
-            tensor_op_top_right[i, j, i, j, i, j] = 1
-    tensor_op_top_right = tensor_op_top_right.reshape([2, 2, 4, 4])
-    op_bottom_left = tn.Node(tensor_op_bottom_left)
-    op_top_right = tn.Node(tensor_op_top_right)
-    op_A = bops.permute(bops.contract(op_top_right, op_bottom_left, '2', '3'), [2, 0, 1, 3, 4, 5])
-    op_B = bops.permute(bops.contract(op_bottom_left, op_top_right, '2', '3'), [2, 3, 4, 0, 1, 5])
-    return op_A, op_B
-
-
-op_A, op_B = get_Z_plaquette_projector()
-minus_boundary = np.array([0, 1], dtype=complex)
-plus_boundary = np.array([1, 0], dtype=complex)
-def normalize_by_gauge_invariant_projector(w, h, random_vectors, cUps, dUps, cDowns, dDowns, leftRows, rightRows):
-    random_ops = [tn.Node(np.outer(vec, np.conj(vec.transpose()))) for vec in random_vectors]
-    return pe.applyLocalOperators_detailedBoundary(
-        cUps, dUps, cDowns, dDowns, leftRows, rightRows, op_A, op_B, h, w, random_ops)
-
-
-def get_projective_boundary_operators(w, h, boundary_sectors):
-    leftRows = [None for hi in range(int(h/2))]
-    for hi in range(int(h/2)):
-        up_vec = plus_boundary if boundary_sectors[2 * hi] == 1 else minus_boundary
-        down_vec = plus_boundary if boundary_sectors[2 * hi + 1] == 1 else minus_boundary
-        leftRows[hi] = tn.Node(np.outer(up_vec, down_vec).reshape([1, 2, 2, 1]))
-    cUps = [None for wi in range(int(w / 2))]
-    cDowns = [None for wi in range(int(w / 2))]
-    dUps = [None for wi in range(int(w / 2))]
-    dDowns = [None for wi in range(int(w / 2))]
-    for wi in range(int(w/2)):
-        cUps[wi] = tn.Node(plus_boundary.reshape([1, 2, 1])) if boundary_sectors[h+4*wi] == 1 else tn.Node(minus_boundary.reshape([1, 2, 1]))
-        cDowns[wi] = tn.Node(plus_boundary.reshape([1, 2, 1])) if boundary_sectors[h+4*wi + 1] == 1 else tn.Node(minus_boundary.reshape([1, 2, 1]))
-        dUps[wi] = tn.Node(plus_boundary.reshape([1, 2, 1])) if boundary_sectors[h+4*wi + 2] == 1 else tn.Node(minus_boundary.reshape([1, 2, 1]))
-        dDowns[wi] = tn.Node(plus_boundary.reshape([1, 2, 1])) if boundary_sectors[h+4*wi + 3] == 1 else tn.Node(minus_boundary.reshape([1, 2, 1]))
-    rightRows = [None for hi in range(h - 1)]
-    rightRows[0] = \
-        tn.Node(np.outer(plus_boundary, plus_boundary).reshape([1, 2, 2, 1])) \
-            if boundary_sectors[h + 2 * w] == 1 else \
-        tn.Node(np.outer(minus_boundary, plus_boundary).reshape([1, 2, 2, 1]))
-    for hi in range(1, int(h/2)):
-        up_vec = plus_boundary if boundary_sectors[h + 2 * w + 2 * hi] == 1 else minus_boundary
-        down_vec = plus_boundary if boundary_sectors[h + 2 * w + 2 * hi + 1] == 1 else minus_boundary
-        rightRows[hi] = tn.Node(np.outer(up_vec, down_vec).reshape([1, 2, 2, 1]))
-    return cUps, dUps, cDowns, dDowns, leftRows, rightRows
-
-
-
-# TODO start from a general basis, add optimization etc
-def get_random_vectors_general_basis(w, h, cUps, dUps, cDowns, dDowns, leftRows, rightRows):
-    spin_vecs = [np.array([1, 0]) * np.sqrt(2), np.array([0, 1]) * np.sqrt(2),
-                 np.array([1, 1]), np.array([1, -1]), np.array([1, 1j]), np.array([1, -1j])]
-    # TODO for the 1 site boundary, choose non random vectors
-    random_vectors = [np.kron(spin_vecs[np.random.randint(len(spin_vecs))],
-                              spin_vecs[np.random.randint(len(spin_vecs))]) for i in range(w*h)]
-    norm = normalize_by_gauge_invariant_projector(w, h, random_vectors, cUps, dUps, cDowns, dDowns, leftRows, rightRows)
-    if norm == 0:
-        return 0
-    random_vectors[0] = random_vectors[0] / np.sqrt(norm)
-    return random_vectors
-
-
-def get_random_operators_general_basis(w, h, n, cUps, dUps, cDowns, dDowns, leftRows, rightRows):
-    random_vectors = [None for ni in range(n)]
-    for ni in range(n):
-        random_vectors[ni] = get_random_vectors_general_basis(w, h, cUps, dUps, cDowns, dDowns, leftRows, rightRows)
-        if random_vectors[ni] == 0:
-            return 0
-    random_ops = [[tn.Node(np.outer(random_vectors[ni][si], np.conj(np.transpose(random_vectors[(ni + 1) % n][si]))))
-                   for si in range(w * h)] for ni in range(n)]
-    return random_ops
-
-
-def renyi_entropy_general_basis(w, h, n, boundary_identifier):
-    boundary_sectors = get_boundary_sectors(w, h, boundary_identifier)
-    cUps, dUps, cDowns, dDowns, leftRows, rightRows = get_projective_boundary_operators(w, h, boundary_sectors)
-    random_ops = get_random_operators_general_basis(w, h, n, cUps, dUps, cDowns, dDowns, leftRows, rightRows)
-    if random_ops == 0:
-        return None
-    res = 1
-    for ni in range(n):
-        res *= pe.applyLocalOperators_detailedBoundary(
-        cUps, dUps, cDowns, dDowns, leftRows, rightRows, op_A, op_B, h, w, random_ops[ni])
-    return res
-
-
-def double_boundary(op):
-    return
-
-
-def is_plus_plaquette(i):
-    i_str = list(bin(i).split('b')[1])
-    site_num = 6
-    i_str = ['0'] * (site_num - len(i_str)) + i_str
-    return np.prod([int(c) * 2 - 1 for c in i_str[1:site_num - 1]]) == 1
-
-
-d = 4
-full_projector_plus = \
-    tn.Node(np.diag([1 if is_plus_plaquette(i) else 0 for i in range(2 ** 6)])
-            .reshape([d, d, d, d, d, d]).transpose([0, 3, 1, 4, 2, 5]))
-left_edge_projector_plus = tn.Node(np.diag([0, 0, 1, 1]))
-left_edge_projector_minus = tn.Node(np.diag([1, 1, 0, 0]))
-bottom_edge_projector_plus = tn.Node(np.diag([0, 1, 0, 1]))
-bottom_edge_projector_minus = tn.Node(np.diag([1, 0, 1, 0]))
-top_edge_projector_plus = tn.Node(np.diag([0, 0, 1, 1, 1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 1, 1]).reshape([4, 4, 4, 4]))
-top_edge_projector_minus = tn.Node(np.diag([1, 1, 0, 0, 0, 0, 1, 1, 0, 0, 1, 1, 1, 1, 0, 0]).reshape([4, 4, 4, 4]))
-top_right_corner_projector_plus = tn.Node(np.diag([1, 0, 0, 1]))
-top_right_corner_projector_minus = tn.Node(np.diag([0, 1, 1, 0]))
-right_edge_projector_plus = tn.Node(np.diag([0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1]).reshape([4, 4, 4, 4]))
-right_edge_projector_minus = tn.Node(np.diag([1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0]).reshape([4, 4, 4, 4]))
-
-def exact_probability(w, h, g, boundary_i, d=4):
-    with open('results/toricBoundaries_gauge_' + str(np.round(g, 8)), 'rb') as f:
-        [upRow, downRow, leftRow, rightRow, openA, openB, A, B] = pickle.load(f)
-    [cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>')
-    [cDown, dDown, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>')
-    norm = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h,
-                                  [tn.Node(np.eye(4)) for i in range(w * h)])
-    leftRow = bops.multNode(leftRow, 1 / norm ** (2 / w))
-    num_of_boundary_options = 2**(2 * (w + h -1))
-    results = np.zeros(num_of_boundary_options)
-    num_of_bulk_ints = 2**((w - 1) * (h - 1))
-    list_of_sectors = get_list_of_sectors(w, h, boundary_i)
-    p = 0
-    for bulk_i in range(num_of_bulk_ints):
-        bulk_ints = [int(c) * 2 - 1 for c in bin(bulk_i).split('b')[1]]
-        bulk_ints = [-1] * ((w - 1) * (h - 1) - len(bulk_ints)) + bulk_ints
-        ops = get_random_operators(w, h, 1, list_of_sectors, [bulk_ints])
-        p += \
-            pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, h, w, [op / 4 for op in ops[0]])
-    return p
-
-
-def shrink_boundaries(upRow, downRow, leftRow, rightRow, max_bond_dim):
-    M = bops.contract(upRow, rightRow, '3', '0')
-    [upRow, rightRow, te] = bops.svdTruncation(M, [0, 1, 2], [3, 4, 5], '>>', maxBondDim=max_bond_dim)
-    # print(te)
-    M = bops.contract(rightRow, downRow, '3', '0')
-    [rightRow, downRow, te] = bops.svdTruncation(M, [0, 1, 2], [3, 4, 5], '>>', maxBondDim=max_bond_dim)
-    # print(te)
-    M = bops.contract(downRow, leftRow, '3', '0')
-    [downRow, leftRow, te] = bops.svdTruncation(M, [0, 1, 2], [3, 4, 5], '>>', maxBondDim=max_bond_dim)
-    # print(te)
-    M = bops.contract(leftRow, upRow, '3', '0')
-    [leftRow, upRow, te] = bops.svdTruncation(M, [0, 1, 2], [3, 4, 5], '>>', maxBondDim=max_bond_dim)
-    # print(te)
-    return [upRow, downRow, leftRow, rightRow]
-
-
-def exact_purity(w, h, g, d=4):
-    with open('results/toricBoundaries_gauge_' + str(np.round(g, 8)), 'rb') as f:
-        [upRow, downRow, leftRow, rightRow, openA, openB, A, B] = pickle.load(f)
-        [upRow, downRow, leftRow, rightRow] = shrink_boundaries(upRow, downRow, leftRow, rightRow, max_bond_dim=4)
-        [cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>', maxTrunc=5)
-        [cDown, dDown, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>', maxTrunc=5)
-        norm = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h,
-                                      [tn.Node(np.eye(4)) for i in range(w * h)])
-        leftRow = bops.multNode(leftRow, 1 / norm ** (2 / w))
-    cUp = tn.Node(np.kron(cUp.tensor, cUp.tensor))
-    dUp = tn.Node(np.kron(dUp.tensor, dUp.tensor))
-    cDown = tn.Node(np.kron(cDown.tensor, cDown.tensor))
-    dDown = tn.Node(np.kron(dDown.tensor, dDown.tensor))
-    leftRow = tn.Node(np.kron(leftRow.tensor, leftRow.tensor))
-    rightRow = tn.Node(np.kron(rightRow.tensor, rightRow.tensor))
-    A = tn.Node(np.kron(A.tensor, A.tensor))
-    B = tn.Node(np.kron(B.tensor, B.tensor))
-    single_swap = np.array([[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1]])
-    double_swap = np.kron(single_swap, single_swap).reshape([2] * 8).transpose([3, 2, 1, 0, 4, 5, 6, 7]).reshape([2**4, 2**4])
-    num_of_boundary_options = 2**(2 * (w + h -1))
-
-    full_purity = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, h, w,
-                                         [tn.Node(double_swap) for i in range(w * h)])
-    return full_purity
-
+d=2
 
 def boundary_binary_string(i, N):
     curr = bin(i).split('b')[1]
@@ -394,83 +26,120 @@ def boundary_binary_string(i, N):
 def square_wilson_loop_expectation_value(cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, L, d=2):
     w = int(np.ceil((L+1)/2)) * 2
     h = w
-    I = np.eye(2)
+    I = np.eye(d)
     norm = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openA, h, w,
                                   [tn.Node(np.eye(d**2)) for i in range(w * h)])
     leftRow = bops.multNode(leftRow, 1 / norm**(2 / h))
     if L == 1:
         ops = [tn.Node(np.kron(I, X)), tn.Node(np.kron(X, X)),
                tn.Node(np.kron(I, I)), tn.Node(np.kron(X, I))]
-        volume = 1
-        area = 4
     if L == 2:
         ops = [tn.Node(np.kron(I, I)), tn.Node(np.kron(I, X)), tn.Node(np.kron(X, I)), tn.Node(np.kron(X, X)),
                tn.Node(np.kron(I, I)), tn.Node(np.kron(I, X)), tn.Node(np.kron(I, I)), tn.Node(np.kron(I, X)),
                tn.Node(np.kron(I, I)), tn.Node(np.kron(I, I)), tn.Node(np.kron(X, I)), tn.Node(np.kron(X, I)),
                tn.Node(np.kron(I, I)), tn.Node(np.kron(I, I)), tn.Node(np.kron(I, I)), tn.Node(np.kron(I, I))]
-        volume = 4
-        area = 8
     elif L == 3:
         ops = [tn.Node(np.kron(I, X)), tn.Node(np.kron(X, I)), tn.Node(np.kron(X, I)), tn.Node(np.kron(X, X)),
                tn.Node(np.kron(I, X)), tn.Node(np.kron(I, I)), tn.Node(np.kron(I, I)), tn.Node(np.kron(I, X)),
                tn.Node(np.kron(I, X)), tn.Node(np.kron(I, I)), tn.Node(np.kron(I, I)), tn.Node(np.kron(I, X)),
                tn.Node(np.kron(I, I)), tn.Node(np.kron(X, I)), tn.Node(np.kron(X, I)), tn.Node(np.kron(X, I))]
-        volume = 9
-        area = 12
-    elif L == 2.5:
-        ops = [tn.Node(np.kron(I, X)), tn.Node(np.kron(X, X)), tn.Node(np.kron(I, X)), tn.Node(np.kron(X, X)),
-               tn.Node(np.kron(I, X)), tn.Node(np.kron(I, I)), tn.Node(np.kron(X, I)), tn.Node(np.kron(I, X)),
-               tn.Node(np.kron(I, X)), tn.Node(np.kron(I, X)), tn.Node(np.kron(X, X)), tn.Node(np.kron(I, X)),
-               tn.Node(np.kron(I, I)), tn.Node(np.kron(X, I)), tn.Node(np.kron(I, I)), tn.Node(np.kron(X, I))]
-        volume = 7
-        area = 16
+    elif L == 4:
+        ops = [tn.Node(mat) for mat in [
+            np.kron(I, I), np.kron(I, X), np.kron(X, I), np.kron(X, I), np.kron(X, I), np.kron(X, X),
+            np.kron(I, I), np.kron(I, X), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, X),
+            np.kron(I, I), np.kron(I, X), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, X),
+            np.kron(I, I), np.kron(I, X), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, X),
+            np.kron(I, I), np.kron(I, I), np.kron(X, I), np.kron(X, I), np.kron(X, I), np.kron(X, I),
+            np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, I)
+        ]]
+    elif L == 5:
+        ops = [tn.Node(mat) for mat in [
+            np.kron(I, X), np.kron(X, I), np.kron(X, I), np.kron(X, I), np.kron(X, I), np.kron(X, X),
+            np.kron(I, X), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, X),
+            np.kron(I, X), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, X),
+            np.kron(I, X), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, X),
+            np.kron(I, X), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, X),
+            np.kron(I, I), np.kron(X, I), np.kron(X, I), np.kron(X, I), np.kron(X, I), np.kron(X, I)
+        ]]
+    elif L == 6:
+        ops = [tn.Node(mat) for mat in [
+            np.kron(I, I), np.kron(I, X), np.kron(X, I), np.kron(X, I), np.kron(X, I), np.kron(X, I), np.kron(X, I), np.kron(X, X),
+            np.kron(I, I), np.kron(I, X), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, X),
+            np.kron(I, I), np.kron(I, X), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, X),
+            np.kron(I, I), np.kron(I, X), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, X),
+            np.kron(I, I), np.kron(I, X), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, X),
+            np.kron(I, I), np.kron(I, X), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, X),
+            np.kron(I, I), np.kron(I, I), np.kron(X, I), np.kron(X, I), np.kron(X, I), np.kron(X, I), np.kron(X, I), np.kron(X, I),
+            np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, I)
+        ]]
+    elif L == 7:
+        ops = [tn.Node(mat) for mat in [
+            np.kron(I, X), np.kron(X, I), np.kron(X, I), np.kron(X, I), np.kron(X, I), np.kron(X, I), np.kron(X, I), np.kron(X, X),
+            np.kron(I, X), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, X),
+            np.kron(I, X), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, X),
+            np.kron(I, X), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, X),
+            np.kron(I, X), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, X),
+            np.kron(I, X), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, X),
+            np.kron(I, X), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, I), np.kron(I, X),
+            np.kron(I, I), np.kron(X, I), np.kron(X, I), np.kron(X, I), np.kron(X, I), np.kron(X, I), np.kron(X, I), np.kron(X, I)
+        ]]
+
+
     result = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, h, w, ops)
-    return result, volume, area
+    return result, L**2, 4 * L
 
 
 # TODO doubt everything above this line
 
-def get_boundaries_from_file(params, w, h):
-    with open('results/toricBoundaries_gauge_' + str(params), 'rb') as f:
+def get_boundaries_from_file(filename, w, h):
+    with open(filename, 'rb') as f:
         [upRow, downRow, leftRow, rightRow, openA, openB, A, B] = pickle.load(f)
-        [upRow, downRow, leftRow, rightRow] = shrink_boundaries(upRow, downRow, leftRow, rightRow, max_bond_dim=4)
+        [upRow, downRow, leftRow, rightRow, te] = shrink_boundaries(upRow, downRow, leftRow, rightRow, bond_dim=4)
         [cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>', maxTrunc=5)
         [cDown, dDown, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>', maxTrunc=5)
         norm = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, h, w,
                                       [tn.Node(np.eye(4)) for i in range(w * h)])
         leftRow = bops.multNode(leftRow, 1 / norm**(2 / h))
+        [cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>', maxBondDim=upRow.tensor.shape[0])
+        [cDown, dDown, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>', maxBondDim=downRow.tensor.shape[0])
     return [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, A, B]
 
 
-def q_to_i(q):
-    return int((q + 1) / 2)
-def i_to_q(i):
-    return i * 2 - 1
-def get_2_by_2_explicit_block(g, boundary_identifier):
-    [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, A, B] = get_boundaries_from_file(g, 2, 2)
-    boundary = [i_to_q(int(c)) for c in bin(boundary_identifier).split('b')[1].zfill(6)]
+def get_choice_indices(boundary, choice, n, d=2):
+    result = [boundary[0], choice[0],
+               (boundary[0] + boundary[1] + choice[0]) % d,
+               (boundary[0] + boundary[1] + boundary[2] + choice[0]) % d]
+    for ni in range(1, n - 1):
+        result += [boundary[ni * 2 + 1], choice[ni],
+                    (choice[ni - 1] + choice[ni] + boundary[ni * 2 + 1]) % d,
+                    (np.sum(boundary[:2 * (ni + 1)]) + choice[ni]) % d]
+    result += [boundary[n * 2 - 1], boundary[-1],
+                (boundary[-1] + choice[-1] + boundary[n * 2 - 1]) % d, np.sum(boundary) % d]
+    return result
+
+# TODO here only d = 2
+def get_2_by_n_explicit_block(filename, n, bi, d=2):
+    [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, A, B] = get_boundaries_from_file(filename, w=n, h=2)
+    # print([node.tensor.shape for node in [cUp, dUp, cDown, dDown, leftRow, rightRow]])
+    boundary = [int(c) for c in bin(bi).split('b')[1].zfill(2 * n + 2)]
     projectors = [[np.diag([1, 0]), np.array([[0, 0], [1, 0]])],
                   [np.array([[0, 1], [0, 0]]), np.diag([0, 1])]]
-    block = np.zeros((2, 2), dtype=complex)
-    choices = [-1, 1]
+
+    num_of_choices = n - 1
+    block = np.zeros((d**num_of_choices, d**num_of_choices), dtype=complex)
+    choices = [[int(c) for c in bin(choice).split('b')[1].zfill(num_of_choices)] for choice in range(d**num_of_choices)]
     for ci in range(len(choices)):
-        ingoing = [q_to_i(boundary[0]), q_to_i(choices[ci]),
-                   q_to_i(boundary[0] * boundary[1] * choices[ci]), q_to_i(boundary[0] * boundary[1] * choices[ci] * boundary[2]),
-                   q_to_i(boundary[3]), q_to_i(boundary[4]),
-                   q_to_i(choices[ci] * boundary[3] * boundary[4]), q_to_i(np.prod(boundary))]
+        ingoing = get_choice_indices(boundary, choices[ci], n)
         for cj in range(len(choices)):
-            outgoing = [q_to_i(boundary[0]), q_to_i(choices[cj]),
-                        q_to_i(boundary[0] * boundary[1] * choices[cj]), q_to_i(boundary[0] * boundary[1] * choices[cj] * boundary[2]),
-                        q_to_i(boundary[3]), q_to_i(boundary[4]),
-                        q_to_i(choices[cj] * boundary[3] * boundary[4]), q_to_i(np.prod(boundary))]
+            outgoing = get_choice_indices(boundary, choices[cj], n)
             ops = [tn.Node(np.kron(projectors[ingoing[2 * i]][outgoing[2 * i]],
-                                   projectors[ingoing[2 * i + 1]][outgoing[2 * i + 1]])) for i in range(4)]
-            block[ci, cj] = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, h=2, w=2, ops=ops)
+                           projectors[ingoing[2 * i + 1]][outgoing[2 * i + 1]])) for i in range(int(len(ingoing)/2))]
+            block[ci, cj] = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, h=2, w=n, ops=ops)
     return block
 
 
 # Fig 5 in https://journals.aps.org/prresearch/pdf/10.1103/PhysRevResearch.3.033179
-def toric_tensors_lgt_approach(params, d=2):
+def toric_tensors_lgt_approach(model, param, d=2):
     # u, r, d, l, t, s
     tensor = np.zeros([d] * 6, dtype=complex)
     for i in range(d):
@@ -481,34 +150,14 @@ def toric_tensors_lgt_approach(params, d=2):
                                              np.exp(2j * np.pi * j / d) *
                              np.exp(-2j * np.pi * k / d)) * d / (2 * np.pi), 10)) % d,
                        i, j] = 1
-    tensor[0, 0, 0, 0, 0, 0] = params[0]
-    tensor[1, 0, 0, 0, 1, 0] = params[0]
+    if model == 'zeros_diff':
+        tensor[0, 0, 0, 0, 0, 0] = param
+    elif model == 'orus':
+        for i in range(d):
+            for j in range(d):
+                tensor[i, j, :, :, :, :] *= (1 + param)**(i + j)
     A = tn.Node(tensor.reshape([d] * 4 + [d**2]))
     return A
-
-#  a  b
-#  b  c
-def edit_t_blocks(t, a, params, d=2):
-    for i in range(int(len(t) / 2)):
-        block_inds = np.where(t[i] != 0)[0]
-        if len(block_inds) > 0:
-            if d == 2:
-                b, c = params
-                t[block_inds[0], block_inds[0]] = a
-                t[block_inds[0], block_inds[1]] = b
-                t[block_inds[1], block_inds[0]] = b
-                t[block_inds[1], block_inds[1]] = c
-            elif d == 3:
-                p0, p1, p2, p3, p4 = params
-                t[block_inds[0], block_inds[0]] = a
-                t[block_inds[0], block_inds[1]] = p0
-                t[block_inds[1], block_inds[0]] = p0
-                t[block_inds[1], block_inds[1]] = p1
-                t[block_inds[0], block_inds[2]] = p2
-                t[block_inds[2], block_inds[0]] = p2
-                t[block_inds[2], block_inds[2]] = p3
-                t[block_inds[2], block_inds[1]] = p4
-                t[block_inds[1], block_inds[2]] = p4
 
 
 def numberToBase(n, b):
@@ -520,8 +169,8 @@ def numberToBase(n, b):
         n //= b
     return digits[::-1]
 
-def tensors_from_transfer_matrix(params, d=2):
-    A = toric_tensors_lgt_approach(params, d)
+def tensors_from_transfer_matrix(model, param, d=2):
+    A = toric_tensors_lgt_approach(model, param, d)
     E0 = bops.permute(bops.contract(A, A, '4', '4'), [0, 4, 1, 5, 2, 6, 3, 7])
     projector_tensor = np.zeros([d, d, d])
     for i in range(d):
@@ -533,89 +182,189 @@ def tensors_from_transfer_matrix(params, d=2):
     return A, tau, openA, projector
 
 
-d = 2
-dir = 'results/gauge/phase_attempts_fmat'
-if not os.path.exists(dir):
-    os.mkdir(dir)
-import matplotlib.pyplot as plt
-legends = []
-normalized_p2s = []
-bs = [np.round(i * 0.1, 8) for i in range(-20, 20)]
-cs = [np.round(i * 0.1, 8) for i in range(10, 11)]
-wilson_area_map = np.zeros((len(bs), len(cs)))
-wilson_volume_map = np.zeros((len(bs), len(cs)))
-normalized_p2_0_block_map = np.zeros((len(bs), len(cs)))
-for bi in range(len(bs)):
-    for ci in range(len(cs)):
-        b, c = bs[bi], cs[ci]
-        params = [b, c, c, c]
-        print(b, c)
-        filename = dir + '/toricBoundaries_gauge_' + str(params)
-        if os.path.exists(filename):
-            with open(filename, 'rb') as f:
-                [upRow, downRow, leftRow, rightRow, openA, openA, A, A] = pickle.load(f)
-        else:
-            A, tau, openA, singlet_projector = tensors_from_transfer_matrix(params, d=d)
-            singlet_projector = tn.Node(singlet_projector.tensor.reshape([d, d**2]))
-            upRow, downRow, leftRow, rightRow = peps.applyBMPS(tau, tau, d=d**2)
-            upRow = bops.permute(bops.contract(bops.contract(
-                upRow, singlet_projector, '1', '0'), singlet_projector, '1', '0'), [0, 2, 3, 1])
-            rightRow = bops.permute(bops.contract(bops.contract(
-                rightRow, singlet_projector, '1', '0'), singlet_projector, '1', '0'), [0, 2, 3, 1])
-            downRow = bops.permute(bops.contract(bops.contract(
-                downRow, singlet_projector, '1', '0'), singlet_projector, '1', '0'), [0, 2, 3, 1])
-            leftRow = bops.permute(bops.contract(bops.contract(
-                leftRow, singlet_projector, '1', '0'), singlet_projector, '1', '0'), [0, 2, 3, 1])
-            with open(filename, 'wb') as f:
-                pickle.dump([upRow, downRow, leftRow, rightRow, openA, openA, A, A], f)
-        circle = bops.contract(bops.contract(bops.contract(
-            upRow, rightRow, '3', '0'), downRow, '5', '0'), leftRow, '70', '03')
-        M = bops.contract(bops.contract(bops.contract(bops.contract(
-            circle, openA, '07', '14'), openA, '017', '124'), openA, '523', '134'), openA, '5018', '1234')
-        mat = np.real(M.tensor.transpose([0, 2, 4, 6, 1, 3, 5, 7]). reshape([d**8, d**8]))
-        mat /= mat.trace()
-        [cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>', maxTrunc=5)
-        [cDown, dDown, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>', maxTrunc=5)
-        Ls = [1, 2, 3, 2.5]
-        volumes = np.zeros(len(Ls))
-        areas = np.zeros(len(Ls))
-        volumes = np.zeros(len(Ls))
-        wilson_expectations = np.zeros(len(Ls))
-        for Li in range(len(Ls)):
-            wilson_exp, volume, area = \
-                square_wilson_loop_expectation_value(cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openA, Ls[Li], d)
-            volumes[Li] = volume
-            areas[Li] = area
-            wilson_expectations[Li] = wilson_exp
-        p, residuals, _, _, _ = np.polyfit(areas, np.log(wilson_expectations), 1, full=True)
-        chisq_dof = residuals / (len(areas) - 3)
-        wilson_area_map[bi, ci] = chisq_dof
-        p, residuals, _, _, _ = np.polyfit(volumes, np.log(wilson_expectations), 1, full=True)
-        chisq_dof = residuals / (len(volumes) - 3)
-        wilson_volume_map[bi, ci] = chisq_dof
-        counter = 0
-        for i in range(1): #range(len(mat)):
-            inds = [0, 78] # np.where(np.abs(mat[i]) > 1e-12)[0]
-            if len(inds) > 0:
-                counter += 1
-                block = np.array([[mat[inds[0], inds[0]], mat[inds[0], inds[1]]], [mat[inds[1], inds[0]], mat[inds[1], inds[1]]]])
-                normalized_p2_0_block_map[bi, ci] += np.matmul(block, block).trace() / block.trace()**2
-        print(wilson_expectations)
-        print(block, np.linalg.eigvals(block))
-plt.plot(bs, wilson_area_map[:, 0])
-plt.plot(bs, wilson_volume_map[:, 0])
-plt.plot(bs, 1 - normalized_p2_0_block_map[:, 0])
-plt.show()
-ff, axs = plt.subplots(3, 1)
-pcm = axs[0].pcolormesh(cs, bs, wilson_area_map)
-ff.colorbar(pcm, ax=axs[0])
-pcm = axs[1].pcolormesh(cs, bs, wilson_volume_map)
-ff.colorbar(pcm, ax=axs[1])
-pcm = axs[2].pcolormesh(cs, bs, normalized_p2_0_block_map)
-ff.colorbar(pcm, ax=axs[2])
-plt.show()
+def results_filname(dirname, model, param_name, param, Ns):
+    return dirname + '/normalized_p2_results_' + model + '_' + param_name + '_' + str(param) + '_Ns_' + str(Ns)
+def boundary_filname(dirname, model, param_name, param):
+    return dirname + '/toricBoundaries_gauge_' + model + '_' + param_name + '_' + str(param)
 
-# TODO plot -coef, 1-p2 separately, for full range and 0.5-1.5
-# TODO handle tau in BMPS but full openA in matrix
-# TODO handwaving proof by Erez
-# TODO think what can be extracted from tau regarding distillable entanglement.
+
+def shrink_boundaries(upRow, downRow, leftRow, rightRow, bond_dim):
+    max_te = 0
+    [upRow, leftRow, te] = bops.svdTruncation(bops.contract(upRow, leftRow, '3', '0'), [0, 1, 2], [3, 4, 5], '>>',
+                                              maxBondDim=bond_dim, minBondDim=bond_dim)
+    if len(te) > 0 and max(te) > max_te: max_te = max(te)
+    [leftRow, downRow, te] = bops.svdTruncation(bops.contract(leftRow, downRow, '3', '0'), [0, 1, 2], [3, 4, 5], '>>',
+                                                maxBondDim=bond_dim, minBondDim=bond_dim)
+    if len(te) > 0 and max(te) > max_te: max_te = max(te)
+    [downRow, rightRow, te] = bops.svdTruncation(bops.contract(downRow, rightRow, '3', '0'), [0, 1, 2], [3, 4, 5], '>>',
+                                                 maxBondDim=bond_dim, minBondDim=bond_dim)
+    if len(te) > 0 and max(te) > max_te: max_te = max(te)
+    [rightRow, upRow, te] = bops.svdTruncation(bops.contract(rightRow, upRow, '3', '0'), [0, 1, 2], [3, 4, 5], '>>',
+                                               maxBondDim=bond_dim, minBondDim=bond_dim)
+    if len(te) > 0 and max(te) > max_te: max_te = max(te)
+    return upRow, downRow, rightRow, leftRow, max_te
+
+
+# TODO handle A != B
+def get_boundaries(dirname, model, param_name, param, max_allowed_te=1e-10):
+    boundary_filename = boundary_filname(dirname, model, param_name, param)
+    if os.path.exists(boundary_filename):
+        [upRow, downRow, leftRow, rightRow, openA, openA, A, A] = pickle.load(open(boundary_filename, 'rb'))
+    else:
+        A, tau, openA, singlet_projector = tensors_from_transfer_matrix(model, param, d=d)
+        singlet_projector = tn.Node(singlet_projector.tensor.reshape([d, d**2]))
+        upRow, downRow, leftRow, rightRow = peps.applyBMPS(tau, tau, d=d**2)
+        upRow = bops.permute(bops.contract(bops.contract(
+            upRow, singlet_projector, '1', '0'), singlet_projector, '1', '0'), [0, 2, 3, 1])
+        rightRow = bops.permute(bops.contract(bops.contract(
+            rightRow, singlet_projector, '1', '0'), singlet_projector, '1', '0'), [0, 2, 3, 1])
+        downRow = bops.permute(bops.contract(bops.contract(
+            downRow, singlet_projector, '1', '0'), singlet_projector, '1', '0'), [0, 2, 3, 1])
+        leftRow = bops.permute(bops.contract(bops.contract(
+            leftRow, singlet_projector, '1', '0'), singlet_projector, '1', '0'), [0, 2, 3, 1])
+        with open(boundary_filename, 'wb') as f:
+            pickle.dump([upRow, downRow, leftRow, rightRow, openA, openA, A, A], f)
+    bond_dim = 2
+    while True:
+        upRow, downRow, rightRow, leftRow, max_te = shrink_boundaries(upRow, downRow, rightRow, leftRow, bond_dim)
+        if max_te > max_allowed_te:
+            bond_dim += 1
+        else:
+            break
+    print('truncation error: ' + str(max_te) + ', bond dim: ' + str(bond_dim))
+    [cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>', maxBondDim=upRow.tensor.shape[0])
+    [cDown, dDown, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>', maxBondDim=downRow.tensor.shape[0])
+    return cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openA
+
+def get_full_purity(w, h, dirname, model, param_name, param):
+    cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB = get_boundaries(dirname, model, param_name, param)
+    norm = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, w, h,
+                                  [tn.Node(np.eye(4)) for i in range(w * h)])
+    cUp = tn.Node(np.kron(cUp.tensor, cUp.tensor))
+    dUp = tn.Node(np.kron(dUp.tensor, dUp.tensor))
+    cDown = tn.Node(np.kron(cDown.tensor, cDown.tensor))
+    dDown = tn.Node(np.kron(dDown.tensor, dDown.tensor))
+    leftRow = tn.Node(np.kron(leftRow.tensor, leftRow.tensor))
+    rightRow = tn.Node(np.kron(rightRow.tensor, rightRow.tensor))
+    A = tn.Node(np.kron(openA.tensor, openA.tensor))
+    B = tn.Node(np.kron(openB.tensor, openB.tensor))
+    single_swap = np.array([[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1]])
+    double_swap = np.kron(single_swap, single_swap).reshape([2] * 8).transpose([3, 2, 1, 0, 4, 5, 6, 7]).reshape(
+        [2 ** 4, 2 ** 4])
+    full_purity = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, h, w,
+                                         [tn.Node(double_swap) for i in range(w * h)])
+    return full_purity
+
+
+def wilson_expectations(model, param, param_name, dirname, plot=False, d=2):
+    cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openA = get_boundaries(dirname, model, param_name, param)
+
+    Ls = np.array(range(2, 8))
+    perimeters = np.zeros(len(Ls))
+    areas = np.zeros(len(Ls))
+    wilson_expectations = np.zeros(len(Ls))
+    for Li in range(len(Ls)):
+        print('L = ' + str(Ls[Li]))
+        wilson_exp, area, perimeter = \
+            square_wilson_loop_expectation_value(cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openA, Ls[Li], d)
+        perimeters[Li] = perimeter
+        areas[Li] = area
+        wilson_expectations[Li] = wilson_exp
+    print(wilson_expectations)
+    pa, residuals, _, _, _ = np.polyfit(areas, np.log(wilson_expectations), 1, full=True)
+    chisq_dof = residuals / (len(areas) - 3)
+    wilson_area = chisq_dof
+    pp, residuals, _, _, _ = np.polyfit(perimeters, np.log(wilson_expectations), 1, full=True)
+    chisq_dof = residuals / (len(perimeters) - 3)
+    wilson_perimeter = chisq_dof
+    if plot:
+        import matplotlib.pyplot as plt
+        ff, axs = plt.subplots(2)
+        axs[0].scatter(areas, np.log(wilson_expectations))
+        axs[0].plot(areas, areas * pa[0] + pa[1])
+        axs[1].scatter(perimeters, np.log(wilson_expectations))
+        axs[1].plot(perimeters, perimeters * pp[0] + pp[1])
+        axs[0].set_title(param_name + ' = ' + str(param))
+        plt.show()
+    return wilson_area, wilson_perimeter
+
+
+def normalized_p2s_data(model, params, Ns, dirname, param_name, d=2):
+    if not os.path.exists(dirname):
+        os.mkdir(dirname)
+    for pi in range(len(params)):
+        param = params[pi]
+        print(param)
+        filename = results_filname(dirname, model, param_name, param, Ns)
+        if os.path.exists(filename):
+            continue
+        boundary_filename = boundary_filname(dirname, model, param_name, param)
+
+        wilson_area, wilson_perimeter = wilson_expectations(model, param, param_name, dirname)
+
+        A, tau, openA, singlet_projector = tensors_from_transfer_matrix(model, param, d=d)
+        tau = np.real(tau.tensor.transpose([0, 2, 1, 3]).reshape([d**2, d**2]))
+        tau_eigenvals = np.zeros(d**2)
+        tau_eigenvals[:2] = np.real(np.linalg.eigvals([[tau[0, 0], tau[0, 3]], [tau[3, 0], tau[3, 3]]]))
+        tau_eigenvals[2:] = np.real(np.linalg.eigvals([[tau[1, 1], tau[1, 2]], [tau[2, 1], tau[2, 2]]]))
+        num_of_sampled_blocks = 63
+        sampled_blocks = [[int(i * d**(2 * n + 2) / num_of_sampled_blocks) for i in range(num_of_sampled_blocks)] for n in Ns]
+        normalized_p2s = [np.zeros(num_of_sampled_blocks) for n in Ns]
+        # curr_rdm_eigvals = [[None for bi in range(num_of_sampled_blocks)] for n in Ns]
+        for ni in range(len(Ns)):
+            n = Ns[ni]
+            for bi in range(num_of_sampled_blocks):
+                b = sampled_blocks[ni][bi]
+                print(n, b)
+                block = get_2_by_n_explicit_block(boundary_filename, n, b, d=d)
+                normalized_p2s[ni][bi] = np.real(np.matmul(block, block).trace()) / block.trace()**2
+                rdm_eigvals = np.linalg.eigvals(block)
+                # curr_rdm_eigvals[ni][bi] = rdm_eigvals
+                if min(rdm_eigvals) < -1e-12:
+                    print('Negative rho eigenvalue!!!')
+                    print(np.round(rdm_eigvals, 20))
+
+        pickle.dump([tau_eigenvals, wilson_area, wilson_perimeter, normalized_p2s, sampled_blocks], open(filename, 'wb'))
+
+def analyze_normalized_p2_data(model, params, Ns, dirname, param_name):
+    import matplotlib.pyplot as plt
+    wilson_areas = np.zeros(len(params))
+    wilson_perimeters = np.zeros(len(params))
+    tau_purities = np.zeros((len(params), 2))
+    num_of_sampled_blocks = 63
+    normalized_p2s = np.zeros((len(params), len(Ns), num_of_sampled_blocks))
+    full_p2s = np.zeros(len(params))
+    for pi in range(len(params)):
+        param = params[pi]
+        print(param)
+        full_p2s[pi] = get_full_purity(2, 2, dirname, model, param_name, param)
+        filename = results_filname(dirname, model, param_name, param, Ns)
+        [tau_eigenvals, wilson_area, wilson_perimeter, curr_normalized_p2s, sampled_blocks] = pickle.load(open(filename, 'rb'))
+        tau_purities[pi, 0] = sum(np.abs(tau_eigenvals[:2])**2)
+        tau_purities[pi, 1] = sum(np.real(tau_eigenvals[2:])**2)
+        for ni in range(len(Ns)):
+            for bi in range(num_of_sampled_blocks):
+                normalized_p2s[pi, ni, bi] = curr_normalized_p2s[ni][bi]
+
+        wilson_areas[pi] = wilson_area
+        wilson_perimeters[pi] = wilson_perimeter
+
+    ff, axs = plt.subplots(4)
+    for i in range(4):
+        axs[0].plot(params, wilson_areas)
+        axs[0].plot(params, wilson_perimeters)
+    axs[1].plot(params, full_p2s)
+    axs[2].plot(params, tau_purities[:, 0])
+    axs[2].plot(params, tau_purities[:, 1], '--')
+    for ni in range(len(Ns)):
+        for bi in range(num_of_sampled_blocks):
+            axs[3].plot(params, normalized_p2s[:, ni, bi])
+    plt.show()
+
+gs = [np.round(0.1 * G, 8) for G in range(20)]
+dirname = 'results/gauge/orus'
+param_name = 'g'
+Ns = [2, 4, 6]
+model = 'orus'
+normalized_p2s_data(model, gs, Ns, dirname, param_name)
+analyze_normalized_p2_data(model, gs, Ns, dirname, param_name)
