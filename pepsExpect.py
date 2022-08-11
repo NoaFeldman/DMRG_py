@@ -4,6 +4,7 @@ import tensornetwork as tn
 import PEPS as peps
 import randomUs as ru
 import pickle
+import gc
 
 d = 2
 
@@ -48,50 +49,85 @@ def applyLocalOperators_detailedBoundary(
         cUps, dUps, cDowns, dDowns, leftRows, rightRows, A, B, h, w, ops):
     if h == 2:
         left = leftRows[0]
-        for i in range(int(w / 2)):
-            left = bops.multiContraction(left, cUps[i], '3', '0', cleanOr1=True)
-            leftUp = applyOpTosite(B, ops[i * 4])
-            leftDown = applyOpTosite(A, ops[i * 4 + 1])
+        for wi in range(int(w / 2)):
+            gc.collect()
+            # print(w, left.tensor.shape, cUps[wi].tensor.shape)
+            left = bops.multiContraction(left, cUps[wi], '3', '0', cleanOr1=True)
+            leftUp = applyOpTosite(B, ops[wi * 4])
+            leftDown = applyOpTosite(A, ops[wi * 4 + 1])
             left = bops.multiContraction(left, leftUp, '23', '30', cleanOr1=True)
             left = bops.multiContraction(left, leftDown, '14', '30', cleanOr1=True)
-            left = bops.multiContraction(left, dDowns[i], '04', '21', cleanOr1=True).reorder_axes([3, 2, 1, 0])
+            left = bops.multiContraction(left, dDowns[wi], '04', '21', cleanOr1=True).reorder_axes([3, 2, 1, 0])
 
-            left = bops.multiContraction(left, dUps[i], '3', '0', cleanOr1=True)
-            rightUp = applyOpTosite(A, ops[i * 4 + 2])
-            rightDown = applyOpTosite(B, ops[i * 4 + 3])
+            left = bops.multiContraction(left, dUps[wi], '3', '0', cleanOr1=True)
+            rightUp = applyOpTosite(A, ops[wi * 4 + 2])
+            rightDown = applyOpTosite(B, ops[wi * 4 + 3])
             left = bops.multiContraction(left, rightUp, '23', '30', cleanOr1=True)
             left = bops.multiContraction(left, rightDown, '14', '30', cleanOr1=True)
-            left = bops.multiContraction(left, cDowns[i], '04', '21', cleanOr1=True).reorder_axes([3, 2, 1, 0])
+            left = bops.multiContraction(left, cDowns[wi], '04', '21', cleanOr1=True).reorder_axes([3, 2, 1, 0])
 
             bops.removeState([leftUp, leftDown, rightDown, rightUp])
 
         return bops.multiContraction(left, rightRows[0], '0123', '3210').tensor * 1
     elif h == 4:
         left = bops.multiContraction(leftRows[0], leftRows[1], '3', '0')
-        for i in range(int(w / 2)):
-            left = bops.multiContraction(left, cUps[i], '5', '0', cleanOr1=True)
-            left0 = applyOpTosite(B, ops[i * 8])
-            left1 = applyOpTosite(A, ops[i * 8 + 1])
-            left2 = applyOpTosite(B, ops[i * 8 + 2])
-            left3 = applyOpTosite(A, ops[i * 8 + 3])
+        for wi in range(int(w / 2)):
+            gc.collect()
+            left = bops.multiContraction(left, cUps[wi], '5', '0', cleanOr1=True)
+            left0 = applyOpTosite(B, ops[wi * 8])
+            left1 = applyOpTosite(A, ops[wi * 8 + 1])
+            left2 = applyOpTosite(B, ops[wi * 8 + 2])
+            left3 = applyOpTosite(A, ops[wi * 8 + 3])
             left = bops.multiContraction(left, left0, '45', '30', cleanOr1=True, cleanOr2=True)
             left = bops.multiContraction(left, left1, '36', '30', cleanOr1=True, cleanOr2=True)
             left = bops.multiContraction(left, left2, '26', '30', cleanOr1=True, cleanOr2=True)
             left = bops.multiContraction(left, left3, '16', '30', cleanOr1=True, cleanOr2=True)
-            left = bops.multiContraction(left, dDowns[i], '06', '21', cleanOr1=True).reorder_axes([5, 4, 3, 2, 1, 0])
+            left = bops.multiContraction(left, dDowns[wi], '06', '21', cleanOr1=True).reorder_axes([5, 4, 3, 2, 1, 0])
 
-            left = bops.multiContraction(left, dUps[i], '5', '0', cleanOr1=True)
-            right0 = applyOpTosite(A, ops[i * 8 + 4])
-            right1 = applyOpTosite(B, ops[i * 8 + 5])
-            right2 = applyOpTosite(A, ops[i * 8 + 6])
-            right3 = applyOpTosite(B, ops[i * 8 + 7])
+            left = bops.multiContraction(left, dUps[wi], '5', '0', cleanOr1=True)
+            right0 = applyOpTosite(A, ops[wi * 8 + 4])
+            right1 = applyOpTosite(B, ops[wi * 8 + 5])
+            right2 = applyOpTosite(A, ops[wi * 8 + 6])
+            right3 = applyOpTosite(B, ops[wi * 8 + 7])
             left = bops.multiContraction(left, right0, '45', '30', cleanOr1=True, cleanOr2=True)
             left = bops.multiContraction(left, right1, '36', '30', cleanOr1=True, cleanOr2=True)
             left = bops.multiContraction(left, right2, '26', '30', cleanOr1=True, cleanOr2=True)
             left = bops.multiContraction(left, right3, '16', '30', cleanOr1=True, cleanOr2=True)
-            left = bops.multiContraction(left, cDowns[i], '06', '21', cleanOr1=True).reorder_axes([5, 4, 3, 2, 1, 0])
+            left = bops.multiContraction(left, cDowns[wi], '06', '21', cleanOr1=True).reorder_axes([5, 4, 3, 2, 1, 0])
         right = bops.multiContraction(rightRows[0], rightRows[1], '3', '0')
         res = bops.multiContraction(left, right, '012345', '543210').tensor * 1
+        return res
+    else:
+        left = leftRows[0]
+        for i in range(1, int(h / 2)):
+            left = bops.contract(left, leftRows[i], [2 * i + 1], '0')
+        for wi in range(int(w / 2)):
+            gc.collect()
+            left = bops.multiContraction(left, cUps[wi], [h + 1], '0', cleanOr1=True)
+            for hi in range(int(h/2)):
+                left_B = applyOpTosite(B, ops[wi * h * 2 + hi * 2])
+                left_A = applyOpTosite(A, ops[wi * h * 2 + hi * 2 + 1])
+                if hi == 0:
+                    left = bops.contract(left, left_B, [h, h + 1], '30', cleanOr1=True, cleanOr2=True)
+                else:
+                    left = bops.contract(left, left_B, [h - hi * 2, h + 2], '30', cleanOr1=True, cleanOr2=True)
+                left = bops.contract(left, left_A, [h - hi * 2 - 1, h + 2], '30', cleanOr1=True, cleanOr2=True)
+            left = bops.contract(left, dDowns[wi], [0, h + 2], '21', cleanOr1=True).reorder_axes(list(range(h + 1, -1, -1)))
+
+            left = bops.multiContraction(left, dUps[wi], [h + 1], '0', cleanOr1=True)
+            for hi in range(int(h/2)):
+                left_A = applyOpTosite(A, ops[wi * h * 2 + h + hi * 2])
+                left_B = applyOpTosite(B, ops[wi * h * 2 + h + hi * 2 + 1])
+                if hi == 0:
+                    left = bops.contract(left, left_A, [h, h + 1], '30', cleanOr1=True, cleanOr2=True)
+                else:
+                    left = bops.contract(left, left_A, [h - hi * 2, h + 2], '30', cleanOr1=True, cleanOr2=True)
+                left = bops.contract(left, left_B, [h - hi * 2 - 1, h + 2], '30', cleanOr1=True, cleanOr2=True)
+            left = bops.contract(left, cDowns[wi], [0, h + 2], '21', cleanOr1=True).reorder_axes(list(range(h + 1, -1, -1)))
+        right = rightRows[0]
+        for i in range(1, int(h / 2)):
+            right = bops.contract(right, rightRows[i], [2 * i + 1], '0')
+        res = bops.contract(left, right, list(range(h+2)), list(range(h+1, -1, -1))).tensor * 1
         return res
 
 
