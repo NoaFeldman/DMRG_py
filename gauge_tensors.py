@@ -156,9 +156,40 @@ def toric_tensors_lgt_approach(model, param, d=2):
         for i in range(d):
             for j in range(d):
                 tensor[i, j, :, :, :, :] *= (1 + param)**(i + j)
+    elif model == 'toric_c':
+        tensor = np.zeros([2] * 10)
+        tensor[0, 0, 0, 0, 0, 0, 0, 0, 0, 0] = 1
+        A = tn.Node(tensor)
+        x = tn.Node(X)
+        A.tensor = A.tensor + param**0.25 * bops.contract(bops.contract(bops.permute(bops.contract(bops.contract(
+            x, A, '1', '0'), x, '2', '1'), [0, 1, 9] + list(range(2, 9))), x, '8', '1'), x, '8', '1').tensor
+        A.tensor = A.tensor + param**0.25 * bops.contract(bops.permute(bops.contract(bops.permute(bops.contract(
+            A, x, '3', '1'), [0, 1, 2, 9] + list(range(3, 9))), x, '4', '1'), [0, 1, 2, 3, 9] + list(range(4, 9))),
+            x, '9', '1').tensor
+        A.tensor = A.tensor + param**0.25 * bops.permute(bops.contract(bops.permute(bops.contract(
+            A, x, '5', '1'), list(range(5)) + [9, 5, 6, 7, 8]), x, '7', '1'), list(range(7)) + [9, 7, 8]).tensor
+        A.tensor = A.tensor + param**0.25 * bops.permute(bops.contract(bops.permute(bops.contract(bops.permute(bops.contract(
+            A, x, '1', '1'), [0, 9] + list(range(1, 9))), x, '7', '1'), list(range(7)) + [9, 7, 8]),
+            x, '8', '1'), list(range(8)) + [9, 8]).tensor
+        return tn.Node(A.tensor.reshape([4] * 5))
+        return A
     A = tn.Node(tensor.reshape([d] * 4 + [d**2]))
     return A
 
+A = toric_tensors_lgt_approach('toric_c', 0.5)
+T = bops.permute(bops.contract(A, A, '4', '4*'), [0, 2, 4, 6, 1, 3, 5, 7])
+singlet_projector_tensor = np.zeros((4, 4, 4**2))
+for i in [0, 3]:
+    for j in [0, 3]:
+        singlet_projector_tensor[i, j, i * 4 + j] = 1
+for i in [1, 2]:
+    for j in [1, 2]:
+        singlet_projector_tensor[i, j, i * 4 + j] = 1
+singlet_proj = tn.Node(singlet_projector_tensor)
+tau = bops.contract(bops.contract(bops.contract(bops.contract(
+    T, singlet_proj, '01', '01'), singlet_proj, '01', '01'), singlet_proj, '01', '01'), singlet_proj, '01', '01')
+tau_mat = tau.tensor.transpose([0, 2, 1, 3]).reshape([4**4, 4**4])
+dbg = 1
 
 def numberToBase(n, b):
     if n == 0:
@@ -240,6 +271,7 @@ def get_full_purity(w, h, dirname, model, param_name, param):
     cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB = get_boundaries(dirname, model, param_name, param)
     norm = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, w, h,
                                   [tn.Node(np.eye(4)) for i in range(w * h)])
+    leftRow.tensor /= norm**(h / 2)
     cUp = tn.Node(np.kron(cUp.tensor, cUp.tensor))
     dUp = tn.Node(np.kron(dUp.tensor, dUp.tensor))
     cDown = tn.Node(np.kron(cDown.tensor, cDown.tensor))
@@ -338,9 +370,11 @@ def analyze_normalized_p2_data(model, params, Ns, dirname, param_name):
         param = params[pi]
         print(param)
         full_p2s[pi] = get_full_purity(2, 2, dirname, model, param_name, param)
+        print(full_p2s[pi])
         filename = results_filname(dirname, model, param_name, param, Ns)
         [tau_eigenvals, wilson_area, wilson_perimeter, curr_normalized_p2s, sampled_blocks] = pickle.load(open(filename, 'rb'))
-        tau_purities[pi, 0] = sum(np.abs(tau_eigenvals[:2])**2)
+        print(tau_eigenvals / np.sum(tau_eigenvals))
+        tau_purities[pi, 0] = sum(np.abs(tau_eigenvals[:2] / sum(tau_eigenvals))**2)
         tau_purities[pi, 1] = sum(np.real(tau_eigenvals[2:])**2)
         for ni in range(len(Ns)):
             for bi in range(num_of_sampled_blocks):
@@ -349,16 +383,18 @@ def analyze_normalized_p2_data(model, params, Ns, dirname, param_name):
         wilson_areas[pi] = wilson_area
         wilson_perimeters[pi] = wilson_perimeter
 
-    ff, axs = plt.subplots(4)
+    ff, axs = plt.subplots(3)
     for i in range(4):
         axs[0].plot(params, wilson_areas)
         axs[0].plot(params, wilson_perimeters)
+    axs[0].legend([r'area law $\chi^2$'])
+    axs[0].legend([r'perimeter law $\chi^2$'])
     axs[1].plot(params, full_p2s)
-    axs[2].plot(params, tau_purities[:, 0])
-    axs[2].plot(params, tau_purities[:, 1], '--')
+    # axs[2].plot(params, tau_purities[:, 0])
+    # axs[2].plot(params, tau_purities[:, 1], '--')
     for ni in range(len(Ns)):
         for bi in range(num_of_sampled_blocks):
-            axs[3].plot(params, normalized_p2s[:, ni, bi])
+            axs[2].plot(params, normalized_p2s[:, ni, bi])
     plt.show()
 
 gs = [np.round(0.1 * G, 8) for G in range(20)]
