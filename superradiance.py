@@ -93,50 +93,70 @@ def get_pair_L_terms(Deltas, gammas, nearest_neighbors_num, sigma):
      [[(1j * Deltas[i] - gammas[i] / 2) * D for i in range(nearest_neighbors_num)], C]]
 
 
-def get_photon_green_L_exp(n, Omega, Gamma, k, theta, sigma, case='kernel', nearest_neighbors_num=1, exp_coeffs=[0]):
+
+def check_exponent_approximation(n, Gamma, k, theta, case='kernel'):
+    Deltas, gammas = get_gnm(Gamma, k, theta, n - 1, case)
+    Gs = Deltas - 1j * gammas / 2
+    aG, bG, cG, pG, qG = fit_exponential(Gs)
+    ag, bg, cg, pg, qg = fit_exponential(gammas)
+    import matplotlib.pyplot as plt
+    ns = np.array(range(1, n))
+    plt.plot(ns, gammas)
+    plt.plot(ns, ag + bg * np.exp(pg * ns) + cg * np.exp(qg * ns))
+    plt.show()
+    plt.plot(ns, np.real(Gs))
+    plt.plot(ns, np.real(bG * np.exp(pG * ns) + cG * np.exp(qG * ns)))
+    plt.show()
+    plt.plot(ns, np.imag(Gs))
+    plt.plot(ns, np.imag(bG * np.exp(pG * ns) + cG * np.exp(qG * ns)))
+    plt.show()
+
+
+def get_photon_green_L_exp(n, Omega, Gamma, k, theta, sigma, case='kernel'):
     d = 2
     S = get_single_L_term(Omega, Gamma, sigma)
-    Deltas, gammas = get_gnm(Gamma, k, theta, nearest_neighbors_num, case)
-    ad, bd, cd, pd, qd = fit_exponential(Deltas)
-    print('neglecting constant in Deltas fit:' + str(ad / np.max(Deltas)))
-    ag, bg, cg, pg, qg = fit_exponential(Deltas)
-    print('neglecting constant in Gammas fit:' + str(ag / np.max(Deltas)))
-    interacting_terms = [[-1j * bd * np.kron(I, sigma.T)], [np.exp(pd) * I], [np.exp(pd) * np.kron(I, sigma)] +
-                         [-1j * cd * np.kron(I, sigma.T)], [np.exp(qd) * I], [np.exp(qd) * np.kron(I, sigma)] +
-                         [-1j * bd * np.kron(I, sigma)], [np.exp(pd) * I], [np.exp(pd) * np.kron(I, sigma.T)] +
-                         [-1j * cd * np.kron(I, sigma)], [np.exp(qd) * I], [np.exp(qd) * np.kron(I, sigma.T)] +
-                         [-0.5 * bg * np.kron(I, sigma.T)], [np.exp(pg) * I], [np.exp(pg) * np.kron(I, sigma)] +
-                         [-0.5 * cg * np.kron(I, sigma.T)], [np.exp(qg) * I], [np.exp(qg) * np.kron(I, sigma)] +
-                         [-0.5 * bg * np.kron(I, sigma)], [np.exp(pg) * I], [np.exp(pg) * np.kron(I, sigma.T)] +
-                         [-0.5 * cg * np.kron(I, sigma)], [np.exp(qg) * I], [np.exp(qg) * np.kron(I, sigma.T)] +
-                         [1j * bd * np.kron(sigma.T, I)], [np.exp(pd) * I], [np.exp(pd) * np.kron(sigma, I)] +
-                         [1j * cd * np.kron(sigma.T, I)], [np.exp(qd) * I], [np.exp(qd) * np.kron(sigma, I)] +
-                         [1j * bd * np.kron(sigma, I)], [np.exp(pd) * I], [np.exp(pd) * np.kron(sigma.T, I)] +
-                         [1j * cd * np.kron(sigma, I)], [np.exp(qd) * I], [np.exp(qd) * np.kron(sigma.T, I)] +
-                         [0.5 * bg * np.kron(sigma.T, I)], [np.exp(pg) * I], [np.exp(pg) * np.kron(sigma, I)] +
-                         [0.5 * cg * np.kron(sigma.T, I)], [np.exp(qg) * I], [np.exp(qg) * np.kron(sigma, I)] +
-                         [0.5 * bg * np.kron(sigma, I)], [np.exp(pg) * I], [np.exp(pg) * np.kron(sigma.T, I)] +
-                         [0.5 * cg * np.kron(sigma, I)], [np.exp(qg) * I], [np.exp(qg) * np.kron(sigma.T, I)] +
-                         [bg * np.kron(sigma, I)], [np.exp(pg) * I], [np.exp(pg) * np.kron(I, sigma)] +
-                         [cg * np.kron(sigma, I)], [np.exp(qg) * I], [np.exp(qg) * np.kron(I, sigma)] +
-                         [bg * np.kron(I, sigma)], [np.exp(pg) * I], [np.exp(pg) * np.kron(sigma, I)] +
-                         [cg * np.kron(I, sigma)], [np.exp(qg) * I], [np.exp(qg) * np.kron(sigma, I)]
+    Deltas, gammas = get_gnm(Gamma, k, theta, n - 1, case)
+    Gs = Deltas - 1j * gammas / 2
+    aG, bG, cG, pG, qG = fit_exponential(Gs)
+    print('neglecting constant in Gs fit:' + str(aG / np.max(np.abs(Gs))))
+    ag, bg, cg, pg, qg = fit_exponential(gammas)
+    print('neglecting constant in gammas fit:' + str(ag / np.max(gammas)))
+    interacting_terms = [[-1j * bG * np.kron(I, sigma.T), np.exp(pG) * np.kron(I, I), np.exp(pG) * np.kron(I, sigma)],
+                         [-1j * cG * np.kron(I, sigma.T), np.exp(qG) * np.kron(I, I), np.exp(qG) * np.kron(I, sigma)],
+                         [-1j * bG * np.kron(I, sigma), np.exp(pG) * np.kron(I, I), np.exp(pG) * np.kron(I, sigma.T)],
+                         [-1j * cG * np.kron(I, sigma), np.exp(qG) * np.kron(I, I), np.exp(qG) * np.kron(I, sigma.T)],
+                         [-1j * aG * np.kron(I, sigma), np.kron(I, I), np.kron(I, sigma.T)],
+                         [1j * np.conj(bG) * np.kron(sigma.T, I), np.conj(np.exp(pG)) * np.kron(I, I), np.conj(np.exp(pG)) * np.kron(sigma, I)],
+                         [1j * np.conj(cG) * np.kron(sigma.T, I), np.conj(np.exp(qG)) * np.kron(I, I), np.conj(np.exp(qG)) * np.kron(sigma, I)],
+                         [1j * np.conj(bG) * np.kron(sigma, I), np.conj(np.exp(pG)) * np.kron(I, I), np.conj(np.exp(pG)) * np.kron(sigma.T, I)],
+                         [1j * np.conj(cG) * np.kron(sigma, I), np.conj(np.exp(qG)) * np.kron(I, I), np.conj(np.exp(qG)) * np.kron(sigma.T, I)],
+                         [1j * aG * np.kron(sigma, I), np.kron(I, I), np.kron(sigma.T, I)],
+                         [bg * np.kron(sigma, I), np.exp(pg) * np.kron(I, I), np.exp(pg) * np.kron(I, sigma)],
+                         [cg * np.kron(sigma, I), np.exp(qg) * np.kron(I, I), np.exp(qg) * np.kron(I, sigma)],
+                         [bg * np.kron(I, sigma), np.exp(pg) * np.kron(I, I), np.exp(pg) * np.kron(sigma, I)],
+                         [cg * np.kron(I, sigma), np.exp(qg) * np.kron(I, I), np.exp(qg) * np.kron(sigma, I)],
+                         [ag * np.kron(I, sigma), np.kron(I, I), np.kron(sigma, I)]
                          ]
-    operators_len = 2 + 20 # TODO I need more here - also for the mid-Is in the interaction term
+    operators_len = 2 + len(interacting_terms)
     nothing_yet_ind = operators_len - 1
+    already_finished_ind = operators_len - 2
     left_tensor = np.zeros((d ** 2, d ** 2, 1, operators_len), dtype=complex)
     mid_tensor = np.zeros((d ** 2, d ** 2, operators_len, operators_len), dtype=complex)
     right_tensor = np.zeros((d ** 2, d ** 2, operators_len, 1), dtype=complex)
-    left_tensor[:, :, 0, 0] = S.T
-    left_tensor[:, :, 0, nothing_yet_ind] = I
-    mid_tensor[:, :, nothing_yet_ind, 0] = S.T
-    mid_tensor[:, :, 0, 0] = I
-    mid_tensor[:, :, nothing_yet_ind, nothing_yet_ind] = I
+    left_tensor[:, :, 0, already_finished_ind] = S.T
+    left_tensor[:, :, 0, nothing_yet_ind] = np.kron(I, I)
+    mid_tensor[:, :, nothing_yet_ind, already_finished_ind] = S.T
+    mid_tensor[:, :, already_finished_ind, already_finished_ind] = np.kron(I, I)
+    mid_tensor[:, :, nothing_yet_ind, nothing_yet_ind] = np.kron(I, I)
     right_tensor[:, :, nothing_yet_ind, 0] = S.T
-    right_tensor[:, :, 0, 0] = I
+    right_tensor[:, :, 0, 0] = np.kron(I, I)
     for term_i in range(len(interacting_terms)):
-        left_tensor[:, :, 0, term_i + 1] = interacting_terms[term_i][0]
-        left_tensor[:, :, term_i + 1, ] = interacting_terms[term_i][0]
+        left_tensor[:, :, 0, term_i] = interacting_terms[term_i][0].T
+        mid_tensor[:, :, nothing_yet_ind, term_i] = interacting_terms[term_i][0].T
+        mid_tensor[:, :, term_i, term_i] = interacting_terms[term_i][1].T
+        mid_tensor[:, :, term_i, already_finished_ind] = interacting_terms[term_i][2].T
+        right_tensor[:, :, term_i, 0] = interacting_terms[term_i][2].T
+    return [tn.Node(left_tensor)] + [tn.Node(mid_tensor) for si in range(n - 2)] + [tn.Node(right_tensor)]
 
 
 def get_photon_green_L(n, Omega, Gamma, k, theta, sigma, opt='NN', case='kernel', nearest_neighbors_num=1, exp_coeffs=[0]):
@@ -233,7 +253,7 @@ def get_j_expect(rho, N, sigma):
 d = 2
 Gamma = 1
 sigma = np.array([[0, 0], [1, 0]])
-I = np.eye(2).reshape([1, d ** 2, 1])
+I = np.eye(2)
 X = np.array([[0, 1], [1, 0]])
 Z = np.diag([1, -1])
 
@@ -259,7 +279,7 @@ except FileExistsError:
 if results_to == 'plot':
     import matplotlib.pyplot as plt
 
-# L_exp = get_photon_green_L_exp(N, Omega, Gamma, k, theta, sigma, case, nn_num)
+L_exp = get_photon_green_L_exp(N, Omega, Gamma, k, theta, sigma)
 L = get_photon_green_L(N, Omega, Gamma, k, theta, sigma, case=case, nearest_neighbors_num=nn_num)
 psi = [tn.Node(np.array([1, 0, 0, 0]).reshape([1, d**2, 1])) for n in range(N)]
 if N <= 6:
@@ -282,19 +302,50 @@ if N <= 6:
                            np.kron(np.matmul(sigmas[n].T, sigmas[m]), np.eye(d**N))
                 L_exact += gammas[np.abs(m - n)] * np.kron(sigmas[n], sigmas[m])
 
+
     explicit_L = bops.contract(L[0], L[1], '3', '2')
+    explicit_L_exp = bops.contract(L_exp[0], L_exp[1], '3', '2')
     explicit_rho = bops.contract(psi[0], psi[1], '2', '0')
     for ni in range(2, N):
         explicit_L = bops.contract(explicit_L, L[ni], [2 * ni + 1], '2')
+        explicit_L_exp = bops.contract(explicit_L_exp, L_exp[ni], [2 * ni + 1], '2')
         explicit_rho = bops.contract(explicit_rho, psi[ni], [ni + 1], '0')
     L_mat = explicit_L.tensor.reshape([d] * 4 * N).transpose([4 * i for i in range(N)]
                                                              + [1 + 4 * i for i in range(N)]
                                                              + [2 + 4 * i for i in range(N)]
                                                              + [3 + 4 * i for i in range(N)])\
         .reshape([d**(2 * N), d**(2 * N)]).T
+    L_exp_mat = explicit_L_exp.tensor.reshape([d] * 4 * N).transpose([4 * i for i in range(N)]
+                                                             + [1 + 4 * i for i in range(N)]
+                                                             + [2 + 4 * i for i in range(N)]
+                                                             + [3 + 4 * i for i in range(N)])\
+        .reshape([d**(2 * N), d**(2 * N)]).T
+    Deltas, gammas = get_gnm(Gamma, k, theta, N - 1, case)
+    Gs = Deltas - 1j * gammas / 2
+    aG, bG, cG, pG, qG = fit_exponential(Gs)
+    ag, bg, cg, pg, qg = fit_exponential(gammas)
+    L_exp_exact = np.zeros((d**(2 * N), d**(2 * N)), dtype=complex)
+    for n in range(N):
+        L_exp_exact += - 0.5 * np.kron(np.eye(d ** N), np.matmul(sigmas[n].T, sigmas[n]))
+        L_exp_exact += - 0.5 * np.kron(np.matmul(sigmas[n].T, sigmas[n]), np.eye(d ** N))
+        L_exp_exact += np.kron(sigmas[n], sigmas[n])
+        for m in range(N):
+            if m != n and np.abs(m - n) <= nn_num:
+                L_exp_exact += (-1j * (aG + bG * np.exp(pG * np.abs(m - n)) + cG * np.exp(qG * np.abs(m - n)))) * \
+                           np.kron(np.eye(d ** N), np.matmul(sigmas[n].T, sigmas[m]))
+                L_exp_exact += (1j * np.conj(aG + bG * np.exp(pG * np.abs(m - n)) + cG * np.exp(qG * np.abs(m - n)))) * \
+                           np.kron(np.matmul(sigmas[n].T, sigmas[m]), np.eye(d ** N))
+                L_exp_exact += (ag + bg * np.exp(pg * np.abs(m - n)) + cg * np.exp(qg * np.abs(m - n))) * np.kron(sigmas[n], sigmas[m])
     rho_vec = bops.getExplicitVec(psi, d**2)
+    rho_vec_exp = np.copy(rho_vec)
+    rho_vec_exp_exact = np.copy(rho_vec)
     evolver_L = linalg.expm(L_mat * dt)
     J_expect_L = np.zeros(timesteps)
+    evolver_L_exp = linalg.expm(L_exp_mat * dt)
+    J_expect_L_exp = np.zeros(timesteps)
+    evolver_L_exp_exact = linalg.expm(L_exp_exact * dt)
+    J_expect_L_exp_exact = np.zeros(timesteps)
+
     z_inds = [[i + d**N * i,
                2 * bin(i).split('b')[1].count('1') - N]
               for i in range(d**N)]
@@ -304,11 +355,18 @@ if N <= 6:
     JdJ = np.matmul(J.conj().T, J)
     for ti in range(timesteps):
         J_expect_L[ti] = np.abs(np.trace(np.matmul(JdJ, rho_vec.reshape([d**N, d**N]))))
+        J_expect_L_exp[ti] = np.abs(np.trace(np.matmul(JdJ, rho_vec_exp.reshape([d**N, d**N]))))
+        J_expect_L_exp_exact[ti] = np.abs(np.trace(np.matmul(JdJ, rho_vec_exp_exact.reshape([d**N, d**N]))))
         rho_vec = np.matmul(evolver_L, rho_vec)
+        rho_vec_exp = np.matmul(evolver_L_exp, rho_vec_exp)
+        rho_vec_exp_exact = np.matmul(evolver_L_exp_exact, rho_vec_exp_exact)
         rhos.append(rho_vec)
 
     if results_to == 'plot':
         plt.plot(J_expect_L)
+        plt.plot(J_expect_L_exp)
+        plt.plot(J_expect_L_exp_exact)
+        plt.show()
     else:
         with open(outdir + '/explicit_J_expect', 'wb') as f:
             pickle.dump(J_expect_L, f)

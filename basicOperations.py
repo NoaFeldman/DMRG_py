@@ -639,6 +639,6 @@ def vector_to_mps(psi, d, N):
     return result
 
 
-def normalize_mps_of_dm(rho, d=2):
+def normalize_mps_of_dm(rho, k, d=2):
     if d == 2:
-        rho[-1].tensor /= getOverlap(rho, [tn.Node(np.array([1, 0, 0, 1]).reshape([1, 4, 1])) for i in range(len(rho))])
+        rho[k].tensor /= getOverlap(rho, [tn.Node(np.array([1, 0, 0, 1]).reshape([1, d**2, 1])) for i in range(len(rho))])
