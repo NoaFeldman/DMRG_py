@@ -399,6 +399,12 @@ runtimes_2 = np.zeros(timesteps)
 runtimes_2_exp = np.zeros(timesteps)
 runtimes_1_exp = np.zeros(timesteps)
 
+tes_1 = np.zeros(timesteps)
+tes_1_corrected = np.zeros(timesteps)
+tes_2 = np.zeros(timesteps)
+tes_2_exp = np.zeros(timesteps)
+tes_1_exp = np.zeros(timesteps)
+
 initial_ti = 0
 for file in os.listdir(newdir):
     if file[-3:] == '_1s':
@@ -408,46 +414,48 @@ for file in os.listdir(newdir):
             data = pickle.load(open(newdir + '/' + file, 'rb'))
             [ti, psi, projectors_left, projectors_right] = data[:4]
             runtimes_1[:len(data[4])] = data[4]
+            if len(data) > 5: tes_1[:len(data[5])] = data[5]
 if initial_ti > 0:
     state_filename, data_filename = filenames(newdir, case, N, Omega, nn_num, initial_ti - 1, bond_dim)
     data = pickle.load(open(state_filename + '_2s', 'rb'))
     [_, psi_2, hl_2, hr_2] = data[:4]
     runtimes_2[:len(data[4])] = data[4]
+    if len(data) > 5: tes_2[:len(data[5])] = data[5]
     data = pickle.load(open(state_filename + '_1s_low_preselection', 'rb'))
     [_, psi_1_corrected_w, hl_1_corrected, hr_1_corrected] = data[:4]
     runtimes_1_corrected[:len(data[4])] = data[4]
-    try:
-        data = pickle.load(open(state_filename + '_2s_exp', 'rb'))
-        [_, psi_2_exp, hl_2_exp, hr_2_exp] = data[:4]
-        runtimes_2_exp[:len(data[4])] = data[4]
-        data = pickle.load(open(state_filename + '_1s_exp', 'rb'))
-        [_, psi_1_exp, hl_1_exp, hr_1_exp] = data[:4]
-        runtimes_1_exp[:len(data[4])] = data[4]
-    except FileNotFoundError:
-        pass
+    if len(data) > 5: tes_1_corrected[:len(data[5])] = data[5]
+    data = pickle.load(open(state_filename + '_2s_exp', 'rb'))
+    [_, psi_2_exp, hl_2_exp, hr_2_exp] = data[:4]
+    runtimes_2_exp[:len(data[4])] = data[4]
+    if len(data) > 5: tes_2_exp[:len(data[5])] = data[5]
+    data = pickle.load(open(state_filename + '_1s_exp', 'rb'))
+    [_, psi_1_exp, hl_1_exp, hr_1_exp] = data[:4]
+    runtimes_1_exp[:len(data[4])] = data[4]
+    if len(data) > 5: tes_1_exp[:len(data[5])] = data[5]
 
 for ti in range(initial_ti, timesteps):
     print('---')
     print(ti)
     tstart = time.time()
-    tdvp.tdvp_sweep(psi, L, projectors_left, projectors_right, dt / 2, max_bond_dim=bond_dim, num_of_sites=1)
+    tes_1[ti] = tdvp.tdvp_sweep(psi, L, projectors_left, projectors_right, dt / 2, max_bond_dim=bond_dim, num_of_sites=1)
     tf = time.time()
     runtimes_1[ti] = tf - tstart
     tstart = time.time()
-    tdvp.tdvp_sweep(psi_1_corrected_w, L, hl_1_corrected, hr_1_corrected, dt / 2, max_bond_dim=bond_dim, num_of_sites=1,
-                    max_trunc=12)
+    tes_1_corrected[ti] = tdvp.tdvp_sweep(psi_1_corrected_w, L, hl_1_corrected, hr_1_corrected, dt / 2,
+                                          max_bond_dim=bond_dim, num_of_sites=1, max_trunc=12)
     tf = time.time()
     runtimes_1_corrected[ti] = tf - tstart
     tstart = time.time()
-    tdvp.tdvp_sweep(psi_2, L, hl_2, hr_2, dt / 2, max_bond_dim=bond_dim, num_of_sites=2)
+    tes_2[ti] = tdvp.tdvp_sweep(psi_2, L, hl_2, hr_2, dt / 2, max_bond_dim=bond_dim, num_of_sites=2)
     tf = time.time()
     runtimes_2[ti] = tf - tstart
     tstart = time.time()
-    tdvp.tdvp_sweep(psi_2_exp, L_exp, hl_2_exp, hr_2_exp, dt / 2, max_bond_dim=bond_dim, num_of_sites=2)
+    tes_2_exp[ti] = tdvp.tdvp_sweep(psi_2_exp, L_exp, hl_2_exp, hr_2_exp, dt / 2, max_bond_dim=bond_dim, num_of_sites=2)
     tf = time.time()
     runtimes_2_exp[ti] = tf - tstart
     tstart = time.time()
-    tdvp.tdvp_sweep(psi_1_exp, L_exp, hl_1_exp, hr_1_exp, dt / 2, max_bond_dim=bond_dim, num_of_sites=1)
+    tes_1_exp[ti] = tdvp.tdvp_sweep(psi_1_exp, L_exp, hl_1_exp, hr_1_exp, dt / 2, max_bond_dim=bond_dim, num_of_sites=1)
     tf = time.time()
     runtimes_1_exp[ti] = tf - tstart
     print('times = ' + str([runtimes_1[ti], runtimes_2[ti], runtimes_1_corrected[ti], runtimes_2_exp[ti], runtimes_1_exp[ti]]))
@@ -460,15 +468,15 @@ for ti in range(initial_ti, timesteps):
         os.remove(old_state_filename + '_1s_exp')
     state_filename, data_filename = filenames(newdir, case, N, Omega, nn_num, ti, bond_dim)
     with open(state_filename + '_1s', 'wb') as f:
-        pickle.dump([ti, psi, projectors_left, projectors_right, runtimes_1], f)
+        pickle.dump([ti, psi, projectors_left, projectors_right, runtimes_1, tes_1], f)
     with open(state_filename + '_1s_low_preselection', 'wb') as f:
-        pickle.dump([ti, psi_1_corrected_w, hl_1_corrected, hr_1_corrected, runtimes_1_corrected], f)
+        pickle.dump([ti, psi_1_corrected_w, hl_1_corrected, hr_1_corrected, runtimes_1_corrected, tes_1_corrected], f)
     with open(state_filename + '_2s', 'wb') as f:
-        pickle.dump([ti, psi_2, hl_2, hr_2, runtimes_2], f)
+        pickle.dump([ti, psi_2, hl_2, hr_2, runtimes_2, tes_2], f)
     with open(state_filename + '_2s_exp', 'wb') as f:
         pickle.dump([ti, psi_2_exp, hl_2_exp, hr_2_exp, runtimes_2_exp], f)
     with open(state_filename + '_1s_exp', 'wb') as f:
-        pickle.dump([ti, psi_1_exp, hl_1_exp, hr_1_exp, runtimes_1_exp], f)
+        pickle.dump([ti, psi_1_exp, hl_1_exp, hr_1_exp, runtimes_1_exp, tes_1_exp], f)
 
 if results_to == 'plot':
     J_expect_1 = np.zeros(int(timesteps / save_each))
