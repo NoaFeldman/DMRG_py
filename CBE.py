@@ -22,7 +22,7 @@ def get_dm(psi):
 
 # Fig 2
 # Assuming k is the OC
-def get_op_tilde_tr(psi: List[tn.Node], k: int, HL: List[tn.Node], HR: List[tn.Node], H: List[tn.Node], dir, D:int, max_trunc=6):
+def get_op_tilde_tr(psi: List[tn.Node], k: int, HL: List[tn.Node], HR: List[tn.Node], H: List[tn.Node], dir, D:int, max_trunc=4):
     if k == -1 or k == len(psi) - 1:
         return
     M = bops.contract(psi[k], psi[k+1], '2', '0')
