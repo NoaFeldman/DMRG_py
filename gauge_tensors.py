@@ -23,6 +23,30 @@ def boundary_binary_string(i, N):
     return curr
 
 
+# TODO doubt everything above this line
+
+
+# |\psi> = \prod_p (1 + cX^p)|0>
+# This construction does not obey Erez's requirement, but it has D=2
+def get_toric_c_tensors(c):
+    A_tensor = np.zeros((2, 2, 2, 2, 2, 2), dtype=complex)
+    for i in range(2):
+        for j in range(2):
+            for k in range(2):
+                A_tensor[i, i, k, j, (1 + j) % 2, (i + k) % 2] = c**i
+    A = tn.Node(A_tensor.reshape([2] * 4 + [4]))
+    boundaries_filename = 'results/gauge/toric_c/toricBoundaries_c_' + str(c)
+    if not os.path.exists(boundaries_filename):
+        AEnv = tn.Node(bops.permute(bops.contract(A, A, '4', '4*'), [0, 4, 1, 5, 2, 6, 3, 7]).tensor.reshape([4] * 4))
+        upRow, downRow, leftRow, rightRow = peps.applyBMPS(AEnv, AEnv, d=d ** 2)
+        openA = tn.Node(np.kron(A.tensor, A.tensor.conj()).reshape([4] * 4 + [2, 2]).transpose([4, 0, 1, 2, 3, 5]))
+        with open(boundaries_filename, 'wb') as f:
+            pickle.dump([upRow, downRow, leftRow, rightRow, openA, openA, A, A], f)
+    [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, A, B] = \
+        get_boundaries_from_file(boundaries_filename, 2, 2)
+    return [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, A, B]
+
+
 def square_wilson_loop_expectation_value(cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, L, d=2):
     w = int(np.ceil((L+1)/2)) * 2
     h = w
@@ -88,8 +112,6 @@ def square_wilson_loop_expectation_value(cUp, dUp, cDown, dDown, leftRow, rightR
     result = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, h, w, ops)
     return result, L**2, 4 * L
 
-
-# TODO doubt everything above this line
 
 def get_boundaries_from_file(filename, w, h):
     with open(filename, 'rb') as f:
@@ -175,21 +197,6 @@ def toric_tensors_lgt_approach(model, param, d=2):
         return A
     A = tn.Node(tensor.reshape([d] * 4 + [d**2]))
     return A
-
-A = toric_tensors_lgt_approach('toric_c', 0.5)
-T = bops.permute(bops.contract(A, A, '4', '4*'), [0, 2, 4, 6, 1, 3, 5, 7])
-singlet_projector_tensor = np.zeros((4, 4, 4**2))
-for i in [0, 3]:
-    for j in [0, 3]:
-        singlet_projector_tensor[i, j, i * 4 + j] = 1
-for i in [1, 2]:
-    for j in [1, 2]:
-        singlet_projector_tensor[i, j, i * 4 + j] = 1
-singlet_proj = tn.Node(singlet_projector_tensor)
-tau = bops.contract(bops.contract(bops.contract(bops.contract(
-    T, singlet_proj, '01', '01'), singlet_proj, '01', '01'), singlet_proj, '01', '01'), singlet_proj, '01', '01')
-tau_mat = tau.tensor.transpose([0, 2, 1, 3]).reshape([4**4, 4**4])
-dbg = 1
 
 def numberToBase(n, b):
     if n == 0:
@@ -288,8 +295,11 @@ def get_full_purity(w, h, dirname, model, param_name, param):
     return full_purity
 
 
-def wilson_expectations(model, param, param_name, dirname, plot=False, d=2):
-    cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openA = get_boundaries(dirname, model, param_name, param)
+def wilson_expectations(model, param, param_name, dirname, plot=False, d=2, boundaries=None):
+    if boundaries is None:
+        cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openA = get_boundaries(dirname, model, param_name, param)
+    else:
+        cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openA = boundaries
 
     Ls = np.array(range(2, 8))
     perimeters = np.zeros(len(Ls))
@@ -397,10 +407,25 @@ def analyze_normalized_p2_data(model, params, Ns, dirname, param_name):
             axs[2].plot(params, normalized_p2s[:, ni, bi])
     plt.show()
 
-gs = [np.round(0.1 * G, 8) for G in range(20)]
-dirname = 'results/gauge/orus'
-param_name = 'g'
-Ns = [2, 4, 6]
-model = 'orus'
-normalized_p2s_data(model, gs, Ns, dirname, param_name)
-analyze_normalized_p2_data(model, gs, Ns, dirname, param_name)
+
+cs = [np.round(0.1 * i, 8) for i in range(11)]
+wilson_areas = np.zeros(len(cs))
+wilson_perimeters = np.zeros(len(cs))
+for ci in range(len(cs)):
+    c = cs[ci]
+    print(c)
+    [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, A, B] = get_toric_c_tensors(c)
+    wilson_area, wilson_perimeter = wilson_expectations('toric_c', c, 'c', 'results/gauge',
+                                    boundaries=[cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB])
+    print(wilson_area, wilson_perimeter)
+    wilson_areas[ci] = wilson_area
+    wilson_perimeters[ci] = wilson_perimeter
+pickle.dump([wilson_areas, wilson_perimeters], open('results/gauge/toric_c/wilson_exps', 'wb'))
+
+# gs = [np.round(0.1 * G, 8) for G in range(20)]
+# dirname = 'results/gauge/orus'
+# param_name = 'g'
+# Ns = [2, 4, 6]
+# model = 'orus'
+# normalized_p2s_data(model, gs, Ns, dirname, param_name)
+# analyze_normalized_p2_data(model, gs, Ns, dirname, param_name)
