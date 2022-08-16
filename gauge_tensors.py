@@ -178,8 +178,16 @@ def toric_tensors_lgt_approach(model, param, d=2):
         for i in range(d):
             for j in range(d):
                 tensor[i, j, :, :, :, :] *= (1 + param)**(i + j)
+    elif model == 'toric_c_mockup':
+        tensor[0, 1, 0, 1, :, :] *= param**0.5
+        tensor[1, 0, 1, 0, :, :] *= param**0.5
+        tensor[1, 1, 0, 0, :, :] *= param**0.5
+        tensor[0, 0, 1, 1, :, :] *= param**0.5
+        tensor[1, 0, 0, 1, :, :] *= param**0.5
+        tensor[0, 1, 1, 0, :, :] *= param**0.5
+        tensor[1, 1, 1, 1, :, :] *= param
     elif model == 'toric_c':
-        tensor = np.zeros([2] * 10)
+        tensor = np.zeros([2] * 10, dtype=complex)
         tensor[0, 0, 0, 0, 0, 0, 0, 0, 0, 0] = 1
         A = tn.Node(tensor)
         x = tn.Node(X)
@@ -198,6 +206,21 @@ def toric_tensors_lgt_approach(model, param, d=2):
     A = tn.Node(tensor.reshape([d] * 4 + [d**2]))
     return A
 
+# A = toric_tensors_lgt_approach('toric_c', 0.5)
+# T = bops.permute(bops.contract(A, A, '4', '4*'), [0, 2, 4, 6, 1, 3, 5, 7])
+# singlet_projector_tensor = np.zeros((4, 4, 4**2))
+# for i in [0, 3]:
+#     for j in [0, 3]:
+#         singlet_projector_tensor[i, j, i * 4 + j] = 1
+# for i in [1, 2]:
+#     for j in [1, 2]:
+#         singlet_projector_tensor[i, j, i * 4 + j] = 1
+# singlet_proj = tn.Node(singlet_projector_tensor)
+# tau = bops.contract(bops.contract(bops.contract(bops.contract(
+#     T, singlet_proj, '01', '01'), singlet_proj, '01', '01'), singlet_proj, '01', '01'), singlet_proj, '01', '01')
+# tau_mat = tau.tensor.transpose([0, 2, 1, 3]).reshape([4**4, 4**4])
+# dbg = 1
+
 def numberToBase(n, b):
     if n == 0:
         return [0]
@@ -210,13 +233,15 @@ def numberToBase(n, b):
 def tensors_from_transfer_matrix(model, param, d=2):
     A = toric_tensors_lgt_approach(model, param, d)
     E0 = bops.permute(bops.contract(A, A, '4', '4'), [0, 4, 1, 5, 2, 6, 3, 7])
-    projector_tensor = np.zeros([d, d, d])
+    bond_dim =  A[0].dimension
+    projector_tensor = np.zeros([bond_dim] * 3)
     for i in range(d):
         projector_tensor[i, i, i] = 1
     projector = tn.Node(projector_tensor)
     tau = bops.contract(bops.contract(bops.contract(bops.contract(
         E0, projector, '01', '01'), projector, '01', '01'), projector, '01', '01'), projector, '01', '01')
-    openA = tn.Node(np.kron(A.tensor, A.tensor.conj()).reshape([d**2] * 6).transpose([4, 0, 1, 2, 3, 5]))
+    openA = tn.Node(np.kron(A.tensor, A.tensor.conj())\
+                    .reshape([bond_dim**2] * 4 + [d**2] * 2).transpose([4, 0, 1, 2, 3, 5]))
     return A, tau, openA, projector
 
 
@@ -250,7 +275,8 @@ def get_boundaries(dirname, model, param_name, param, max_allowed_te=1e-10):
         [upRow, downRow, leftRow, rightRow, openA, openA, A, A] = pickle.load(open(boundary_filename, 'rb'))
     else:
         A, tau, openA, singlet_projector = tensors_from_transfer_matrix(model, param, d=d)
-        singlet_projector = tn.Node(singlet_projector.tensor.reshape([d, d**2]))
+        bond_dim = A[0].dimension
+        singlet_projector = tn.Node(singlet_projector.tensor.reshape([bond_dim, bond_dim**2]))
         upRow, downRow, leftRow, rightRow = peps.applyBMPS(tau, tau, d=d**2)
         upRow = bops.permute(bops.contract(bops.contract(
             upRow, singlet_projector, '1', '0'), singlet_projector, '1', '0'), [0, 2, 3, 1])
@@ -302,9 +328,11 @@ def wilson_expectations(model, param, param_name, dirname, plot=False, d=2, boun
         cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openA = boundaries
 
     Ls = np.array(range(2, 8))
+    if openA[1].dimension > d**2:
+        Ls = np.array(range(2, 6))
     perimeters = np.zeros(len(Ls))
     areas = np.zeros(len(Ls))
-    wilson_expectations = np.zeros(len(Ls))
+    wilson_expectations = np.zeros(len(Ls), dtype=complex)
     for Li in range(len(Ls)):
         print('L = ' + str(Ls[Li]))
         wilson_exp, area, perimeter = \
@@ -312,6 +340,7 @@ def wilson_expectations(model, param, param_name, dirname, plot=False, d=2, boun
         perimeters[Li] = perimeter
         areas[Li] = area
         wilson_expectations[Li] = wilson_exp
+        gc.collect()
     print(wilson_expectations)
     pa, residuals, _, _, _ = np.polyfit(areas, np.log(wilson_expectations), 1, full=True)
     chisq_dof = residuals / (len(areas) - 3)
@@ -406,7 +435,6 @@ def analyze_normalized_p2_data(model, params, Ns, dirname, param_name):
         for bi in range(num_of_sampled_blocks):
             axs[2].plot(params, normalized_p2s[:, ni, bi])
     plt.show()
-
 
 cs = [np.round(0.1 * i, 8) for i in range(11)]
 wilson_areas = np.zeros(len(cs))
