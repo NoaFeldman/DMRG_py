@@ -33,13 +33,13 @@ def get_toric_c_tensors(c):
     for i in range(2):
         for j in range(2):
             for k in range(2):
-                A_tensor[i, i, k, j, (1 + j) % 2, (i + k) % 2] = c**i
+                A_tensor[i, i, k, j, (i + j) % 2, (i + k) % 2] = c**i
     A = tn.Node(A_tensor.reshape([2] * 4 + [4]))
     boundaries_filename = 'results/gauge/toric_c/toricBoundaries_c_' + str(c)
     if not os.path.exists(boundaries_filename):
         AEnv = tn.Node(bops.permute(bops.contract(A, A, '4', '4*'), [0, 4, 1, 5, 2, 6, 3, 7]).tensor.reshape([4] * 4))
         upRow, downRow, leftRow, rightRow = peps.applyBMPS(AEnv, AEnv, d=d ** 2)
-        openA = tn.Node(np.kron(A.tensor, A.tensor.conj()).reshape([4] * 4 + [2, 2]).transpose([4, 0, 1, 2, 3, 5]))
+        openA = tn.Node(np.kron(A.tensor, A.tensor.conj()).reshape([4] * 4 + [4, 4]).transpose([4, 0, 1, 2, 3, 5]))
         with open(boundaries_filename, 'wb') as f:
             pickle.dump([upRow, downRow, leftRow, rightRow, openA, openA, A, A], f)
     [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, A, B] = \
