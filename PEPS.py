@@ -268,7 +268,7 @@ def twoCopiesEntanglement(circle, A, B):
 
 # TODO I stopped getting A, B and return openA, openB, which would cause problems with old code.
 #  Fix this by checking the case (for example, shape of A)
-def applyBMPS(AEnv: tn.Node, BEnv:tn.Node, d=2, steps=100, chi=32):
+def applyBMPS(AEnv: tn.Node, BEnv:tn.Node, d=2, steps=100, chi=128):
     envOpAB = bops.permute(bops.multiContraction(AEnv, BEnv, '1', '3'), [0, 3, 2, 4, 1, 5])
     envOpBA = bops.permute(bops.multiContraction(BEnv, AEnv, '1', '3'), [0, 3, 2, 4, 1, 5])
 

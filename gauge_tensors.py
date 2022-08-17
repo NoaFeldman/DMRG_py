@@ -178,6 +178,15 @@ def toric_tensors_lgt_approach(model, param, d=2):
         for i in range(d):
             for j in range(d):
                 tensor[i, j, :, :, :, :] *= (1 + param)**(i + j)
+    elif model == 'zohar':
+        alpha, beta, gamma, delta = param
+        tensor[0, 0, 0, 0, 0, 0] = alpha
+        for i in range(2):
+            for j in range(2):
+                tensor[i, j, (i + 1) % 2, (j + 1) % 2, i, j] = beta
+        tensor[0, 1, 0, 1, 0, 1] = gamma
+        tensor[1, 0, 1, 0, 1, 0] = gamma
+        tensor[1, 1, 1, 1, 1, 1] = delta
     elif model == 'toric_c_mockup':
         tensor[0, 1, 0, 1, :, :] *= param**0.5
         tensor[1, 0, 1, 0, :, :] *= param**0.5
@@ -436,24 +445,27 @@ def analyze_normalized_p2_data(model, params, Ns, dirname, param_name):
             axs[2].plot(params, normalized_p2s[:, ni, bi])
     plt.show()
 
-cs = [np.round(0.1 * i, 8) for i in range(11)]
-wilson_areas = np.zeros(len(cs))
-wilson_perimeters = np.zeros(len(cs))
-for ci in range(len(cs)):
-    c = cs[ci]
-    print(c)
-    [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, A, B] = get_toric_c_tensors(c)
-    wilson_area, wilson_perimeter = wilson_expectations('toric_c', c, 'c', 'results/gauge',
-                                    boundaries=[cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB])
-    print(wilson_area, wilson_perimeter)
-    wilson_areas[ci] = wilson_area
-    wilson_perimeters[ci] = wilson_perimeter
-pickle.dump([wilson_areas, wilson_perimeters], open('results/gauge/toric_c/wilson_exps', 'wb'))
+# cs = [np.round(0.1 * i, 8) for i in range(11)]
+# wilson_areas = np.zeros(len(cs))
+# wilson_perimeters = np.zeros(len(cs))
+# for ci in range(len(cs)):
+#     c = cs[ci]
+#     print(c)
+#     [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, A, B] = get_toric_c_tensors(c)
+#     wilson_area, wilson_perimeter = wilson_expectations('toric_c', c, 'c', 'results/gauge',
+#                                     boundaries=[cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB])
+#     print(wilson_area, wilson_perimeter)
+#     wilson_areas[ci] = wilson_area
+#     wilson_perimeters[ci] = wilson_perimeter
+# pickle.dump([wilson_areas, wilson_perimeters], open('results/gauge/toric_c/wilson_exps', 'wb'))
 
-# gs = [np.round(0.1 * G, 8) for G in range(20)]
-# dirname = 'results/gauge/orus'
-# param_name = 'g'
-# Ns = [2, 4, 6]
-# model = 'orus'
-# normalized_p2s_data(model, gs, Ns, dirname, param_name)
-# analyze_normalized_p2_data(model, gs, Ns, dirname, param_name)
+params = [[alpha, beta, gamma, delta] for alpha in [np.round(0.5 * i, 8) for i in range(-2, 3)] \
+                                      for beta in [np.round(0.5 * i, 8) for i in range(-2, 3)] \
+                                      for gamma in [np.round(0.5 * i, 8) for i in range(-2, 3)] \
+                                      for delta in [np.round(0.5 * i, 8) for i in range(-2, 3)]]
+model = 'zohar'
+dirname = 'results/gauge/' + model
+param_name = 'parmas'
+Ns = [2, 4, 6]
+normalized_p2s_data(model, params, Ns, dirname, param_name)
+# analyze_normalized_p2_data(model, params, Ns, dirname, param_name)
