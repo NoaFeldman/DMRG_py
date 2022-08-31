@@ -116,7 +116,7 @@ def square_wilson_loop_expectation_value(cUp, dUp, cDown, dDown, leftRow, rightR
 def get_boundaries_from_file(filename, w, h):
     with open(filename, 'rb') as f:
         [upRow, downRow, leftRow, rightRow, openA, openB, A, B] = pickle.load(f)
-        [upRow, downRow, leftRow, rightRow, te] = shrink_boundaries(upRow, downRow, leftRow, rightRow, bond_dim=4)
+        [upRow, downRow, leftRow, rightRow, te] = shrink_boundaries(upRow, downRow, leftRow, rightRow, bond_dim=2)
         [cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>', maxTrunc=5)
         [cDown, dDown, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>', maxTrunc=5)
         norm = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, h, w,
@@ -262,19 +262,19 @@ def boundary_filname(dirname, model, param_name, param):
 
 def shrink_boundaries(upRow, downRow, leftRow, rightRow, bond_dim):
     max_te = 0
-    [upRow, leftRow, te] = bops.svdTruncation(bops.contract(upRow, leftRow, '3', '0'), [0, 1, 2], [3, 4, 5], '>>',
+    [leftRow, upRow, te] = bops.svdTruncation(bops.contract(leftRow, upRow, '3', '0'), [0, 1, 2], [3, 4, 5], '>>',
                                               maxBondDim=bond_dim, minBondDim=bond_dim)
     if len(te) > 0 and max(te) > max_te: max_te = max(te)
-    [leftRow, downRow, te] = bops.svdTruncation(bops.contract(leftRow, downRow, '3', '0'), [0, 1, 2], [3, 4, 5], '>>',
+    [downRow, leftRow, te] = bops.svdTruncation(bops.contract(downRow, leftRow, '3', '0'), [0, 1, 2], [3, 4, 5], '>>',
                                                 maxBondDim=bond_dim, minBondDim=bond_dim)
     if len(te) > 0 and max(te) > max_te: max_te = max(te)
-    [downRow, rightRow, te] = bops.svdTruncation(bops.contract(downRow, rightRow, '3', '0'), [0, 1, 2], [3, 4, 5], '>>',
+    [rightRow, downRow, te] = bops.svdTruncation(bops.contract(rightRow, downRow, '3', '0'), [0, 1, 2], [3, 4, 5], '>>',
                                                  maxBondDim=bond_dim, minBondDim=bond_dim)
     if len(te) > 0 and max(te) > max_te: max_te = max(te)
-    [rightRow, upRow, te] = bops.svdTruncation(bops.contract(rightRow, upRow, '3', '0'), [0, 1, 2], [3, 4, 5], '>>',
+    [upRow, rightRow, te] = bops.svdTruncation(bops.contract(upRow, rightRow, '3', '0'), [0, 1, 2], [3, 4, 5], '>>',
                                                maxBondDim=bond_dim, minBondDim=bond_dim)
     if len(te) > 0 and max(te) > max_te: max_te = max(te)
-    return upRow, downRow, rightRow, leftRow, max_te
+    return upRow, downRow,  leftRow, rightRow, max_te
 
 
 # TODO handle A != B
@@ -299,7 +299,7 @@ def get_boundaries(dirname, model, param_name, param, max_allowed_te=1e-10):
             pickle.dump([upRow, downRow, leftRow, rightRow, openA, openA, A, A], f)
     bond_dim = 2
     while True:
-        upRow, downRow, rightRow, leftRow, max_te = shrink_boundaries(upRow, downRow, rightRow, leftRow, bond_dim)
+        upRow, downRow, leftRow, rightRow, max_te = shrink_boundaries(upRow, downRow, leftRow, rightRow, bond_dim)
         if max_te > max_allowed_te:
             bond_dim += 1
         else:
@@ -445,27 +445,17 @@ def analyze_normalized_p2_data(model, params, Ns, dirname, param_name):
             axs[2].plot(params, normalized_p2s[:, ni, bi])
     plt.show()
 
-# cs = [np.round(0.1 * i, 8) for i in range(11)]
-# wilson_areas = np.zeros(len(cs))
-# wilson_perimeters = np.zeros(len(cs))
-# for ci in range(len(cs)):
-#     c = cs[ci]
-#     print(c)
-#     [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, A, B] = get_toric_c_tensors(c)
-#     wilson_area, wilson_perimeter = wilson_expectations('toric_c', c, 'c', 'results/gauge',
-#                                     boundaries=[cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB])
-#     print(wilson_area, wilson_perimeter)
-#     wilson_areas[ci] = wilson_area
-#     wilson_perimeters[ci] = wilson_perimeter
-# pickle.dump([wilson_areas, wilson_perimeters], open('results/gauge/toric_c/wilson_exps', 'wb'))
-
-params = [[alpha, beta, gamma, delta] for alpha in [np.round(0.5 * i, 8) for i in range(-2, 3)] \
-                                      for beta in [np.round(0.5 * i, 8) for i in range(-2, 3)] \
-                                      for gamma in [np.round(0.5 * i, 8) for i in range(-2, 3)] \
-                                      for delta in [np.round(0.5 * i, 8) for i in range(-2, 3)]]
-model = 'zohar'
+model = sys.argv[1]
+if model == 'zohar':
+    params = [[alpha, beta, gamma, delta] for alpha in [np.round(0.5 * i, 8) for i in range(-2, 3)] \
+              for beta in [np.round(0.5 * i, 8) for i in range(-2, 3)] \
+              for gamma in [np.round(0.5 * i, 8) for i in range(-2, 3)] \
+              for delta in [np.round(0.5 * i, 8) for i in range(-2, 3)]]
+    param_name = 'parmas'
+elif model == 'zeros_diff':
+    params = [np.round(0.1 * a, 8) for a in range(-20, 21)]
+    param_name = 'alpha'
 dirname = 'results/gauge/' + model
-param_name = 'parmas'
 Ns = [2, 4, 6]
 normalized_p2s_data(model, params, Ns, dirname, param_name)
 # analyze_normalized_p2_data(model, params, Ns, dirname, param_name)
