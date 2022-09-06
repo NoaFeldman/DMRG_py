@@ -379,6 +379,55 @@ def svdTruncation(node: tn.Node, leftEdges: List[int], rightEdges: List[int],
     return [l, r, truncErr]
 
 
+def svdTruncation_np(T: np.array, leftEdges: List[int], rightEdges: List[int],
+                  dir: str, maxBondDim=1024, minBondDim=0,
+                  normalize=False, maxTrunc=15):
+    maxBondDim = np.min([maxBondDim, np.prod(np.array(T.shape)[leftEdges[:]]),
+                         np.prod(np.array(T.shape)[rightEdges[:]])])
+    try:
+        M = T.transpose(leftEdges + rightEdges).\
+            reshape([np.prod(np.array(T.shape)[leftEdges[:]]), np.prod(np.array(T.shape)[rightEdges[:]])])
+        [u, s, vh] = np.linalg.svd(M, full_matrices=False)
+    except np.linalg.LinAlgError:
+        # TODO
+        dbg = 1
+        T = np.round(T, 16)
+        M = T.transpose(leftEdges + rightEdges).\
+            reshape([np.prod(np.array(T.shape)[leftEdges[:]]), np.prod(np.array(T.shape)[rightEdges[:]])])
+        [u, s, vh] = np.linalg.svd(M, full_matrices=False)
+    truncErr = []
+    if len(s) > maxBondDim:
+        truncErr = s[maxBondDim:]
+        u = u[:, :maxBondDim]
+        s = s[:maxBondDim]
+        vh = vh[:maxBondDim, :]
+    norm = np.sqrt(sum(s**2))
+    if norm == 0:
+        dbg = 1
+    if maxTrunc > 0:
+        meaningful = max(minBondDim, sum(np.round(s / norm, maxTrunc) > 0))
+        if len(s) > meaningful:
+            truncErr += list(s[meaningful:])
+            s = s[:meaningful]
+            u = u.transpose([-1 * i for i in range(1, len(u.shape) + 1)])[:meaningful, :]. \
+                transpose([-1 * i for i in range(1, len(u.shape) + 1)])
+            vh = vh[:meaningful, :]
+    if normalize:
+        s /= norm
+        truncErr /= norm
+    if dir == '>>':
+        l = u.reshape(list(np.array(T.shape)[leftEdges[:]]) + [len(s)])
+        r = np.matmul(np.diag(s), vh).reshape([len(s)] + list(np.array(T.shape)[rightEdges[:]]))
+    elif dir == '<<':
+        l = np.matmul(u, np.diag(s)).reshape(list(np.array(T.shape)[leftEdges[:]]) + [len(s)])
+        r = vh.reshape([len(s)] + list(np.array(T.shape)[rightEdges[:]]))
+    elif dir == '>*<':
+        return [u.reshape(list(np.array(T.shape)[leftEdges[:]]) + [len(s)]),
+                np.diag(s),
+                vh.reshape([len(s)] + list(np.array(T.shape)[rightEdges[:]])), truncErr]
+    return [l, r, truncErr]
+
+
 def getRenyiEntropy(psi: List[tn.Node], n: int, ASize: int, maxBondDim=1024):
     psiCopy = copyState(psi)
     for k in [len(psiCopy) - 1 - i for i in range(len(psiCopy) - ASize - 1)]:
@@ -642,3 +691,4 @@ def vector_to_mps(psi, d, N):
 def normalize_mps_of_dm(rho, d=2):
     if d == 2:
         rho[-1].tensor /= getOverlap(rho, [tn.Node(np.array([1, 0, 0, 1]).reshape([1, d**2, 1])) for i in range(len(rho))])
+

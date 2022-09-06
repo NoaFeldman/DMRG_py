@@ -93,7 +93,6 @@ def get_pair_L_terms(Deltas, gammas, nearest_neighbors_num, sigma):
      [[(1j * Deltas[i] - gammas[i] / 2) * D for i in range(nearest_neighbors_num)], C]]
 
 
-
 def check_exponent_approximation(n, Gamma, k, theta, case='kernel'):
     Deltas, gammas = get_gnm(Gamma, k, theta, n - 1, case)
     Gs = Deltas - 1j * gammas / 2
@@ -286,7 +285,7 @@ if results_to == 'plot':
 L_exp = get_photon_green_L_exp(N, Omega, Gamma, k, theta, sigma)
 L = get_photon_green_L(N, Omega, Gamma, k, theta, sigma, case=case, nearest_neighbors_num=nn_num)
 psi = [tn.Node(np.array([1, 0, 0, 0]).reshape([1, d**2, 1])) for n in range(N)]
-if N <= 4:
+if N <= 6:
     rhos = []
     Deltas, gammas = get_gnm(Gamma, k, theta, nn_num, case)
     if case == 'kernel':
@@ -305,7 +304,6 @@ if N <= 4:
                 L_exact += (1j * Deltas[np.abs(m - n)] - 0.5 * gammas[np.abs(m - n)]) * \
                            np.kron(np.matmul(sigmas[n].T, sigmas[m]), np.eye(d**N))
                 L_exact += gammas[np.abs(m - n)] * np.kron(sigmas[n], sigmas[m])
-
 
     explicit_L = bops.contract(L[0], L[1], '3', '2')
     explicit_L_exp = bops.contract(L_exp[0], L_exp[1], '3', '2')
@@ -367,10 +365,10 @@ if N <= 4:
         rhos.append(rho_vec)
 
     if results_to == 'plot':
-        plt.plot(J_expect_L)
-        plt.plot(J_expect_L_exp)
-        plt.plot(J_expect_L_exp_exact)
-        plt.show()
+        plt.plot(np.array(range(int(timesteps))) * dt, J_expect_L)
+        plt.plot(np.array(range(int(timesteps))) * dt, J_expect_L_exp)
+        plt.plot(np.array(range(int(timesteps))) * dt, J_expect_L_exp_exact)
+        # plt.show()
     else:
         with open(outdir + '/explicit_J_expect', 'wb') as f:
             pickle.dump(J_expect_L, f)
@@ -441,23 +439,23 @@ for ti in range(initial_ti, timesteps):
     tes_1[ti] = tdvp.tdvp_sweep(psi, L, projectors_left, projectors_right, dt / 2, max_bond_dim=bond_dim, num_of_sites=1)
     tf = time.time()
     runtimes_1[ti] = tf - tstart
-    tstart = time.time()
-    tes_1_corrected[ti] = tdvp.tdvp_sweep(psi_1_corrected_w, L, hl_1_corrected, hr_1_corrected, dt / 2,
-                                          max_bond_dim=bond_dim, num_of_sites=1, max_trunc=12)
-    tf = time.time()
-    runtimes_1_corrected[ti] = tf - tstart
+    # tstart = time.time()
+    # tes_1_corrected[ti] = tdvp.tdvp_sweep(psi_1_corrected_w, L, hl_1_corrected, hr_1_corrected, dt / 2,
+    #                                       max_bond_dim=bond_dim, num_of_sites=1, max_trunc=12)
+    # tf = time.time()
+    # runtimes_1_corrected[ti] = tf - tstart
     tstart = time.time()
     tes_2[ti] = tdvp.tdvp_sweep(psi_2, L, hl_2, hr_2, dt / 2, max_bond_dim=bond_dim, num_of_sites=2)
     tf = time.time()
     runtimes_2[ti] = tf - tstart
-    tstart = time.time()
-    tes_2_exp[ti] = tdvp.tdvp_sweep(psi_2_exp, L_exp, hl_2_exp, hr_2_exp, dt / 2, max_bond_dim=bond_dim, num_of_sites=2)
-    tf = time.time()
-    runtimes_2_exp[ti] = tf - tstart
-    tstart = time.time()
-    tes_1_exp[ti] = tdvp.tdvp_sweep(psi_1_exp, L_exp, hl_1_exp, hr_1_exp, dt / 2, max_bond_dim=bond_dim, num_of_sites=1)
-    tf = time.time()
-    runtimes_1_exp[ti] = tf - tstart
+    # tstart = time.time()
+    # tes_2_exp[ti] = tdvp.tdvp_sweep(psi_2_exp, L_exp, hl_2_exp, hr_2_exp, dt / 2, max_bond_dim=bond_dim, num_of_sites=2)
+    # tf = time.time()
+    # runtimes_2_exp[ti] = tf - tstart
+    # tstart = time.time()
+    # tes_1_exp[ti] = tdvp.tdvp_sweep(psi_1_exp, L_exp, hl_1_exp, hr_1_exp, dt / 2, max_bond_dim=bond_dim, num_of_sites=1)
+    # tf = time.time()
+    # runtimes_1_exp[ti] = tf - tstart
     print('times = ' + str([runtimes_1[ti], runtimes_2[ti], runtimes_1_corrected[ti], runtimes_2_exp[ti], runtimes_1_exp[ti]]))
     if ti > 0 and ti % save_each != 1:
         old_state_filename, old_data_filename = filenames(newdir, case, N, Omega, nn_num, ti - 1, bond_dim)
@@ -510,15 +508,15 @@ if results_to == 'plot':
         J_expect_2_exp[ti] = get_j_expect(psi_2_exp, N, sigma)
     plt.plot(np.array(range(int(timesteps / save_each))) * dt * save_each, J_expect_1)
     plt.plot(np.array(range(int(timesteps / save_each))) * dt * save_each, J_expect_2, '--')
-    plt.plot(np.array(range(int(timesteps / save_each))) * dt * save_each, J_expect_1_corrected, ':')
-    plt.plot(np.array(range(int(timesteps / save_each))) * dt * save_each, J_expect_1_exp, ':')
-    plt.plot(np.array(range(int(timesteps / save_each))) * dt * save_each, J_expect_2_exp, ':')
+    # plt.plot(np.array(range(int(timesteps / save_each))) * dt * save_each, J_expect_1_corrected, ':')
+    # plt.plot(np.array(range(int(timesteps / save_each))) * dt * save_each, J_expect_1_exp, ':')
+    # plt.plot(np.array(range(int(timesteps / save_each))) * dt * save_each, J_expect_2_exp, ':')
     plt.show()
-    plt.plot(runtimes_1)
-    plt.plot(runtimes_2)
-    plt.plot(runtimes_1_corrected)
-    plt.show()
-    plt.plot(bd_1)
-    plt.plot(bd_2)
-    plt.plot(bd_1_corrected)
-    plt.show()
+    # plt.plot(runtimes_1)
+    # plt.plot(runtimes_2)
+    # plt.plot(runtimes_1_corrected)
+    # plt.show()
+    # plt.plot(bd_1)
+    # plt.plot(bd_2)
+    # plt.plot(bd_1_corrected)
+    # plt.show()

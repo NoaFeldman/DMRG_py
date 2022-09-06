@@ -8,10 +8,14 @@ from typing import List
 import scipy.linalg as linalg
 import os
 import CBE as cbe
-
+import gc
 
 def tensor_overlap(n1, n2):
     return bops.contract(n1, n2, list(range(len(n1.tensor.shape))) + ['*'], list(range(len(n1.tensor.shape)))).tensor * 1
+
+
+def tensor_overlap_np(v1, v2):
+    return np.einsum('ABCD'[:len(v1.shape)] + ',' + 'ABCD'[:len(v1.shape)], v1.conj(), v2, optimize=True)
 
 
 def arnoldi(HL, HR, H, psi, k, num_of_sites=2, max_h_size=50, C=None):
@@ -23,9 +27,7 @@ def arnoldi(HL, HR, H, psi, k, num_of_sites=2, max_h_size=50, C=None):
         v = psi[k]
     elif num_of_sites == 0:
         v = C
-    max_size = np.prod(v.tensor.shape)
-    if max_size < max_h_size:
-        max_h_size = max_size
+    max_h_size = min(max_h_size, np.prod(v.tensor.shape))
     v.set_tensor(v.get_tensor() / np.sqrt(tensor_overlap(v, v)))
     basis = [bops.copyState([v])[0]]
     size = max_h_size
@@ -44,15 +46,57 @@ def arnoldi(HL, HR, H, psi, k, num_of_sites=2, max_h_size=50, C=None):
         basis.append(bops.multNode(bops.copyState([v])[0], 1 / result[j + 1, j]))
     return result[:size, :size], basis
 
+
+def arnoldi_np(HL, HR, H, psi, k, num_of_sites=2, max_h_size=50, C=None):
+    accuracy = 1e-12
+    result = np.zeros((max_h_size, max_h_size), dtype=complex)
+    if num_of_sites == 2:
+        v = np.tensordot(psi[k].tensor, psi[k+1].tensor, ([2], [0]))
+    elif num_of_sites == 1:
+        v = psi[k].tensor
+    elif num_of_sites == 0:
+        v = C
+    max_h_size = min(max_h_size, np.prod(v.shape))
+    v = v / np.sqrt(tensor_overlap_np(v, v))
+    basis = [np.copy(v)]
+    size = max_h_size
+    for j in range(max_h_size - 1):
+        v = applyHToM_np(HL, HR, H, basis[j], k, num_of_sites=num_of_sites)
+        for ri in range(j + 1):
+            result[ri, j] = tensor_overlap_np(basis[ri], v)
+            v = v - result[ri, j] * basis[ri]
+        result[j + 1, j] = np.sqrt(tensor_overlap_np(v, v))
+        if result[j + 1, j] < accuracy or \
+                np.any([int(np.abs(tensor_overlap_np(basis[bi], v) /
+                                   tensor_overlap_np(v, v)) > accuracy)
+                        for bi in range(len(basis))]):
+            size = j + 1
+            break
+        basis.append(np.copy(v) / result[j + 1, j])
+    return result[:size, :size], basis
+
+
 def applyHToM(HL, HR, H, M, k, num_of_sites):
     if num_of_sites == 2:
         return bops.contract(bops.contract(bops.contract(bops.contract(
-            HL[k], M, '0', '0'), H[k], '02', '20'), H[k + 1], '41', '20'), HR[k+1], '14', '01')
+            HL[k], M, '0', '0'), H[k], '02', '20'), H[k + 1], '41', '20'), HR[k + 1], '14', '01')
     elif num_of_sites == 1:
         return bops.contract(bops.contract(bops.contract(
             HL[k], M, '0', '0'), H[k], '02', '20'), HR[k], '13', '01')
     elif num_of_sites == 0:
         return bops.contract(bops.contract(M, HL[k], '0', '0'), HR[k-1], '01', '01')
+
+
+def applyHToM_np(HL, HR, H, M, k, num_of_sites) -> np.array:
+    if num_of_sites == 2:
+        return np.tensordot(np.tensordot(np.tensordot(np.tensordot(
+            HL[k].tensor, M, ([0], [0])), H[k].tensor, ([0, 2], [2, 0])), H[k + 1].tensor,
+            ([4, 1], [2, 0])), HR[k+1].tensor, ([1, 4], [0, 1]))
+    elif num_of_sites == 1:
+        return np.tensordot(np.tensordot(np.tensordot(
+            HL[k].tensor, M, ([0], [0])), H[k].tensor, ([0, 2], [2, 0])), HR[k].tensor, ([1, 3], [0, 1]))
+    elif num_of_sites == 0:
+        return np.tensordot(np.tensordot(M, HL[k].tensor, ([0], [0])), HR[k-1].tensor, ([0, 1], [0, 1]))
 
 
 def apply_time_evolver(arnoldi_T: np.array, arnoldi_basis: List[tn.Node], M: tn.Node, dt):
@@ -63,6 +107,16 @@ def apply_time_evolver(arnoldi_T: np.array, arnoldi_basis: List[tn.Node], M: tn.
         for ci in range(len(time_evolver)):
             result += time_evolver[ci, ri] * m_overlap * arnoldi_basis[ci].tensor
     return tn.Node(result)
+
+def apply_time_evolver_np(arnoldi_T: np.array, arnoldi_basis: List[np.array], M: np.array, dt) -> np.array:
+    time_evolver = linalg.expm(dt * arnoldi_T)
+    result = np.zeros(M.shape, dtype=complex)
+    for ri in range(len(time_evolver)):
+        m_overlap = tensor_overlap_np(arnoldi_basis[ri], M)
+        for ci in range(len(time_evolver)):
+            result += time_evolver[ci, ri] * m_overlap * arnoldi_basis[ci]
+    return result
+
 
 # k is OC, pair is [k, k+1]
 def tdvp_step(psi: List[tn.Node], H: List[tn.Node], k: int, HL: List[tn.Node], HR: List[tn.Node],
@@ -114,7 +168,7 @@ def tdvp_step(psi: List[tn.Node], H: List[tn.Node], k: int, HL: List[tn.Node], H
     if num_of_sites == 2:
         psi[M_ind] = bops.copyState([M])[0]
         T, basis = arnoldi(HL, HR, H, psi, M_ind, num_of_sites=1)
-        M = apply_time_evolver(T, basis, M, - dt)
+        M = apply_time_evolver_np(T, basis, M, - dt)
         psi[M_ind] = M
     elif num_of_sites == 1:
         T, basis = arnoldi(HL, HR, H, psi, M_ind, num_of_sites=0, C=C) # TODO
@@ -128,17 +182,81 @@ def tdvp_step(psi: List[tn.Node], H: List[tn.Node], k: int, HL: List[tn.Node], H
     return te
 
 
+def tdvp_step_np(psi: List[tn.Node], H: List[tn.Node], k: int, HL: List[tn.Node], HR: List[tn.Node],
+              dir: str, dt, max_bond_dim, num_of_sites, is_density_matrix=True, max_trunc=6):
+    if num_of_sites == 1:
+        left_ind = k - int(dir == '<<')
+        cbe.get_op_tilde_tr_np(psi, left_ind, HL, HR, H, dir, D=max_bond_dim, max_trunc=max_trunc)
+
+    T, basis = arnoldi_np(HL, HR, H, psi, k, num_of_sites)
+    if num_of_sites == 2:
+        M = np.tensordot(psi[k].tensor, psi[k+1].tensor, ([2], [0]))
+    else:
+        M = psi[k].tensor
+    M = apply_time_evolver_np(T, basis, M, dt)
+
+    if dir == '>>':
+        if num_of_sites == 2:
+            [A, M, te] = bops.svdTruncation_np(M, [0, 1], [2, 3], '>>', maxBondDim=max_bond_dim)
+        elif num_of_sites == 1:
+            [A, C, te] = bops.svdTruncation_np(M, [0, 1], [2], '>>', maxBondDim=max_bond_dim)
+        psi[k] = tn.Node(A)
+        M_ind = k + 1
+        if k == len(psi) - num_of_sites:
+            # TODO maybe I need to lose C, and add A instead of M for num_of_sites = 1?
+            psi[len(psi) - 1] = tn.Node(M)
+            if is_density_matrix:
+                bops.normalize_mps_of_dm(psi)
+            return te
+        HL[k + 1] = tn.Node(np.tensordot(np.tensordot(np.tensordot(
+            HL[k].tensor, A, ([0], [0])), H[k].tensor, ([0, 2], [2, 0])), A.conj(), ([0, 2], [0, 1])))
+    elif dir == '<<':
+        if num_of_sites == 2:
+            [M, B, te] = bops.svdTruncation_np(M, [0, 1], [2, 3], '<<', maxBondDim=max_bond_dim)
+        elif num_of_sites == 1:
+            [C, B, te] = bops.svdTruncation_np(M, [0], [1, 2], '<<', maxBondDim=max_bond_dim)
+        B_ind = k + num_of_sites - 1
+        psi[B_ind] = tn.Node(B)
+        M_ind = k
+        if k == 0:
+            # TODO maybe I need to lose C, and add B instead of M for num_of_sites = 1?
+            psi[0] = tn.Node(M)
+            if is_density_matrix:
+                bops.normalize_mps_of_dm(psi)
+            return te
+        HR[B_ind - 1] = tn.Node(np.tensordot(np.tensordot(np.tensordot(
+            B, HR[B_ind].tensor, ([2], [0])), H[B_ind].tensor, ([1, 2], [0, 3])), B.conj(), ([2, 1], [1, 2])))
+    # if len(te) > 0: print('tdvp_step, line 112', num_of_sites, max(te))
+
+    if num_of_sites == 2:
+        psi[M_ind] = tn.Node(M)
+        T, basis = arnoldi_np(HL, HR, H, psi, M_ind, num_of_sites=1)
+        M = apply_time_evolver_np(T, basis, M, - dt)
+        psi[M_ind] = tn.Node(M)
+    elif num_of_sites == 1:
+        T, basis = arnoldi_np(HL, HR, H, psi, M_ind, num_of_sites=0, C=C) # TODO
+        C = apply_time_evolver_np(T, basis, C, - dt)
+        if dir == '>>':
+            psi[k+1] = tn.Node(np.tensordot(C, psi[k+1].tensor, ([1], [0])))
+        elif dir == '<<':
+            psi[k - 1] = tn.Node(np.tensordot(psi[k - 1].tensor, C, ([2], [0])))
+    if is_density_matrix:
+        bops.normalize_mps_of_dm(psi)
+    return te
+
+
 def tdvp_sweep(psi: List[tn.Node], H: List[tn.Node], HL: List[tn.Node], HR: List[tn.Node],
                dt, max_bond_dim, num_of_sites, max_trunc=6):
     max_te = 0
     for k in range(len(psi) - num_of_sites, -1, -1):
-        te = tdvp_step(psi, H, k, HL, HR, '<<', dt, max_bond_dim, num_of_sites=num_of_sites, max_trunc=max_trunc)
+        te = tdvp_step_np(psi, H, k, HL, HR, '<<', dt, max_bond_dim, num_of_sites=num_of_sites, max_trunc=max_trunc)
         if len(te) > 0 and np.max(te) > max_te:
             max_te = te[0]
     for k in range(len(psi) - num_of_sites + 1):
-        te = tdvp_step(psi, H, k, HL, HR, '>>', dt, max_bond_dim, num_of_sites=num_of_sites, max_trunc=max_trunc)
+        te = tdvp_step_np(psi, H, k, HL, HR, '>>', dt, max_bond_dim, num_of_sites=num_of_sites, max_trunc=max_trunc)
         if len(te) > 0 and np.max(te) > max_te:
             max_te = te[0]
+    gc.collect()
     return max_te
 
 def get_initial_projectors(psi: List[tn.Node], H: List[tn.Node]):
