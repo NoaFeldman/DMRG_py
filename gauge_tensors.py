@@ -445,6 +445,37 @@ def analyze_normalized_p2_data(model, params, Ns, dirname, param_name):
             axs[2].plot(params, normalized_p2s[:, ni, bi])
     plt.show()
 
+do_magic_stuff = False
+if do_magic_stuff:
+    gs = [np.round(0.05 * g, 8) for g in range(0, 40)]
+    ps = np.zeros(len(gs))
+    p2s = np.zeros(len(gs))
+    for gi in range(len(gs)):
+        g = gs[gi]
+        model = 'orus'
+        cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB = get_boundaries('results/gauge/' + model, model, 'g', g)
+        AEnv = bops.contract(openA, tn.Node(np.eye(d**2)), '05', '01')
+        rdm = np.tensordot(bops.contract(bops.contract(bops.contract(bops.contract(bops.contract(bops.contract(bops.contract(bops.contract(bops.contract(
+            leftRow, cUp, '3', '0'), AEnv, '23', '30'), dUp, '2', '0'), AEnv, '24', '30'), rightRow, '34', '01'),
+            AEnv, '12', '30'), dDown, '05', '21'), cDown, '24', '02'), openA, '0132', '1234')\
+            .tensor.reshape([2] * 4), np.eye(2), ([0, 2], [0, 1]))
+        rdm /= rdm.trace()
+        a_z = np.abs(1/2 - rdm[0, 0])
+        ps[gi] = a_z
+        p2 = 0
+        for bi in range(2**6):
+            print(g, bi)
+            if g == 0.2 and bi == 63:
+                dbg = 1
+            block = get_2_by_n_explicit_block(boundary_filname('results/gauge/orus', 'orus', 'g', g), 2, bi)
+            p2 += np.matmul(block, block).trace()
+        p2s[gi] = p2
+    import matplotlib.pyplot as plt
+    plt.plot(gs, ps)
+    plt.plot(gs, p2s)
+    plt.show()
+
+
 model = sys.argv[1]
 if model == 'zohar':
     params = [[alpha, beta, gamma, delta] for alpha in [np.round(0.5 * i, 8) for i in range(-2, 3)] \
