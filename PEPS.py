@@ -245,7 +245,7 @@ def bmpsDensityMatrix(up_row, down_row, AEnv, BEnv, A, B, steps):
     dm = bops.multiContraction(circle, ABNet, '23140567', '01234567', cleanOr1=True, cleanOr2=True)
     ordered = np.round(np.reshape(dm.tensor, [16,  16]), 13)
     ordered = ordered / np.trace(ordered)
-    return dm
+    return dm, ordered
 
 
 # https://journals.aps.org/prl/pdf/10.1103/PhysRevLett.109.020505
