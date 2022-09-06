@@ -49,6 +49,11 @@ def get_magic_ising_dmrg_terms(theta):
     neighbor_terms = [- np.kron(basic.pauli2X, basic.pauli2X) for i in range(n - 1)]
     return onsite_terms, neighbor_terms
 
+def get_magic_ising_h_2_dmrg_terms(theta):
+    onsite_terms = [- 2 * np.diag([1, np.exp(1j * np.pi * theta)]) for i in range(n)]
+    neighbor_terms = [- np.kron(basic.pauli2X, basic.pauli2X) for i in range(n - 1)]
+    return onsite_terms, neighbor_terms
+
 def get_magic_xxz_dmrg_terms(delta):
     onsite_terms = [0 * np.eye(d) for i in range(n)]
     neighbor_terms = [np.kron(t_z, t_z) * delta + \
@@ -158,6 +163,10 @@ elif model == 'ising_magic':
     param_name = 'theta'
     params = [np.round(i * 0.005, 8) for i in range(range_i, range_f)]
     h_func = get_magic_ising_dmrg_terms
+elif model == 'ising_magic_h_2':
+    param_name = 'theta'
+    params = [np.round(i * 0.005, 8) for i in range(range_i, range_f)]
+    h_func = get_magic_ising_h_2_dmrg_terms
 elif model == 'xy':
     param_name = 'gamma'
     params = [np.round(i * 0.1, 1) for i in range(-10, 11)]
@@ -326,7 +335,7 @@ def analyze():
     axs[2].set_ylabel(r'$M_{1/2}$')
     axs[3].plot(params, m2s_avgs)
     axs[3].set_ylabel(r'$\overline{M_2}$')
-    plt.xlabel(param_name)
+    plt.xlabel(r'$\theta/\pi$')
     plt.show()
 
 
@@ -382,4 +391,4 @@ def analyze_kitaev():
     plt.show()
 
 run()
-analyze_kitaev()
+analyze()
