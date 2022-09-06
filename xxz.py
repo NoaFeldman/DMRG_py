@@ -163,10 +163,6 @@ elif model == 'ising_magic':
     param_name = 'theta'
     params = [np.round(i * 0.005, 8) for i in range(range_i, range_f)]
     h_func = get_magic_ising_dmrg_terms
-elif model == 'ising_magic_h_2':
-    param_name = 'theta'
-    params = [np.round(i * 0.005, 8) for i in range(range_i, range_f)]
-    h_func = get_magic_ising_h_2_dmrg_terms
 elif model == 'xy':
     param_name = 'gamma'
     params = [np.round(i * 0.1, 1) for i in range(-10, 11)]
@@ -390,5 +386,41 @@ def analyze_kitaev():
     plt.legend([r'$p_2$', r'$\alpha_2$', r'$\beta_2$', r'$\alpha_{1/2}$', r'$\beta_{1/2}$'])
     plt.show()
 
-run()
-analyze()
+
+def analyze_ising_2d():
+    n = 12
+    import matplotlib.pyplot as plt
+    thetas = [np.round(0.005 * ti, 8) for ti in range(int(2 / 0.005))]
+    hs = [np.round(0.1 * hi, 8) for hi in range(30)]
+    ff, axs = plt.subplots(4, 1)
+    p2s = np.zeros((len(thetas), len(hs)))
+    m2s = np.zeros((len(thetas), len(hs)))
+    mhalves = np.zeros((len(thetas), len(hs)))
+    m2_avgs = np.zeros((len(thetas), len(hs)))
+    for hi in range(len(hs)):
+        h = hs[hi]
+        for ti in range(len(thetas)):
+            theta = thetas[ti]
+            try:
+                [psi_orig, m2, mhalf, m2_avg] = pickle.load(open(filename(indir, model, 'theta_h', [theta, h], n), 'rb'))
+            except FileNotFoundError:
+                continue
+            p2s[ti, hi] = bops.getRenyiEntropy(psi_orig, 2, int(n/2))
+            m2s[ti, hi] = m2
+            mhalves[ti, hi] = mhalf
+            m2_avgs[ti, hi] = m2_avg
+    axs[0].pcolormesh(hs, thetas, p2s)
+    axs[0].set_title(r'$p_2$')
+    axs[0].set_ylabel(r'$\theta/\pi$')
+    axs[1].pcolormesh(hs, thetas, m2s)
+    axs[1].set_title(r'$M_2$')
+    axs[1].set_ylabel(r'$\theta/\pi$')
+    axs[2].pcolormesh(hs, thetas, mhalves)
+    axs[2].set_title(r'$M_{1/2}$')
+    axs[2].set_ylabel(r'$\theta/\pi$')
+    axs[3].pcolormesh(hs, thetas, m2_avgs)
+    axs[3].set_title(r'$M_\bar{2}$')
+    axs[3].set_ylabel(r'$\theta/\pi$')
+    axs[3].set_xlabel(r'$h$')
+    plt.show()
+analyze_ising_2d()
