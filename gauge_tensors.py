@@ -4,12 +4,11 @@ import basicOperations as bops
 import pepsExpect as pe
 import PEPS as peps
 import pickle
-import randomUs as ru
-from typing import List
 import os
 import sys
-import basicAnalysis as bans
 import gc
+import time
+
 
 X = np.array([[0, 1], [1, 0]])
 I = np.eye(2)
@@ -373,6 +372,7 @@ def normalized_p2s_data(model, params, Ns, dirname, param_name, d=2):
     if not os.path.exists(dirname):
         os.mkdir(dirname)
     for pi in range(len(params)):
+        start = time.time()
         param = params[pi]
         print(param)
         filename = results_filname(dirname, model, param_name, param, Ns)
@@ -404,6 +404,8 @@ def normalized_p2s_data(model, params, Ns, dirname, param_name, d=2):
                     print('Negative rho eigenvalue!!!')
                     print(np.round(rdm_eigvals, 20))
 
+        end = time.time()
+        print(start - end)
         pickle.dump([tau_eigenvals, wilson_area, wilson_perimeter, normalized_p2s, sampled_blocks], open(filename, 'wb'))
 
 def analyze_normalized_p2_data(model, params, Ns, dirname, param_name):
