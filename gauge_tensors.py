@@ -372,41 +372,44 @@ def normalized_p2s_data(model, params, Ns, dirname, param_name, d=2):
     if not os.path.exists(dirname):
         os.mkdir(dirname)
     for pi in range(len(params)):
-        start = time.time()
-        param = params[pi]
-        print(param)
-        filename = results_filname(dirname, model, param_name, param, Ns)
-        if os.path.exists(filename):
+        try:
+            start = time.time()
+            param = params[pi]
+            print(param)
+            filename = results_filname(dirname, model, param_name, param, Ns)
+            if os.path.exists(filename):
+                continue
+            boundary_filename = boundary_filname(dirname, model, param_name, param)
+
+            wilson_area, wilson_perimeter = wilson_expectations(model, param, param_name, dirname)
+
+            A, tau, openA, singlet_projector = tensors_from_transfer_matrix(model, param, d=d)
+            tau = np.real(tau.tensor.transpose([0, 2, 1, 3]).reshape([d**2, d**2]))
+            tau_eigenvals = np.zeros(d**2)
+            tau_eigenvals[:2] = np.real(np.linalg.eigvals([[tau[0, 0], tau[0, 3]], [tau[3, 0], tau[3, 3]]]))
+            tau_eigenvals[2:] = np.real(np.linalg.eigvals([[tau[1, 1], tau[1, 2]], [tau[2, 1], tau[2, 2]]]))
+            num_of_sampled_blocks = 63
+            sampled_blocks = [[int(i * d**(2 * n + 2) / num_of_sampled_blocks) for i in range(num_of_sampled_blocks)] for n in Ns]
+            normalized_p2s = [np.zeros(num_of_sampled_blocks) for n in Ns]
+            # curr_rdm_eigvals = [[None for bi in range(num_of_sampled_blocks)] for n in Ns]
+            for ni in range(len(Ns)):
+                n = Ns[ni]
+                for bi in range(num_of_sampled_blocks):
+                    b = sampled_blocks[ni][bi]
+                    print(n, b)
+                    block = get_2_by_n_explicit_block(boundary_filename, n, b, d=d)
+                    normalized_p2s[ni][bi] = np.real(np.matmul(block, block).trace()) / block.trace()**2
+                    rdm_eigvals = np.linalg.eigvals(block)
+                    # curr_rdm_eigvals[ni][bi] = rdm_eigvals
+                    if min(rdm_eigvals) < -1e-12:
+                        print('Negative rho eigenvalue!!!')
+                        print(np.round(rdm_eigvals, 20))
+
+            end = time.time()
+            print(start - end)
+            pickle.dump([tau_eigenvals, wilson_area, wilson_perimeter, normalized_p2s, sampled_blocks], open(filename, 'wb'))
+        except:
             continue
-        boundary_filename = boundary_filname(dirname, model, param_name, param)
-
-        wilson_area, wilson_perimeter = wilson_expectations(model, param, param_name, dirname)
-
-        A, tau, openA, singlet_projector = tensors_from_transfer_matrix(model, param, d=d)
-        tau = np.real(tau.tensor.transpose([0, 2, 1, 3]).reshape([d**2, d**2]))
-        tau_eigenvals = np.zeros(d**2)
-        tau_eigenvals[:2] = np.real(np.linalg.eigvals([[tau[0, 0], tau[0, 3]], [tau[3, 0], tau[3, 3]]]))
-        tau_eigenvals[2:] = np.real(np.linalg.eigvals([[tau[1, 1], tau[1, 2]], [tau[2, 1], tau[2, 2]]]))
-        num_of_sampled_blocks = 63
-        sampled_blocks = [[int(i * d**(2 * n + 2) / num_of_sampled_blocks) for i in range(num_of_sampled_blocks)] for n in Ns]
-        normalized_p2s = [np.zeros(num_of_sampled_blocks) for n in Ns]
-        # curr_rdm_eigvals = [[None for bi in range(num_of_sampled_blocks)] for n in Ns]
-        for ni in range(len(Ns)):
-            n = Ns[ni]
-            for bi in range(num_of_sampled_blocks):
-                b = sampled_blocks[ni][bi]
-                print(n, b)
-                block = get_2_by_n_explicit_block(boundary_filename, n, b, d=d)
-                normalized_p2s[ni][bi] = np.real(np.matmul(block, block).trace()) / block.trace()**2
-                rdm_eigvals = np.linalg.eigvals(block)
-                # curr_rdm_eigvals[ni][bi] = rdm_eigvals
-                if min(rdm_eigvals) < -1e-12:
-                    print('Negative rho eigenvalue!!!')
-                    print(np.round(rdm_eigvals, 20))
-
-        end = time.time()
-        print(start - end)
-        pickle.dump([tau_eigenvals, wilson_area, wilson_perimeter, normalized_p2s, sampled_blocks], open(filename, 'wb'))
 
 def analyze_normalized_p2_data(model, params, Ns, dirname, param_name):
     import matplotlib.pyplot as plt
