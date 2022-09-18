@@ -48,7 +48,7 @@ def plaquette_node(g=0.0) -> List[tn.Node]:
     projector_down_right_corner[:, :, 0, 0] = I
     projector_down_right_corner[:, :, 1, 1] = X
     op_down_right = tn.Node(projector_down_right_corner)
-    # phisical_in, physical_out, right, up
+    # physical_in, physical_out, right, up
     projector_down_left_corner = np.zeros((d, d, d, d), dtype=complex)
     projector_down_left_corner[:, :, 0, 0] = I
     projector_down_left_corner[:, :, 1, 1] = X
@@ -69,10 +69,13 @@ def plaquette_node(g=0.0) -> List[tn.Node]:
     left_boundary = bops.contract(left_boundary, tn.Node(g_pair_projector), '3', '0')
 
     # TODO suit BMPS for this nonequal dimension of vertical and horizontal legs
-    # AEnv = pe.toEnvOperator(bops.multiContraction(A, A, '4', '4*'))
-    # upRow, downRow, leftRow, rightRow, openA, openB = peps.applyBMPS(A, A, d=(d**4))
-    # with open('results/toricBoundaries_squares_' + str(g), 'wb') as f:
-    #     pickle.dump([upRow, downRow, leftRow, rightRow, openA, openB, A], f)
+    AEnv = pe.toEnvOperator(bops.multiContraction(A, A, '4', '4*'))
+    openA = tn.Node(np.kron(A.tensor, A.tensor.conj()).reshape(
+        [A.tensor.shape[0]**2, A.tensor.shape[1]**2, A.tensor.shape[0]**2, A.tensor.shape[1]**2, 2**4, 2**4])\
+        .transpose([4, 0, 1, 2, 3, 5]))
+    upRow, downRow, leftRow, rightRow = peps.applyBMPS(AEnv, AEnv, d=(d**4))
+    with open('results/toricBoundaries_squares_' + str(g), 'wb') as f:
+        pickle.dump([upRow, downRow, leftRow, rightRow, openA, openA, A, A], f)
     return [A, left_boundary]
 
 plaquette_node(g=0.1)
@@ -317,10 +320,4 @@ for g in gs:
         with open('results/gauge/imag_time_evolution_g_' + str(g), 'rb') as f:
             A = pickle.load(f)
     except FileNotFoundError:
-        gauge_models_test(g)
-        with open('results/gauge/imag_time_evolution_g_' + str(g), 'rb') as f:
-            [A, B, C, D] =pickle.load(f)
-    A.tensor = np.array(A.tensor, dtype=complex)
-    upRow, downRow, leftRow, rightRow, openA, openB = peps.applyBMPS(A, A, d=(d ** 4))
-    with open('results/toricBoundaries_squares_' + str(g), 'wb') as f:
-        pickle.dump([upRow, downRow, leftRow, rightRow, openA, openB, A], f)
+        plaquette_node(g)
