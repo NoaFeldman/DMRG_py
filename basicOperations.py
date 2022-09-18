@@ -250,8 +250,26 @@ def getNodeNorm(node: tn.Node):
 
 def contract(node1: tn.Node, node2: tn.Node, edges1, edges2, nodeName=None,
                      cleanOr1=False, cleanOr2=False, isDiag1=False, isDiag2=False) -> tn.Node:
-    return multiContraction(node1, node2, edges1, edges2, nodeName,
-                            cleanOr1, cleanOr2, isDiag1, isDiag2)
+    if node1 is None or node2 is None:
+        return None
+    if edges1[len(edges1) - 1] == '*':
+        t1 = node1.tensor.conj()
+        edges1 = edges1[0:len(edges1) - 1]
+    else:
+        t1 = node1.tensor
+    if edges2[len(edges2) - 1] == '*':
+        t2 = node2.tensor.conj()
+        edges2 = edges2[0:len(edges2) - 1]
+    else:
+        t2 = node2.tensor
+    if not (isDiag1 or isDiag2):
+        return tn.Node(np.tensordot(t1, t2, ([int(e) for e in edges1], [int(e) for e in edges2])))
+    elif isDiag1 and isDiag2:
+        return t1 * t2
+    elif isDiag1:
+        return tn.Node(contractDiag(t2, t1, int(edges2[0])))
+    else: # isDiag2 and not isDiag1
+        return tn.Node(contractDiag(t1, t2, int(edges1[0])))
 
 
 def multiContraction(node1: tn.Node, node2: tn.Node, edges1, edges2, nodeName=None,
@@ -259,39 +277,31 @@ def multiContraction(node1: tn.Node, node2: tn.Node, edges1, edges2, nodeName=No
     if node1 is None or node2 is None:
         return None
     if edges1[len(edges1) - 1] == '*':
-        copy1 = copyState([node1], conj=True)[0]
+        t1 = node1.tensor.conj()
         edges1 = edges1[0:len(edges1) - 1]
     else:
-        copy1 = copyState([node1])[0]
+        t1 = node1.tensor
     if edges2[len(edges2) - 1] == '*':
-        copy2 = copyState([node2], conj=True)[0]
+        t2 = node2.tensor.conj()
         edges2 = edges2[0:len(edges2) - 1]
     else:
-        copy2 = copyState([node2])[0]
+        t2 = node2.tensor
+    if not (isDiag1 or isDiag2):
+        return tn.Node(np.tensordot(t1, t2, ([int(e) for e in edges1], [int(e) for e in edges2])))
+    elif isDiag1 and isDiag2:
+        return t1 * t2
+    elif isDiag1:
+        return tn.Node(contractDiag(t2, t1, int(edges2[0])))
+    else: # isDiag2 and not isDiag1
+        return tn.Node(contractDiag(t1, t2, int(edges1[0])))
 
-    if cleanOr1:
-        tn.remove_node(node1)
-    if cleanOr2:
-        tn.remove_node(node2)
-    if isDiag1 and isDiag2:
-        return tn.Node(copy1.tensor * copy2.tensor)
-    elif isDiag1 and not isDiag2:
-        return contractDiag(copy2, copy1.tensor, int(edges2[0]))
-    elif isDiag2 and not isDiag1:
-        return contractDiag(copy1, copy2.tensor, int(edges1[0]))
-    for i in range(len(edges1)):
-        copy1[int(edges1[i])] ^ copy2[int(edges2[i])]
-    return tn.contract_between(copy1, copy2, name=nodeName)
-
-
-def contractDiag(node: tn.Node, diag: np.array, edgeNum: int):
-    node.tensor = transpose(node.tensor,
-                               [edgeNum] + [i for i in range(len(node.edges)) if i != edgeNum])
-    for i in range(node[0].dimension):
-        node.tensor[i] *= diag[i]
-    node.tensor = transpose(node.tensor,
-                               list(range(1, edgeNum + 1)) + [0] + list(range(edgeNum + 1, len(node.edges))))
-    return node
+def contractDiag(tensor: np.array, diag: np.array, edgeNum: int):
+    tensor = transpose(tensor,
+                           [edgeNum] + [i for i in range(len(tensor.shape)) if i != edgeNum])
+    for i in range(tensor.shape[0]):
+        tensor[i] *= diag[i]
+    tensor = transpose(tensor, list(range(1, edgeNum + 1)) + [0] + list(range(edgeNum + 1, len(tensor.shape))))
+    return tensor
 
 
 

@@ -6,7 +6,7 @@ import gc
 def bmpsRowStep(gammaL, lambdaMid, gammaR, lambdaSide, envOp, lattice='squared', chi=128, shrink=True):
     if lattice == 'squared':
         row = bops.multiContraction(bops.multiContraction(
-            bops.multiContraction(bops.multiContraction(lambdaSide, gammaL, '1', '0', isDiag1=True),
+            bops.multiContraction(bops.multiContraction(lambdaSide, gammaL, '0', '0', isDiag1=True),
                                   lambdaMid, '2', '0', cleanOr1=True, cleanOr2=True, isDiag2=True),
                                   gammaR, '2', '0', cleanOr1=True, cleanOr2=True),
                                   lambdaSide, '3', '0', cleanOr1=True, isDiag2=True)
@@ -19,7 +19,7 @@ def bmpsRowStep(gammaL, lambdaMid, gammaR, lambdaSide, envOp, lattice='squared',
         siteIndexNumber = 3
     elif lattice == 'triangular':
         row = bops.multiContraction(bops.multiContraction(
-            bops.multiContraction(bops.multiContraction(lambdaSide, gammaL, '1', '0', isDiag1=True),
+            bops.multiContraction(bops.multiContraction(lambdaSide, gammaL, '0', '0', isDiag1=True),
                                   lambdaMid, '3', '0', cleanOr1=True, cleanOr2=True, isDiag2=True),
                                   gammaR, '3', '0', cleanOr1=True, cleanOr2=True),
                                   lambdaSide, '5', '0', cleanOr1=True, isDiag2=True)
@@ -31,7 +31,7 @@ def bmpsRowStep(gammaL, lambdaMid, gammaR, lambdaSide, envOp, lattice='squared',
         siteIndexNumber = 4
     else: # elif lattice == 'unionJack':
         row = bops.multiContraction(bops.multiContraction(
-            bops.multiContraction(bops.multiContraction(lambdaSide, gammaL, '1', '0', isDiag1=True),
+            bops.multiContraction(bops.multiContraction(lambdaSide, gammaL, '0', '0', isDiag1=True),
                                   lambdaMid, '4', '0', cleanOr1=True, cleanOr2=True, isDiag2=True),
                                   gammaR, '4', '0', cleanOr1=True, cleanOr2=True),
                                   lambdaSide, '7', '0', cleanOr1=True, isDiag2=True)
@@ -56,14 +56,14 @@ def bmpsRowStep(gammaL, lambdaMid, gammaR, lambdaSide, envOp, lattice='squared',
             b = 1
     newLambdaMid = tn.Node(np.diag(S.tensor) / np.sqrt(sum(np.diag(S.tensor)**2))) # bops.multNode(S, 1 / np.sqrt(sum(S.tensor**2)))
     lambdaSideInv = tn.Node(np.array([1 / val if val > 1e-15 else 0 for val in lambdaSide.tensor], dtype=gammaL.dtype))
-    newGammaL = bops.multiContraction(lambdaSideInv, U, '1', '0', cleanOr2=True, isDiag1=True)
+    newGammaL = bops.multiContraction(lambdaSideInv, U, '0', '0', cleanOr2=True, isDiag1=True)
     splitter = tn.Node(bops.getLegsSplitterTensor([newGammaL[i].dimension for i in range(sideLegsNumber)]))
     newGammaR = bops.multiContraction(V, lambdaSideInv, [siteIndexNumber - 1], '0', cleanOr1=True, cleanOr2=True, isDiag2=True)
     newGammaL = bops.unifyLegs(newGammaL, list(range(sideLegsNumber)))
     newGammaR = bops.unifyLegs(newGammaR,
                         list(range(len(newGammaR.tensor.shape) - sideLegsNumber, len(newGammaR.tensor.shape))))
     newLambdaSide = bops.multiContraction(bops.multiContraction(
-        lambdaSide, splitter, '1', '0', cleanOr1=True, isDiag1=True),
+        lambdaSide, splitter, '0', '0', cleanOr1=True, isDiag1=True),
         splitter, list(range(sideLegsNumber)), list(range(sideLegsNumber)), cleanOr1=True, cleanOr2=True)
     temp = newLambdaSide
     newLambdaSide = tn.Node(np.diag(newLambdaSide.tensor))
@@ -95,7 +95,7 @@ def checkConvergence(oldGammaC, oldLambdaC, oldGammaD, oldLambdaD, GammaC, Lambd
 
 
 def getRowDM(GammaL, LambdaL, GammaR, LambdaR, sites, d):
-    c = bops.contract(bops.contract(LambdaR, GammaL, '1', '0', isDiag1=True), LambdaL, '2', '0', isDiag2=True)
+    c = bops.contract(bops.contract(LambdaR, GammaL, '0', '0', isDiag1=True), LambdaL, '2', '0', isDiag2=True)
     row = bops.contract(bops.contract(c, GammaR, '2', '0'), LambdaR, '3', '0', isDiag2=True)
     for i in range(sites):
         row = bops.multiContraction(row, GammaL, [len(row.edges) - 1], [0])
