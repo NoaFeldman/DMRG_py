@@ -277,7 +277,7 @@ def shrink_boundaries(upRow, downRow, leftRow, rightRow, bond_dim):
 
 
 # TODO handle A != B
-def get_boundaries(dirname, model, param_name, param, max_allowed_te=1e-10):
+def get_boundaries(dirname, model, param_name, param, max_allowed_te=1e-10, silent=False):
     boundary_filename = boundary_filname(dirname, model, param_name, param)
     if os.path.exists(boundary_filename):
         [upRow, downRow, leftRow, rightRow, openA, openA, A, A] = pickle.load(open(boundary_filename, 'rb'))
@@ -303,13 +303,13 @@ def get_boundaries(dirname, model, param_name, param, max_allowed_te=1e-10):
             bond_dim += 1
         else:
             break
-    print('truncation error: ' + str(max_te) + ', bond dim: ' + str(bond_dim))
+    if not silent: print('truncation error: ' + str(max_te) + ', bond dim: ' + str(bond_dim))
     [cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>', maxBondDim=upRow.tensor.shape[0])
     [cDown, dDown, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>', maxBondDim=downRow.tensor.shape[0])
     return cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openA
 
-def get_full_purity(w, h, dirname, model, param_name, param):
-    cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB = get_boundaries(dirname, model, param_name, param)
+def get_full_purity(w, h, dirname, model, param_name, param, silent=False):
+    cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB = get_boundaries(dirname, model, param_name, param, silent=silent)
     norm = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, w, h,
                                   [tn.Node(np.eye(4)) for i in range(w * h)])
     leftRow.tensor /= norm**(h / 2)
@@ -411,7 +411,7 @@ def normalized_p2s_data(model, params, Ns, dirname, param_name, d=2):
         except:
             continue
 
-def analyze_normalized_p2_data(model, params, Ns, dirname, param_name):
+def analyze_normalized_p2_data(model, params, Ns, dirname, param_name, plot=True):
     import matplotlib.pyplot as plt
     wilson_areas = np.zeros(len(params))
     wilson_perimeters = np.zeros(len(params))
@@ -420,65 +420,37 @@ def analyze_normalized_p2_data(model, params, Ns, dirname, param_name):
     normalized_p2s = np.zeros((len(params), len(Ns), num_of_sampled_blocks))
     full_p2s = np.zeros(len(params))
     for pi in range(len(params)):
-        param = params[pi]
-        print(param)
-        full_p2s[pi] = get_full_purity(2, 2, dirname, model, param_name, param)
-        print(full_p2s[pi])
-        filename = results_filname(dirname, model, param_name, param, Ns)
-        [tau_eigenvals, wilson_area, wilson_perimeter, curr_normalized_p2s, sampled_blocks] = pickle.load(open(filename, 'rb'))
-        print(tau_eigenvals / np.sum(tau_eigenvals))
-        tau_purities[pi, 0] = sum(np.abs(tau_eigenvals[:2] / sum(tau_eigenvals))**2)
-        tau_purities[pi, 1] = sum(np.real(tau_eigenvals[2:])**2)
+        try:
+            param = params[pi]
+            filename = results_filname(dirname, model, param_name, param, Ns)
+            [tau_eigenvals, wilson_area, wilson_perimeter, curr_normalized_p2s, sampled_blocks] = pickle.load(open(filename, 'rb'))
+            full_p2s[pi] = get_full_purity(2, 2, dirname, model, param_name, param, silent=True)
+            print(param, full_p2s[pi], min(curr_normalized_p2s[2]), wilson_area[0], wilson_perimeter[0])
+            tau_purities[pi, 0] = sum(np.abs(tau_eigenvals[:2] / sum(tau_eigenvals))**2)
+            tau_purities[pi, 1] = sum(np.real(tau_eigenvals[2:])**2)
+            for ni in range(len(Ns)):
+                for bi in range(num_of_sampled_blocks):
+                    normalized_p2s[pi, ni, bi] = curr_normalized_p2s[ni][bi]
+
+            wilson_areas[pi] = wilson_area
+            wilson_perimeters[pi] = wilson_perimeter
+        except FileNotFoundError:
+            continue
+
+    if plot:
+        ff, axs = plt.subplots(3)
+        for i in range(4):
+            axs[0].plot(params, wilson_areas)
+            axs[0].plot(params, wilson_perimeters)
+        axs[0].legend([r'area law $\chi^2$'])
+        axs[0].legend([r'perimeter law $\chi^2$'])
+        axs[1].plot(params, full_p2s)
+        # axs[2].plot(params, tau_purities[:, 0])
+        # axs[2].plot(params, tau_purities[:, 1], '--')
         for ni in range(len(Ns)):
             for bi in range(num_of_sampled_blocks):
-                normalized_p2s[pi, ni, bi] = curr_normalized_p2s[ni][bi]
-
-        wilson_areas[pi] = wilson_area
-        wilson_perimeters[pi] = wilson_perimeter
-
-    ff, axs = plt.subplots(3)
-    for i in range(4):
-        axs[0].plot(params, wilson_areas)
-        axs[0].plot(params, wilson_perimeters)
-    axs[0].legend([r'area law $\chi^2$'])
-    axs[0].legend([r'perimeter law $\chi^2$'])
-    axs[1].plot(params, full_p2s)
-    # axs[2].plot(params, tau_purities[:, 0])
-    # axs[2].plot(params, tau_purities[:, 1], '--')
-    for ni in range(len(Ns)):
-        for bi in range(num_of_sampled_blocks):
-            axs[2].plot(params, normalized_p2s[:, ni, bi])
-    plt.show()
-
-do_magic_stuff = False
-if do_magic_stuff:
-    gs = [np.round(0.05 * g, 8) for g in range(0, 40)]
-    ps = np.zeros(len(gs))
-    p2s = np.zeros(len(gs))
-    for gi in range(len(gs)):
-        g = gs[gi]
-        model = 'orus'
-        cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB = get_boundaries('results/gauge/' + model, model, 'g', g)
-        AEnv = bops.contract(openA, tn.Node(np.eye(d**2)), '05', '01')
-        rdm = np.tensordot(bops.contract(bops.contract(bops.contract(bops.contract(bops.contract(bops.contract(bops.contract(bops.contract(bops.contract(
-            leftRow, cUp, '3', '0'), AEnv, '23', '30'), dUp, '2', '0'), AEnv, '24', '30'), rightRow, '34', '01'),
-            AEnv, '12', '30'), dDown, '05', '21'), cDown, '24', '02'), openA, '0132', '1234')\
-            .tensor.reshape([2] * 4), np.eye(2), ([0, 2], [0, 1]))
-        rdm /= rdm.trace()
-        a_z = np.abs(1/2 - rdm[0, 0])
-        ps[gi] = a_z
-        p2 = 0
-        for bi in range(2**6):
-            print(g, bi)
-            if g == 0.2 and bi == 63:
-                dbg = 1
-            block = get_2_by_n_explicit_block(boundary_filname('results/gauge/orus', 'orus', 'g', g), 2, bi)
-            p2 += np.matmul(block, block).trace()
-        p2s[gi] = p2
-    import matplotlib.pyplot as plt
-    plt.plot(gs, ps)
-    plt.plot(gs, p2s)
-    plt.show()
+                axs[2].plot(params, normalized_p2s[:, ni, bi])
+        plt.show()
 
 
 model = sys.argv[1]
@@ -491,7 +463,10 @@ if model == 'zohar':
 elif model == 'zeros_diff':
     params = [np.round(0.1 * a, 8) for a in range(-20, 21)]
     param_name = 'alpha'
+elif model == 'orus':
+    params = [np.round(0.1 * i, 8) for i in range(20)]
+    param_name = 'g'
 dirname = 'results/gauge/' + model
 Ns = [2, 4, 6]
 normalized_p2s_data(model, params, Ns, dirname, param_name)
-# analyze_normalized_p2_data(model, params, Ns, dirname, param_name)
+analyze_normalized_p2_data(model, params, Ns, dirname, param_name)
