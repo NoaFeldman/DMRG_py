@@ -186,6 +186,26 @@ def toric_tensors_lgt_approach(model, param, d=2):
         tensor[0, 1, 0, 1, 0, 1] = gamma
         tensor[1, 0, 1, 0, 1, 0] = gamma
         tensor[1, 1, 1, 1, 1, 1] = delta
+    elif model == 'zohar_deltas':
+        alpha, beta, gamma = np.sqrt(2), 1, 0
+        delta = param
+        tensor[0, 0, 0, 0, 0, 0] = alpha
+        for i in range(2):
+            for j in range(2):
+                tensor[i, j, (i + 1) % 2, (j + 1) % 2, i, j] = beta
+        tensor[0, 1, 0, 1, 0, 1] = gamma
+        tensor[1, 0, 1, 0, 1, 0] = gamma
+        tensor[1, 1, 1, 1, 1, 1] = delta
+    elif model == 'zohar_deltas_large_alpha':
+        alpha, beta, gamma = 2, 1, 0
+        delta = param
+        tensor[0, 0, 0, 0, 0, 0] = alpha
+        for i in range(2):
+            for j in range(2):
+                tensor[i, j, (i + 1) % 2, (j + 1) % 2, i, j] = beta
+        tensor[0, 1, 0, 1, 0, 1] = gamma
+        tensor[1, 0, 1, 0, 1, 0] = gamma
+        tensor[1, 1, 1, 1, 1, 1] = delta
     elif model == 'toric_c_mockup':
         tensor[0, 1, 0, 1, :, :] *= param**0.5
         tensor[1, 0, 1, 0, :, :] *= param**0.5
@@ -425,10 +445,10 @@ def analyze_normalized_p2_data(model, params, Ns, dirname, param_name, plot=True
             filename = results_filname(dirname, model, param_name, param, Ns)
             [tau_eigenvals, wilson_area, wilson_perimeter, curr_normalized_p2s, sampled_blocks] = pickle.load(open(filename, 'rb'))
             full_p2s[pi] = get_full_purity(2, 2, dirname, model, param_name, param, silent=True)
-            print(param, full_p2s[pi], min(curr_normalized_p2s[2]), wilson_area[0], wilson_perimeter[0])
+            print(param, full_p2s[pi], min(curr_normalized_p2s[2]), wilson_area[0], wilson_perimeter[0], tau_eigenvals)
             tau_purities[pi, 0] = sum(np.abs(tau_eigenvals[:2] / sum(tau_eigenvals))**2)
             tau_purities[pi, 1] = sum(np.real(tau_eigenvals[2:])**2)
-            for ni in range(len(Ns)):
+            for ni in range(2, 3):
                 for bi in range(num_of_sampled_blocks):
                     normalized_p2s[pi, ni, bi] = curr_normalized_p2s[ni][bi]
 
@@ -439,11 +459,9 @@ def analyze_normalized_p2_data(model, params, Ns, dirname, param_name, plot=True
 
     if plot:
         ff, axs = plt.subplots(3)
-        for i in range(4):
-            axs[0].plot(params, wilson_areas)
-            axs[0].plot(params, wilson_perimeters)
-        axs[0].legend([r'area law $\chi^2$'])
-        axs[0].legend([r'perimeter law $\chi^2$'])
+        axs[0].plot(params, wilson_areas)
+        axs[0].plot(params, wilson_perimeters)
+        axs[0].legend([r'area law $\chi^2$', r'perimeter law $\chi^2$'])
         axs[1].plot(params, full_p2s)
         # axs[2].plot(params, tau_purities[:, 0])
         # axs[2].plot(params, tau_purities[:, 1], '--')
@@ -460,6 +478,12 @@ if model == 'zohar':
               for gamma in [np.round(0.5 * i, 8) for i in range(-2, 3)] \
               for delta in [np.round(0.5 * i, 8) for i in range(-2, 3)]]
     param_name = 'parmas'
+elif model == 'zohar_deltas':
+    params = [np.round(0.2 * a, 8) for a in range(-10, 11)]
+    param_name = 'delta'
+elif model == 'zohar_deltas_large_alpha':
+    params = [np.round(0.2 * a, 8) for a in range(-10, 11)]
+    param_name = 'delta'
 elif model == 'zeros_diff':
     params = [np.round(0.1 * a, 8) for a in range(-20, 21)]
     param_name = 'alpha'
