@@ -100,14 +100,23 @@ def check_exponent_approximation(n, Gamma, k, theta, case='kernel'):
     ag, bg, cg, pg, qg = fit_exponential(gammas)
     import matplotlib.pyplot as plt
     ns = np.array(range(1, n))
-    plt.plot(ns, gammas)
-    plt.plot(ns, ag + bg * np.exp(pg * ns) + cg * np.exp(qg * ns))
+    plt.scatter(ns, gammas)
+    plt.scatter(ns, ag + bg * np.exp(pg * ns) + cg * np.exp(qg * ns))
+    plt.title(r'$\gamma(r)$')
+    plt.xlabel(r'$r$')
+    plt.legend(['exact', 'exponent sum'])
     plt.show()
-    plt.plot(ns, np.real(Gs))
-    plt.plot(ns, np.real(bG * np.exp(pG * ns) + cG * np.exp(qG * ns)))
+    plt.scatter(ns, np.real(Gs))
+    plt.scatter(ns, np.real(bG * np.exp(pG * ns) + cG * np.exp(qG * ns)))
+    plt.title(r'Re($G(r)$)')
+    plt.xlabel(r'$r$')
+    plt.legend(['exact', 'exponent sum'])
     plt.show()
-    plt.plot(ns, np.imag(Gs))
-    plt.plot(ns, np.imag(bG * np.exp(pG * ns) + cG * np.exp(qG * ns)))
+    plt.scatter(ns, np.imag(Gs))
+    plt.scatter(ns, np.imag(bG * np.exp(pG * ns) + cG * np.exp(qG * ns)))
+    plt.legend(['exact', 'exponent sum'])
+    plt.title(r'Im($G(r)$)')
+    plt.xlabel(r'$r$')
     plt.show()
 
 
@@ -285,67 +294,72 @@ if results_to == 'plot':
 L_exp = get_photon_green_L_exp(N, Omega, Gamma, k, theta, sigma)
 L = get_photon_green_L(N, Omega, Gamma, k, theta, sigma, case=case, nearest_neighbors_num=nn_num)
 psi = [tn.Node(np.array([1, 0, 0, 0]).reshape([1, d**2, 1])) for n in range(N)]
-if N <= 6:
+if N <= 12:
+    print(nn_num)
     rhos = []
     Deltas, gammas = get_gnm(Gamma, k, theta, nn_num, case)
     if case == 'kernel':
         Deltas = np.array([0] + list(Deltas))
         gammas = np.array([Gamma] + list(gammas))
-    L_exact = np.zeros((d**(2*N), d**(2*N)), dtype=complex)
+    H_eff_exact = np.zeros((d**(N), d**(N)), dtype=complex)
     sigmas = []
     for i in range(N):
         sigmas.append(np.kron(np.eye(d**(i)), np.kron(sigma, np.eye(d**(N - i - 1)))))
 
     for n in range(N):
+        H_eff_exact += Omega * (sigmas[n] + sigmas[n].T)
         for m in range(N):
             if np.abs(m - n) <= nn_num:
-                L_exact += (-1j * Deltas[np.abs(m - n)] - 0.5 * gammas[np.abs(m - n)]) * \
-                           np.kron(np.eye(d**N), np.matmul(sigmas[n].T, sigmas[m]))
-                L_exact += (1j * Deltas[np.abs(m - n)] - 0.5 * gammas[np.abs(m - n)]) * \
-                           np.kron(np.matmul(sigmas[n].T, sigmas[m]), np.eye(d**N))
-                L_exact += gammas[np.abs(m - n)] * np.kron(sigmas[n], sigmas[m])
+                H_eff_exact += (Deltas[np.abs(n - m)] - 1j * gammas[np.abs(n - m)] / 2) * \
+                               np.matmul(sigmas[n], sigmas[m].T)
+                # L_exact += (-1j * Deltas[np.abs(m - n)] - 0.5 * gammas[np.abs(m - n)]) * \
+                #            np.kron(np.eye(d**N), np.matmul(sigmas[n].T, sigmas[m]))
+                # L_exact += (1j * Deltas[np.abs(m - n)] - 0.5 * gammas[np.abs(m - n)]) * \
+                #            np.kron(np.matmul(sigmas[n].T, sigmas[m]), np.eye(d**N))
+                # L_exact += gammas[np.abs(m - n)] * np.kron(sigmas[n], sigmas[m])
 
-    explicit_L = bops.contract(L[0], L[1], '3', '2')
-    explicit_L_exp = bops.contract(L_exp[0], L_exp[1], '3', '2')
-    explicit_rho = bops.contract(psi[0], psi[1], '2', '0')
-    for ni in range(2, N):
-        explicit_L = bops.contract(explicit_L, L[ni], [2 * ni + 1], '2')
-        explicit_L_exp = bops.contract(explicit_L_exp, L_exp[ni], [2 * ni + 1], '2')
-        explicit_rho = bops.contract(explicit_rho, psi[ni], [ni + 1], '0')
-    L_mat = explicit_L.tensor.reshape([d] * 4 * N).transpose([4 * i for i in range(N)]
-                                                             + [1 + 4 * i for i in range(N)]
-                                                             + [2 + 4 * i for i in range(N)]
-                                                             + [3 + 4 * i for i in range(N)])\
-        .reshape([d**(2 * N), d**(2 * N)]).T
-    L_exp_mat = explicit_L_exp.tensor.reshape([d] * 4 * N).transpose([4 * i for i in range(N)]
-                                                             + [1 + 4 * i for i in range(N)]
-                                                             + [2 + 4 * i for i in range(N)]
-                                                             + [3 + 4 * i for i in range(N)])\
-        .reshape([d**(2 * N), d**(2 * N)]).T
+    # explicit_L = bops.contract(L[0], L[1], '3', '2')
+    # # explicit_L_exp = bops.contract(L_exp[0], L_exp[1], '3', '2')
+    # explicit_rho = bops.contract(psi[0], psi[1], '2', '0')
+    # for ni in range(2, N):
+    #     explicit_L = bops.contract(explicit_L, L[ni], [2 * ni + 1], '2')
+    #     # explicit_L_exp = bops.contract(explicit_L_exp, L_exp[ni], [2 * ni + 1], '2')
+    #     explicit_rho = bops.contract(explicit_rho, psi[ni], [ni + 1], '0')
+    # L_mat = explicit_L.tensor.reshape([d] * 4 * N).transpose([4 * i for i in range(N)]
+    #                                                          + [1 + 4 * i for i in range(N)]
+    #                                                          + [2 + 4 * i for i in range(N)]
+    #                                                          + [3 + 4 * i for i in range(N)])\
+    #     .reshape([d**(2 * N), d**(2 * N)]).T
+    # L_exp_mat = explicit_L_exp.tensor.reshape([d] * 4 * N).transpose([4 * i for i in range(N)]
+    #                                                          + [1 + 4 * i for i in range(N)]
+    #                                                          + [2 + 4 * i for i in range(N)]
+    #                                                          + [3 + 4 * i for i in range(N)])\
+    #     .reshape([d**(2 * N), d**(2 * N)]).T
     Deltas, gammas = get_gnm(Gamma, k, theta, N - 1, case)
     Gs = Deltas - 1j * gammas / 2
     aG, bG, cG, pG, qG = fit_exponential(Gs)
     ag, bg, cg, pg, qg = fit_exponential(gammas)
-    L_exp_exact = np.zeros((d**(2 * N), d**(2 * N)), dtype=complex)
-    for n in range(N):
-        L_exp_exact += - 0.5 * np.kron(np.eye(d ** N), np.matmul(sigmas[n].T, sigmas[n]))
-        L_exp_exact += - 0.5 * np.kron(np.matmul(sigmas[n].T, sigmas[n]), np.eye(d ** N))
-        L_exp_exact += np.kron(sigmas[n], sigmas[n])
-        for m in range(N):
-            if m != n and np.abs(m - n) <= nn_num:
-                L_exp_exact += (-1j * (aG + bG * np.exp(pG * np.abs(m - n)) + cG * np.exp(qG * np.abs(m - n)))) * \
-                           np.kron(np.eye(d ** N), np.matmul(sigmas[n].T, sigmas[m]))
-                L_exp_exact += (1j * np.conj(aG + bG * np.exp(pG * np.abs(m - n)) + cG * np.exp(qG * np.abs(m - n)))) * \
-                       np.kron(np.matmul(sigmas[n].T, sigmas[m]), np.eye(d ** N))
-                L_exp_exact += (ag + bg * np.exp(pg * np.abs(m - n)) + cg * np.exp(qg * np.abs(m - n))) * np.kron(sigmas[n], sigmas[m])
+    # L_exp_exact = np.zeros((d**(2 * N), d**(2 * N)), dtype=complex)
+    # for n in range(N):
+    #     L_exp_exact += - 0.5 * np.kron(np.eye(d ** N), np.matmul(sigmas[n].T, sigmas[n]))
+    #     L_exp_exact += - 0.5 * np.kron(np.matmul(sigmas[n].T, sigmas[n]), np.eye(d ** N))
+    #     L_exp_exact += np.kron(sigmas[n], sigmas[n])
+    #     for m in range(N):
+    #         if m != n and np.abs(m - n) <= nn_num:
+    #             L_exp_exact += (-1j * (aG + bG * np.exp(pG * np.abs(m - n)) + cG * np.exp(qG * np.abs(m - n)))) * \
+    #                        np.kron(np.eye(d ** N), np.matmul(sigmas[n].T, sigmas[m]))
+    #             L_exp_exact += (1j * np.conj(aG + bG * np.exp(pG * np.abs(m - n)) + cG * np.exp(qG * np.abs(m - n)))) * \
+    #                    np.kron(np.matmul(sigmas[n].T, sigmas[m]), np.eye(d ** N))
+    #             L_exp_exact += (ag + bg * np.exp(pg * np.abs(m - n)) + cg * np.exp(qg * np.abs(m - n))) * np.kron(sigmas[n], sigmas[m])
+    rho_mat = np.diag([1] + [0] * (d**N - 1))
     rho_vec = bops.getExplicitVec(psi, d**2)
     rho_vec_exp = np.copy(rho_vec)
     rho_vec_exp_exact = np.copy(rho_vec)
-    evolver_L = linalg.expm(L_mat * dt)
+    # evolver_L = linalg.expm(L_exact * dt)
     J_expect_L = np.zeros(timesteps)
-    evolver_L_exp = linalg.expm(L_exp_mat * dt)
+    # evolver_L_exp = linalg.expm(L_exp_mat * dt)
     J_expect_L_exp = np.zeros(timesteps)
-    evolver_L_exp_exact = linalg.expm(L_exp_exact * dt)
+    # evolver_L_exp_exact = linalg.expm(L_exp_exact * dt)
     J_expect_L_exp_exact = np.zeros(timesteps)
 
     z_inds = [[i + d**N * i,
@@ -356,19 +370,26 @@ if N <= 6:
         J += sigmas[i]
     JdJ = np.matmul(J.conj().T, J)
     for ti in range(timesteps):
-        J_expect_L[ti] = np.abs(np.trace(np.matmul(JdJ, rho_vec.reshape([d**N, d**N]))))
-        J_expect_L_exp[ti] = np.abs(np.trace(np.matmul(JdJ, rho_vec_exp.reshape([d**N, d**N]))))
-        J_expect_L_exp_exact[ti] = np.abs(np.trace(np.matmul(JdJ, rho_vec_exp_exact.reshape([d**N, d**N]))))
-        rho_vec = np.matmul(evolver_L, rho_vec)
-        rho_vec_exp = np.matmul(evolver_L_exp, rho_vec_exp)
-        rho_vec_exp_exact = np.matmul(evolver_L_exp_exact, rho_vec_exp_exact)
+        print(ti)
+        J_expect_L[ti] = np.abs(np.trace(np.matmul(JdJ, rho_mat)))
+        addition = 1j * (np.matmul(H_eff_exact, rho_mat) - np.matmul(rho_mat, H_eff_exact.conj().T))
+        for n in range(N):
+            for m in range(N):
+                if np.abs(m - n) <= nn_num:
+                    addition += gammas[np.abs(n - m)] * np.matmul(sigmas[n], np.matmul(rho_mat, sigmas[m].T))
+        rho_mat += dt * addition
+        # J_expect_L_exp[ti] = np.abs(np.trace(np.matmul(JdJ, rho_vec_exp.reshape([d**N, d**N]))))
+        # J_expect_L_exp_exact[ti] = np.abs(np.trace(np.matmul(JdJ, rho_vec_exp_exact.reshape([d**N, d**N]))))
+        # rho_vec = np.matmul(evolver_L, rho_vec)
+        # rho_vec_exp = np.matmul(evolver_L_exp, rho_vec_exp)
+        # rho_vec_exp_exact = np.matmul(evolver_L_exp_exact, rho_vec_exp_exact)
         rhos.append(rho_vec)
 
     if results_to == 'plot':
         plt.plot(np.array(range(int(timesteps))) * dt, J_expect_L)
         plt.plot(np.array(range(int(timesteps))) * dt, J_expect_L_exp)
         plt.plot(np.array(range(int(timesteps))) * dt, J_expect_L_exp_exact)
-        # plt.show()
+        plt.show()
     else:
         with open(outdir + '/explicit_J_expect', 'wb') as f:
             pickle.dump(J_expect_L, f)
@@ -435,35 +456,43 @@ if initial_ti > 0:
 for ti in range(initial_ti, timesteps):
     print('---')
     print(ti)
-    tstart = time.time()
-    tes_1[ti] = tdvp.tdvp_sweep(psi, L, projectors_left, projectors_right, dt / 2, max_bond_dim=bond_dim, num_of_sites=1)
-    tf = time.time()
-    runtimes_1[ti] = tf - tstart
-    # tstart = time.time()
-    # tes_1_corrected[ti] = tdvp.tdvp_sweep(psi_1_corrected_w, L, hl_1_corrected, hr_1_corrected, dt / 2,
-    #                                       max_bond_dim=bond_dim, num_of_sites=1, max_trunc=12)
-    # tf = time.time()
-    # runtimes_1_corrected[ti] = tf - tstart
-    tstart = time.time()
-    tes_2[ti] = tdvp.tdvp_sweep(psi_2, L, hl_2, hr_2, dt / 2, max_bond_dim=bond_dim, num_of_sites=2)
-    tf = time.time()
-    runtimes_2[ti] = tf - tstart
-    # tstart = time.time()
-    # tes_2_exp[ti] = tdvp.tdvp_sweep(psi_2_exp, L_exp, hl_2_exp, hr_2_exp, dt / 2, max_bond_dim=bond_dim, num_of_sites=2)
-    # tf = time.time()
-    # runtimes_2_exp[ti] = tf - tstart
-    # tstart = time.time()
-    # tes_1_exp[ti] = tdvp.tdvp_sweep(psi_1_exp, L_exp, hl_1_exp, hr_1_exp, dt / 2, max_bond_dim=bond_dim, num_of_sites=1)
-    # tf = time.time()
-    # runtimes_1_exp[ti] = tf - tstart
-    print('times = ' + str([runtimes_1[ti], runtimes_2[ti], runtimes_1_corrected[ti], runtimes_2_exp[ti], runtimes_1_exp[ti]]))
     if ti > 0 and ti % save_each != 1:
+        tstart = time.time()
+        psi_2_exp = bops.copyState(psi_1_exp)
+        hl_2_exp = bops.copyState(hl_1_exp)
+        hr_2_exp = bops.copyState(hr_1_exp)
+        tes_2_exp[ti] = tdvp.tdvp_sweep(psi_2_exp, L_exp, hl_2_exp, hr_2_exp, dt / 2, max_bond_dim=bond_dim, num_of_sites=2)
+        tf = time.time()
+        runtimes_2_exp[ti] = tf - tstart
+
         old_state_filename, old_data_filename = filenames(newdir, case, N, Omega, nn_num, ti - 1, bond_dim)
         os.remove(old_state_filename + '_1s')
         os.remove(old_state_filename + '_2s')
         os.remove(old_state_filename + '_1s_low_preselection')
         os.remove(old_state_filename + '_2s_exp')
         os.remove(old_state_filename + '_1s_exp')
+    # tstart = time.time()
+    # tes_1[ti] = tdvp.tdvp_sweep(psi, L, projectors_left, projectors_right, dt / 2, max_bond_dim=bond_dim, num_of_sites=1)
+    # tf = time.time()
+    # runtimes_1[ti] = tf - tstart
+    # tstart = time.time()
+    # tes_1_corrected[ti] = tdvp.tdvp_sweep(psi_1_corrected_w, L, hl_1_corrected, hr_1_corrected, dt / 2,
+    #                                       max_bond_dim=bond_dim, num_of_sites=1, max_trunc=12)
+    # tf = time.time()
+    # runtimes_1_corrected[ti] = tf - tstart
+    # tstart = time.time()
+    # tes_2[ti] = tdvp.tdvp_sweep(psi_2, L, hl_2, hr_2, dt / 2, max_bond_dim=bond_dim, num_of_sites=2)
+    # tf = time.time()
+    # runtimes_2[ti] = tf - tstart
+    # tstart = time.time()
+    # tes_2_exp[ti] = tdvp.tdvp_sweep(psi_2_exp, L_exp, hl_2_exp, hr_2_exp, dt / 2, max_bond_dim=bond_dim, num_of_sites=2)
+    # tf = time.time()
+    # runtimes_2_exp[ti] = tf - tstart
+    tstart = time.time()
+    tes_1_exp[ti] = tdvp.tdvp_sweep(psi_1_exp, L_exp, hl_1_exp, hr_1_exp, dt / 2, max_bond_dim=bond_dim, num_of_sites=1)
+    tf = time.time()
+    runtimes_1_exp[ti] = tf - tstart
+    print('times = ' + str([runtimes_1[ti], runtimes_2[ti], runtimes_1_corrected[ti], runtimes_2_exp[ti], runtimes_1_exp[ti]]))
     state_filename, data_filename = filenames(newdir, case, N, Omega, nn_num, ti, bond_dim)
     with open(state_filename + '_1s', 'wb') as f:
         pickle.dump([ti, psi, projectors_left, projectors_right, runtimes_1, tes_1], f)
