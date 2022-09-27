@@ -133,7 +133,7 @@ def get_choice_indices(boundary, choice, n, d=2):
     for ni in range(1, n - 1):
         result += [boundary[ni * 2 + 1], choice[ni],
                     (choice[ni - 1] + choice[ni] + boundary[ni * 2 + 1]) % d,
-                    (np.sum(boundary[:2 * (ni + 1)]) + choice[ni]) % d]
+                    (np.sum(boundary[:(2 * ni + 3)]) + choice[ni]) % d]
     result += [boundary[n * 2 - 1], boundary[-1],
                 (boundary[-1] + choice[-1] + boundary[n * 2 - 1]) % d, np.sum(boundary) % d]
     return result
@@ -141,7 +141,6 @@ def get_choice_indices(boundary, choice, n, d=2):
 # TODO here only d = 2
 def get_2_by_n_explicit_block(filename, n, bi, d=2):
     [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, A, B] = get_boundaries_from_file(filename, w=n, h=2)
-    # print([node.tensor.shape for node in [cUp, dUp, cDown, dDown, leftRow, rightRow]])
     boundary = [int(c) for c in bin(bi).split('b')[1].zfill(2 * n + 2)]
     projectors = [[np.diag([1, 0]), np.array([[0, 0], [1, 0]])],
                   [np.array([[0, 1], [0, 0]]), np.diag([0, 1])]]
@@ -158,8 +157,6 @@ def get_2_by_n_explicit_block(filename, n, bi, d=2):
             block[ci, cj] = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, h=2, w=n, ops=ops)
     return block
 
-
-# Fig 5 in https://journals.aps.org/prresearch/pdf/10.1103/PhysRevResearch.3.033179
 def toric_tensors_lgt_approach(model, param, d=2):
     # u, r, d, l, t, s
     tensor = np.zeros([d] * 6, dtype=complex)
@@ -173,6 +170,11 @@ def toric_tensors_lgt_approach(model, param, d=2):
                        i, j] = 1
     if model == 'zeros_diff':
         tensor[0, 0, 0, 0, 0, 0] = param
+    elif model == 'zohar_alpha':
+        tensor[0, 0, 0, 0, 0, 0] = param
+    elif model == 'zohar_gamma':
+        tensor[1, 0, 1, 0, 1, 0] = param
+        tensor[0, 1, 0, 1, 0, 1] = param
     elif model == 'orus':
         for i in range(d):
             for j in range(d):
@@ -214,20 +216,90 @@ def toric_tensors_lgt_approach(model, param, d=2):
     A = tn.Node(tensor.reshape([d] * 4 + [d**2]))
     return A
 
-# A = toric_tensors_lgt_approach('toric_c', 0.5)
-# T = bops.permute(bops.contract(A, A, '4', '4*'), [0, 2, 4, 6, 1, 3, 5, 7])
-# singlet_projector_tensor = np.zeros((4, 4, 4**2))
-# for i in [0, 3]:
-#     for j in [0, 3]:
-#         singlet_projector_tensor[i, j, i * 4 + j] = 1
-# for i in [1, 2]:
-#     for j in [1, 2]:
-#         singlet_projector_tensor[i, j, i * 4 + j] = 1
-# singlet_proj = tn.Node(singlet_projector_tensor)
-# tau = bops.contract(bops.contract(bops.contract(bops.contract(
-#     T, singlet_proj, '01', '01'), singlet_proj, '01', '01'), singlet_proj, '01', '01'), singlet_proj, '01', '01')
-# tau_mat = tau.tensor.transpose([0, 2, 1, 3]).reshape([4**4, 4**4])
-# dbg = 1
+
+def get_corner_projector(b, d=2):
+    if d == 2:
+        if b == 0:
+            # 0000, 0101, 1010, 1111
+            return tn.Node(np.diag([int(i in [0, 5, 10, 15]) for i in range(16)])
+                           .reshape([4, 4, 4, 4]))
+        else:
+            # 0011, 0110, 1001, 1100
+            return tn.Node(np.diag([int(i in [3, 6, 9, 12]) for i in range(16)])
+                           .reshape([4, 4, 4, 4]))
+
+
+def get_block_probability(filename, n, bi, d=2):
+    [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, A, B] = get_boundaries_from_file(filename, w=n, h=2)
+    boundary = [int(c) for c in bin(bi).split('b')[1].zfill(2 * n + 2)]
+    boundary.append(sum(boundary) % d)
+    edge_projectors = [tn.Node(np.diag([1, 0, 0, 0])), tn.Node(np.diag([0, 0, 0, 1]))]
+    dDowns = []
+    dUps = []
+    cDowns = []
+    cUps = []
+    bottom_left_corner = bops.permute(bops.contract(bops.contract(
+        dDown, leftRow, '2', '0'), get_corner_projector(boundary[2]), '12', '01'), [0, 3, 4, 1, 2])
+    [d_down_corner, leftRow, te] = bops.svdTruncation(bottom_left_corner, [0, 1], [2, 3, 4], '>>')
+    dDowns.append(d_down_corner)
+    leftRow = bops.permute(bops.contract(leftRow, edge_projectors[boundary[1]], '2', '0'), [0, 1, 3, 2])
+    cUps.append(bops.permute(bops.contract(cUp, edge_projectors[boundary[0]], '1', '0'), [0, 2, 1]))
+    for ni in range(int(n/2) - 1):
+        dUps.append(bops.permute(bops.contract(dUp, edge_projectors[boundary[3 + ni * 4]], '1', '0'), [0, 2, 1]))
+        cDowns.append(bops.permute(bops.contract(cDown, edge_projectors[boundary[4 + ni * 4]], '1', '0'), [0, 2, 1]))
+        cUps.append(bops.permute(bops.contract(cUp, edge_projectors[boundary[5 + ni * 4]], '1', '0'), [0, 2, 1]))
+        dDowns.append(bops.permute(bops.contract(dDown, edge_projectors[boundary[6 + ni * 4]], '1', '0'), [0, 2, 1]))
+    dUps.append(bops.permute(bops.contract(dUp, edge_projectors[boundary[3 + (int(n/2) - 1) * 4]], '1', '0'), [0, 2, 1]))
+    cDowns.append(bops.permute(bops.contract(cDown, edge_projectors[boundary[4 + (int(n/2) - 1) * 4]], '1', '0'), [0, 2, 1]))
+    rightRow = bops.permute(bops.contract(bops.contract(
+        rightRow, edge_projectors[boundary[-2]], '1', '0'), edge_projectors[boundary[-1]], '1', '0'), [0, 2, 3, 1])
+    return pe.applyLocalOperators_detailedBoundary(cUps, dUps, cDowns, dDowns, [leftRow], [rightRow], openA, openA, 2, n,
+                                                   [tn.Node(np.eye(4)) for i in range(2 * n)])
+
+
+    # projectors = [[np.diag([1, 0]), np.array([[0, 0], [1, 0]])],
+    #               [np.array([[0, 1], [0, 0]]), np.diag([0, 1])]]
+    # num_of_choices = n - 1
+    # block = np.zeros((d**num_of_choices, d**num_of_choices), dtype=complex)
+    # choices = [[int(c) for c in bin(choice).split('b')[1].zfill(num_of_choices)] for choice in range(d**num_of_choices)]
+    # for ci in range(len(choices)):
+    #     ingoing = get_choice_indices(boundary[:-1], choices[ci], n)
+    #     for cj in range(len(choices)):
+    #         outgoing = get_choice_indices(boundary[:-1], choices[cj], n)
+    #         ops = [tn.Node(np.kron(projectors[ingoing[2 * i]][outgoing[2 * i]],
+    #                        projectors[ingoing[2 * i + 1]][outgoing[2 * i + 1]])) for i in range(int(len(ingoing)/2))]
+    #         block[ci, cj] = pe.applyLocalOperators_detailedBoundary(cUps, dUps, cDowns, dDowns, [leftRow], [rightRow],
+    #                                                                 openA, openA, 2, n, ops=ops)
+    # return block
+
+
+def get_block_purity(filename, n, bi, d=2):
+    [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, A, B] = get_boundaries_from_file(filename, w=n, h=2)
+    boundary = [int(c) for c in bin(bi).split('b')[1].zfill(2 * n + 2)]
+    boundary.append(sum(boundary) % d)
+    edge_projectors = [tn.Node(np.diag([1, 0, 0, 0])), tn.Node(np.diag([0, 0, 0, 1]))]
+    dDowns = []
+    dUps = []
+    cDowns = []
+    cUps = []
+    bottom_left_corner = bops.permute(bops.contract(bops.contract(
+        dDown, leftRow, '2', '0'), get_corner_projector(boundary[2]), '12', '01'), [0, 3, 4, 1, 2])
+    [d_down_corner, leftRow, te] = bops.svdTruncation(bottom_left_corner, [0, 1], [2, 3, 4], '>>')
+    dDowns.append(d_down_corner)
+    left_row = bops.permute(bops.contract(leftRow, edge_projectors[boundary[1]], '2', '0'), [0, 1, 3, 2])
+    cUps.append(bops.permute(bops.contract(cUp, edge_projectors[boundary[0]], '1', '0'), [0, 2, 1]))
+    for ni in range(int(n/2) - 1):
+        dUps.append(bops.permute(bops.contract(dUp, edge_projectors[boundary[3 + ni * 4]], '1', '0'), [0, 2, 1]))
+        cDowns.append(bops.permute(bops.contract(cDown, edge_projectors[boundary[4 + ni * 4]], '1', '0'), [0, 2, 1]))
+        cUps.append(bops.permute(bops.contract(cUp, edge_projectors[boundary[5 + ni * 4]], '1', '0'), [0, 2, 1]))
+        dDowns.append(bops.permute(bops.contract(dDown, edge_projectors[boundary[6 + ni * 4]], '1', '0'), [0, 2, 1]))
+    dUps.append(bops.permute(bops.contract(dUp, edge_projectors[boundary[3 + (int(n/2) - 1) * 4]], '1', '0'), [0, 2, 1]))
+    cDowns.append(bops.permute(bops.contract(cDown, edge_projectors[boundary[4 + (int(n/2) - 1) * 4]], '1', '0'), [0, 2, 1]))
+    rightRow = bops.permute(bops.contract(bops.contract(
+        rightRow, edge_projectors[boundary[-2]], '1', '0'), edge_projectors[boundary[-1]], '1', '0'), [0, 2, 3, 1])
+    return get_full_purity(n, 2, dirname, model, param_name, 0,
+                           [cUps, dUps, cDowns, dDowns, [leftRow], [rightRow], openA, openA])
+
 
 def numberToBase(n, b):
     if n == 0:
@@ -238,10 +310,11 @@ def numberToBase(n, b):
         n //= b
     return digits[::-1]
 
+
 def tensors_from_transfer_matrix(model, param, d=2):
     A = toric_tensors_lgt_approach(model, param, d)
     E0 = bops.permute(bops.contract(A, A, '4', '4'), [0, 4, 1, 5, 2, 6, 3, 7])
-    bond_dim =  A[0].dimension
+    bond_dim = A[0].dimension
     projector_tensor = np.zeros([bond_dim] * 3)
     for i in range(d):
         projector_tensor[i, i, i] = 1
@@ -253,8 +326,11 @@ def tensors_from_transfer_matrix(model, param, d=2):
     return A, tau, openA, projector
 
 
-def results_filname(dirname, model, param_name, param, Ns):
-    return dirname + '/normalized_p2_results_' + model + '_' + param_name + '_' + str(param) + '_Ns_' + str(Ns)
+def results_filename(dirname, model, param_name, param, Ns):
+    return dirname + '/normalized_p2_results_' + model + '_' + param_name + '_' + str(param) + \
+           '_Ns_' + str(Ns[0]) + '-' + str(Ns[-1])
+
+
 def boundary_filname(dirname, model, param_name, param):
     return dirname + '/toricBoundaries_gauge_' + model + '_' + param_name + '_' + str(param)
 
@@ -308,23 +384,33 @@ def get_boundaries(dirname, model, param_name, param, max_allowed_te=1e-10):
     [cDown, dDown, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>', maxBondDim=downRow.tensor.shape[0])
     return cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openA
 
-def get_full_purity(w, h, dirname, model, param_name, param):
-    cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB = get_boundaries(dirname, model, param_name, param)
-    norm = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, w, h,
-                                  [tn.Node(np.eye(4)) for i in range(w * h)])
-    leftRow.tensor /= norm**(h / 2)
-    cUp = tn.Node(np.kron(cUp.tensor, cUp.tensor))
-    dUp = tn.Node(np.kron(dUp.tensor, dUp.tensor))
-    cDown = tn.Node(np.kron(cDown.tensor, cDown.tensor))
-    dDown = tn.Node(np.kron(dDown.tensor, dDown.tensor))
-    leftRow = tn.Node(np.kron(leftRow.tensor, leftRow.tensor))
-    rightRow = tn.Node(np.kron(rightRow.tensor, rightRow.tensor))
+
+def get_full_purity(w, h, dirname, model, param_name, param, boundary_ops=None):
+    if boundary_ops is None:
+        cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB = get_boundaries(dirname, model, param_name, param)
+        norm = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, w, h,
+                                      [tn.Node(np.eye(4)) for i in range(w * h)])
+        leftRow.tensor /= norm**(h / 2)
+        cUps = [cUp for i in range(int(w/2))]
+        dUps = [dUp for i in range(int(w/2))]
+        cDowns = [cDown for i in range(int(w/2))]
+        dDowns = [dDown for i in range(int(w/2))]
+        leftRows = [leftRow for i in range(int(h/2))]
+        rightRows = [rightRow for i in range(int(h/2))]
+    else:
+        cUps, dUps, cDowns, dDowns, leftRows, rightRows, openA, openB = boundary_ops
+    cUps = [tn.Node(np.kron(o.tensor, o.tensor)) for o in cUps]
+    dUps = [tn.Node(np.kron(o.tensor, o.tensor)) for o in dUps]
+    cDowns = [tn.Node(np.kron(o.tensor, o.tensor)) for o in cDowns]
+    dDowns = [tn.Node(np.kron(o.tensor, o.tensor)) for o in dDowns]
+    leftRows = [tn.Node(np.kron(o.tensor, o.tensor)) for o in leftRows]
+    rightRows = [tn.Node(np.kron(o.tensor, o.tensor)) for o in rightRows]
     A = tn.Node(np.kron(openA.tensor, openA.tensor))
     B = tn.Node(np.kron(openB.tensor, openB.tensor))
     single_swap = np.array([[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1]])
     double_swap = np.kron(single_swap, single_swap).reshape([2] * 8).transpose([3, 2, 1, 0, 4, 5, 6, 7]).reshape(
         [2 ** 4, 2 ** 4])
-    full_purity = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, h, w,
+    full_purity = pe.applyLocalOperators_detailedBoundary(cUps, dUps, cDowns, dDowns, leftRows, rightRows, A, B, h, w,
                                          [tn.Node(double_swap) for i in range(w * h)])
     return full_purity
 
@@ -372,44 +458,36 @@ def normalized_p2s_data(model, params, Ns, dirname, param_name, d=2):
     if not os.path.exists(dirname):
         os.mkdir(dirname)
     for pi in range(len(params)):
-        try:
-            start = time.time()
-            param = params[pi]
-            print(param)
-            filename = results_filname(dirname, model, param_name, param, Ns)
-            if os.path.exists(filename):
-                continue
-            boundary_filename = boundary_filname(dirname, model, param_name, param)
-
-            wilson_area, wilson_perimeter = wilson_expectations(model, param, param_name, dirname)
-
-            A, tau, openA, singlet_projector = tensors_from_transfer_matrix(model, param, d=d)
-            tau = np.real(tau.tensor.transpose([0, 2, 1, 3]).reshape([d**2, d**2]))
-            tau_eigenvals = np.zeros(d**2)
-            tau_eigenvals[:2] = np.real(np.linalg.eigvals([[tau[0, 0], tau[0, 3]], [tau[3, 0], tau[3, 3]]]))
-            tau_eigenvals[2:] = np.real(np.linalg.eigvals([[tau[1, 1], tau[1, 2]], [tau[2, 1], tau[2, 2]]]))
-            num_of_sampled_blocks = 63
-            sampled_blocks = [[int(i * d**(2 * n + 2) / num_of_sampled_blocks) for i in range(num_of_sampled_blocks)] for n in Ns]
-            normalized_p2s = [np.zeros(num_of_sampled_blocks) for n in Ns]
-            # curr_rdm_eigvals = [[None for bi in range(num_of_sampled_blocks)] for n in Ns]
-            for ni in range(len(Ns)):
-                n = Ns[ni]
-                for bi in range(num_of_sampled_blocks):
-                    b = sampled_blocks[ni][bi]
-                    print(n, b)
-                    block = get_2_by_n_explicit_block(boundary_filename, n, b, d=d)
-                    normalized_p2s[ni][bi] = np.real(np.matmul(block, block).trace()) / block.trace()**2
-                    rdm_eigvals = np.linalg.eigvals(block)
-                    # curr_rdm_eigvals[ni][bi] = rdm_eigvals
-                    if min(rdm_eigvals) < -1e-12:
-                        print('Negative rho eigenvalue!!!')
-                        print(np.round(rdm_eigvals, 20))
-
-            end = time.time()
-            print(start - end)
-            pickle.dump([tau_eigenvals, wilson_area, wilson_perimeter, normalized_p2s, sampled_blocks], open(filename, 'wb'))
-        except:
+        param = params[pi]
+        print(param)
+        filename = results_filename(dirname, model, param_name, param, Ns)
+        if os.path.exists(filename):
             continue
+        boundary_filename = boundary_filname(dirname, model, param_name, param)
+
+        wilson_area, wilson_perimeter = wilson_expectations(model, param, param_name, dirname)
+
+        A, tau, openA, singlet_projector = tensors_from_transfer_matrix(model, param, d=d)
+        tau = np.real(tau.tensor.transpose([0, 2, 1, 3]).reshape([d**2, d**2]))
+        tau_eigenvals = np.zeros(d**2)
+        tau_eigenvals[:2] = np.real(np.linalg.eigvals([[tau[0, 0], tau[0, 3]], [tau[3, 0], tau[3, 3]]]))
+        tau_eigenvals[2:] = np.real(np.linalg.eigvals([[tau[1, 1], tau[1, 2]], [tau[2, 1], tau[2, 2]]]))
+        num_of_sampled_blocks = 63
+        sampled_blocks = [[int(i * d**(2 * n + 2) / num_of_sampled_blocks) for i in range(num_of_sampled_blocks)] for n in Ns]
+        p2s = [np.zeros(num_of_sampled_blocks) for n in Ns]
+        p1s = [np.zeros(num_of_sampled_blocks) for n in Ns]
+        # curr_rdm_eigvals = [[None for bi in range(num_of_sampled_blocks)] for n in Ns]
+        for ni in range(len(Ns)):
+            n = Ns[ni]
+            for bi in range(num_of_sampled_blocks):
+                b = sampled_blocks[ni][bi]
+                print(n, b)
+                p2s[ni][bi] = get_block_purity(boundary_filename, n, b)
+                p1s[ni][bi] = get_block_probability(boundary_filename, n, b)
+
+        pickle.dump([tau_eigenvals, wilson_area, wilson_perimeter, p2s, p1s, sampled_blocks],
+                    open(filename, 'wb'))
+
 
 def analyze_normalized_p2_data(model, params, Ns, dirname, param_name):
     import matplotlib.pyplot as plt
@@ -424,61 +502,30 @@ def analyze_normalized_p2_data(model, params, Ns, dirname, param_name):
         print(param)
         full_p2s[pi] = get_full_purity(2, 2, dirname, model, param_name, param)
         print(full_p2s[pi])
-        filename = results_filname(dirname, model, param_name, param, Ns)
-        [tau_eigenvals, wilson_area, wilson_perimeter, curr_normalized_p2s, sampled_blocks] = pickle.load(open(filename, 'rb'))
+        filename = results_filename(dirname, model, param_name, param, Ns)
+        [tau_eigenvals, wilson_area, wilson_perimeter, p2s, p1s, sampled_blocks] = pickle.load(open(filename, 'rb'))
         print(tau_eigenvals / np.sum(tau_eigenvals))
         tau_purities[pi, 0] = sum(np.abs(tau_eigenvals[:2] / sum(tau_eigenvals))**2)
         tau_purities[pi, 1] = sum(np.real(tau_eigenvals[2:])**2)
         for ni in range(len(Ns)):
             for bi in range(num_of_sampled_blocks):
-                normalized_p2s[pi, ni, bi] = curr_normalized_p2s[ni][bi]
+                normalized_p2s[pi, ni, bi] = p2s[ni][bi] / p1s[ni][bi]**2
 
         wilson_areas[pi] = wilson_area
         wilson_perimeters[pi] = wilson_perimeter
 
-    ff, axs = plt.subplots(3)
+    ff, axs = plt.subplots(2)
     for i in range(4):
         axs[0].plot(params, wilson_areas)
         axs[0].plot(params, wilson_perimeters)
     axs[0].legend([r'area law $\chi^2$'])
     axs[0].legend([r'perimeter law $\chi^2$'])
     axs[1].plot(params, full_p2s)
-    # axs[2].plot(params, tau_purities[:, 0])
-    # axs[2].plot(params, tau_purities[:, 1], '--')
-    for ni in range(len(Ns)):
-        for bi in range(num_of_sampled_blocks):
-            axs[2].plot(params, normalized_p2s[:, ni, bi])
     plt.show()
-
-do_magic_stuff = False
-if do_magic_stuff:
-    gs = [np.round(0.05 * g, 8) for g in range(0, 40)]
-    ps = np.zeros(len(gs))
-    p2s = np.zeros(len(gs))
-    for gi in range(len(gs)):
-        g = gs[gi]
-        model = 'orus'
-        cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB = get_boundaries('results/gauge/' + model, model, 'g', g)
-        AEnv = bops.contract(openA, tn.Node(np.eye(d**2)), '05', '01')
-        rdm = np.tensordot(bops.contract(bops.contract(bops.contract(bops.contract(bops.contract(bops.contract(bops.contract(bops.contract(bops.contract(
-            leftRow, cUp, '3', '0'), AEnv, '23', '30'), dUp, '2', '0'), AEnv, '24', '30'), rightRow, '34', '01'),
-            AEnv, '12', '30'), dDown, '05', '21'), cDown, '24', '02'), openA, '0132', '1234')\
-            .tensor.reshape([2] * 4), np.eye(2), ([0, 2], [0, 1]))
-        rdm /= rdm.trace()
-        a_z = np.abs(1/2 - rdm[0, 0])
-        ps[gi] = a_z
-        p2 = 0
-        for bi in range(2**6):
-            print(g, bi)
-            if g == 0.2 and bi == 63:
-                dbg = 1
-            block = get_2_by_n_explicit_block(boundary_filname('results/gauge/orus', 'orus', 'g', g), 2, bi)
-            p2 += np.matmul(block, block).trace()
-        p2s[gi] = p2
-    import matplotlib.pyplot as plt
-    plt.plot(gs, ps)
-    plt.plot(gs, p2s)
-    plt.show()
+    for sbi in range(len(sampled_blocks)):
+        plt.pcolormesh(Ns, params, normalized_p2s[:, :, sbi])
+        plt.title(sampled_blocks[sbi])
+        plt.show()
 
 
 model = sys.argv[1]
@@ -489,9 +536,16 @@ if model == 'zohar':
               for delta in [np.round(0.5 * i, 8) for i in range(-2, 3)]]
     param_name = 'parmas'
 elif model == 'zeros_diff':
+    params = [np.round(0.1 * a, 8) for a in range(-9, 21)]
+    param_name = 'alpha'
+elif model == 'zohar_alpha':
     params = [np.round(0.1 * a, 8) for a in range(-20, 21)]
     param_name = 'alpha'
+elif model == 'zohar_gamma':
+    params = [np.round(0.1 * a, 8) for a in range(-20, 21)]
+    param_name = 'gamma'
 dirname = 'results/gauge/' + model
-Ns = [2, 4, 6]
+
+Ns = [2 * i for i in range(1, 30)]
 normalized_p2s_data(model, params, Ns, dirname, param_name)
 # analyze_normalized_p2_data(model, params, Ns, dirname, param_name)
