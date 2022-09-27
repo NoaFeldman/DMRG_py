@@ -188,6 +188,26 @@ def toric_tensors_lgt_approach(model, param, d=2):
         tensor[0, 1, 0, 1, 0, 1] = gamma
         tensor[1, 0, 1, 0, 1, 0] = gamma
         tensor[1, 1, 1, 1, 1, 1] = delta
+    elif model == 'zohar_deltas':
+        alpha, beta, gamma = np.sqrt(2), 1, 0
+        delta = param
+        tensor[0, 0, 0, 0, 0, 0] = alpha
+        for i in range(2):
+            for j in range(2):
+                tensor[i, j, (i + 1) % 2, (j + 1) % 2, i, j] = beta
+        tensor[0, 1, 0, 1, 0, 1] = gamma
+        tensor[1, 0, 1, 0, 1, 0] = gamma
+        tensor[1, 1, 1, 1, 1, 1] = delta
+    elif model == 'zohar_deltas_large_alpha':
+        alpha, beta, gamma = 2, 1, 0
+        delta = param
+        tensor[0, 0, 0, 0, 0, 0] = alpha
+        for i in range(2):
+            for j in range(2):
+                tensor[i, j, (i + 1) % 2, (j + 1) % 2, i, j] = beta
+        tensor[0, 1, 0, 1, 0, 1] = gamma
+        tensor[1, 0, 1, 0, 1, 0] = gamma
+        tensor[1, 1, 1, 1, 1, 1] = delta
     elif model == 'toric_c_mockup':
         tensor[0, 1, 0, 1, :, :] *= param**0.5
         tensor[1, 0, 1, 0, :, :] *= param**0.5
@@ -353,7 +373,7 @@ def shrink_boundaries(upRow, downRow, leftRow, rightRow, bond_dim):
 
 
 # TODO handle A != B
-def get_boundaries(dirname, model, param_name, param, max_allowed_te=1e-10):
+def get_boundaries(dirname, model, param_name, param, max_allowed_te=1e-10, silent=False):
     boundary_filename = boundary_filname(dirname, model, param_name, param)
     if os.path.exists(boundary_filename):
         [upRow, downRow, leftRow, rightRow, openA, openA, A, A] = pickle.load(open(boundary_filename, 'rb'))
@@ -379,11 +399,10 @@ def get_boundaries(dirname, model, param_name, param, max_allowed_te=1e-10):
             bond_dim += 1
         else:
             break
-    print('truncation error: ' + str(max_te) + ', bond dim: ' + str(bond_dim))
+    if not silent: print('truncation error: ' + str(max_te) + ', bond dim: ' + str(bond_dim))
     [cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>', maxBondDim=upRow.tensor.shape[0])
     [cDown, dDown, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>', maxBondDim=downRow.tensor.shape[0])
     return cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openA
-
 
 def get_full_purity(w, h, dirname, model, param_name, param, boundary_ops=None):
     if boundary_ops is None:
@@ -489,7 +508,7 @@ def normalized_p2s_data(model, params, Ns, dirname, param_name, d=2):
                     open(filename, 'wb'))
 
 
-def analyze_normalized_p2_data(model, params, Ns, dirname, param_name):
+def analyze_normalized_p2_data(model, params, Ns, dirname, param_name, plot=True):
     import matplotlib.pyplot as plt
     wilson_areas = np.zeros(len(params))
     wilson_perimeters = np.zeros(len(params))
@@ -511,8 +530,8 @@ def analyze_normalized_p2_data(model, params, Ns, dirname, param_name):
             for bi in range(num_of_sampled_blocks):
                 normalized_p2s[pi, ni, bi] = p2s[ni][bi] / p1s[ni][bi]**2
 
-        wilson_areas[pi] = wilson_area
-        wilson_perimeters[pi] = wilson_perimeter
+            wilson_areas[pi] = wilson_area
+            wilson_perimeters[pi] = wilson_perimeter
 
     ff, axs = plt.subplots(2)
     for i in range(4):
@@ -535,6 +554,12 @@ if model == 'zohar':
               for gamma in [np.round(0.5 * i, 8) for i in range(-2, 3)] \
               for delta in [np.round(0.5 * i, 8) for i in range(-2, 3)]]
     param_name = 'parmas'
+elif model == 'zohar_deltas':
+    params = [np.round(0.2 * a, 8) for a in range(-10, 11)]
+    param_name = 'delta'
+elif model == 'zohar_deltas_large_alpha':
+    params = [np.round(0.2 * a, 8) for a in range(-10, 11)]
+    param_name = 'delta'
 elif model == 'zeros_diff':
     params = [np.round(0.1 * a, 8) for a in range(-9, 21)]
     param_name = 'alpha'
@@ -544,8 +569,11 @@ elif model == 'zohar_alpha':
 elif model == 'zohar_gamma':
     params = [np.round(0.1 * a, 8) for a in range(-20, 21)]
     param_name = 'gamma'
+elif model == 'orus':
+    params = [np.round(0.1 * i, 8) for i in range(20)]
+    param_name = 'g'
 dirname = 'results/gauge/' + model
 
 Ns = [2 * i for i in range(1, 30)]
 normalized_p2s_data(model, params, Ns, dirname, param_name)
-# analyze_normalized_p2_data(model, params, Ns, dirname, param_name)
+analyze_normalized_p2_data(model, params, Ns, dirname, param_name)
