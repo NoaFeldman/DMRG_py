@@ -239,6 +239,17 @@ def filenames(newdir, case, N, Omega, nn_num, ti, bond_dim):
                       + '_Omega_' + str(Omega) + '_nn_' + str(nn_num) + '_bond_' + str(bond_dim)
     return state_filename, data_filename
 
+
+def get_sigma_z_expect(rho, N):
+    res = 0
+    for si in range(5, N-5):
+        res += bops.getOverlap(rho,
+                               [tn.Node(I) for i in range(si)] + [
+                                   tn.Node(np.diag([1, -1]).reshape([1, d ** 2, 1]))]
+                               + [tn.Node(I) for i in range(si + 1, N)])
+    return res
+
+
 def get_j_expect(rho, N, sigma):
     res = 0
     for si in range(N):
@@ -424,6 +435,18 @@ tes_2 = np.zeros(timesteps)
 tes_2_exp = np.zeros(timesteps)
 tes_1_exp = np.zeros(timesteps)
 
+JdJ_1 = np.zeros(timesteps)
+JdJ_1_corrected = np.zeros(timesteps)
+JdJ_2 = np.zeros(timesteps)
+JdJ_2_exp = np.zeros(timesteps)
+JdJ_1_exp = np.zeros(timesteps)
+
+sigmaz_1 = np.zeros(timesteps)
+sigmaz_1_corrected = np.zeros(timesteps)
+sigmaz_2 = np.zeros(timesteps)
+sigmaz_2_exp = np.zeros(timesteps)
+sigmaz_1_exp = np.zeros(timesteps)
+
 initial_ti = 0
 for file in os.listdir(newdir):
     if file[-3:] == '_1s':
@@ -451,7 +474,12 @@ if initial_ti > 0:
     data = pickle.load(open(state_filename + '_1s_exp', 'rb'))
     [_, psi_1_exp, hl_1_exp, hr_1_exp] = data[:4]
     runtimes_1_exp[:len(data[4])] = data[4]
-    if len(data) > 5: tes_1_exp[:len(data[5])] = data[5]
+    JdJ_1_exp[:len(data[5])] = data[5]
+    sigmaz_1_exp[:len(data[7])] = data[7]
+    if len(data) > 5:
+        tes_1_exp[:len(data[5])] = data[5]
+        JdJ_1_exp[:len(data[6])] = data[6]
+        sigmaz_1_exp[:len(data[7])] = data[7]
 
 for ti in range(initial_ti, timesteps):
     print('---')
@@ -490,6 +518,8 @@ for ti in range(initial_ti, timesteps):
     # runtimes_2_exp[ti] = tf - tstart
     tstart = time.time()
     tes_1_exp[ti] = tdvp.tdvp_sweep(psi_1_exp, L_exp, hl_1_exp, hr_1_exp, dt / 2, max_bond_dim=bond_dim, num_of_sites=1)
+    JdJ_1_exp[ti] = get_j_expect(psi, N, psi_1_exp)
+    sigmaz_1_exp[ti] = get_sigma_z_expect(psi, N, psi_1_exp)
     tf = time.time()
     runtimes_1_exp[ti] = tf - tstart
     print('times = ' + str([runtimes_1[ti], runtimes_2[ti], runtimes_1_corrected[ti], runtimes_2_exp[ti], runtimes_1_exp[ti]]))
@@ -503,9 +533,10 @@ for ti in range(initial_ti, timesteps):
     with open(state_filename + '_2s_exp', 'wb') as f:
         pickle.dump([ti, psi_2_exp, hl_2_exp, hr_2_exp, runtimes_2_exp], f)
     with open(state_filename + '_1s_exp', 'wb') as f:
-        pickle.dump([ti, psi_1_exp, hl_1_exp, hr_1_exp, runtimes_1_exp, tes_1_exp], f)
+        pickle.dump([ti, psi_1_exp, hl_1_exp, hr_1_exp, runtimes_1_exp, tes_1_exp, JdJ_1_exp, sigmaz_1_exp], f)
 
 if results_to == 'plot':
+    print('plot')
     J_expect_1 = np.zeros(int(timesteps / save_each))
     J_expect_2 = np.zeros(int(timesteps / save_each))
     J_expect_1_corrected = np.zeros(int(timesteps / save_each))
@@ -518,6 +549,7 @@ if results_to == 'plot':
     bd_2 = np.zeros(int(timesteps / save_each))
     bd_1_corrected = np.zeros(int(timesteps / save_each))
     for ti in range(0, int(timesteps / save_each)):
+        print(ti)
         state_filename, data_filename = filenames(newdir, case, N, Omega, nn_num, ti * save_each, bond_dim)
         psi = pickle.load(open(state_filename + '_1s', 'rb'))[1]
         bd_1[ti] = psi[int(N/2)][0].dimension
@@ -537,9 +569,9 @@ if results_to == 'plot':
         J_expect_2_exp[ti] = get_j_expect(psi_2_exp, N, sigma)
     plt.plot(np.array(range(int(timesteps / save_each))) * dt * save_each, J_expect_1)
     plt.plot(np.array(range(int(timesteps / save_each))) * dt * save_each, J_expect_2, '--')
-    # plt.plot(np.array(range(int(timesteps / save_each))) * dt * save_each, J_expect_1_corrected, ':')
-    # plt.plot(np.array(range(int(timesteps / save_each))) * dt * save_each, J_expect_1_exp, ':')
-    # plt.plot(np.array(range(int(timesteps / save_each))) * dt * save_each, J_expect_2_exp, ':')
+    plt.plot(np.array(range(int(timesteps / save_each))) * dt * save_each, J_expect_1_corrected, ':')
+    plt.plot(np.array(range(int(timesteps / save_each))) * dt * save_each, J_expect_1_exp, ':')
+    plt.plot(np.array(range(int(timesteps / save_each))) * dt * save_each, J_expect_2_exp, ':')
     plt.show()
     # plt.plot(runtimes_1)
     # plt.plot(runtimes_2)
