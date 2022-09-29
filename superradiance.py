@@ -518,8 +518,8 @@ for ti in range(initial_ti, timesteps):
     # runtimes_2_exp[ti] = tf - tstart
     tstart = time.time()
     tes_1_exp[ti] = tdvp.tdvp_sweep(psi_1_exp, L_exp, hl_1_exp, hr_1_exp, dt / 2, max_bond_dim=bond_dim, num_of_sites=1)
-    JdJ_1_exp[ti] = get_j_expect(psi, N, psi_1_exp)
-    sigmaz_1_exp[ti] = get_sigma_z_expect(psi, N, psi_1_exp)
+    JdJ_1_exp[ti] = get_j_expect(psi_1_exp, N, sigma)
+    sigmaz_1_exp[ti] = get_sigma_z_expect(psi_1_exp, N)
     tf = time.time()
     runtimes_1_exp[ti] = tf - tstart
     print('times = ' + str([runtimes_1[ti], runtimes_2[ti], runtimes_1_corrected[ti], runtimes_2_exp[ti], runtimes_1_exp[ti]]))
