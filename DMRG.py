@@ -206,11 +206,13 @@ def applyHToM(HL, HR, H, M, k):
 def lanczos(HL, HR, H, k, psi, psiCompare=None, apply_function=applyHToM, opt='ground_state', dt=1e-2):
     [T, base] = getTridiagonal(HL, HR, H, k, psi, psiCompare, apply_function=apply_function)
     [Es, Vs] = np.linalg.eigh(T)
+    [Es, Vs] = np.linalg.eigh(T)
+    # print('min Es = ' + str(min(Es)))
     M = None
 
-    for ei in range(len(Es)):
-        for vi in range(len(base)):
-            M = bops.addNodes(M, bops.multNode(base[vi], Vs[vi, ei] * Es[ei]))
+    # for ei in range(len(Es)):
+    #     for vi in range(len(base)):
+    #         M = bops.addNodes(M, bops.multNode(base[vi], Vs[vi, ei] * Es[ei]))
     if opt == 'ground_state':
         minIndex = np.argmin(Es)
         E0 = Es[minIndex]
@@ -250,8 +252,8 @@ def getTridiagonal(HL, HR, H, k, psi, psiCompare=None, apply_function=applyHToM)
     Tarr = [[0, 0, 0]]
     Tarr[0][1] = alpha
     counter = 0
-    formBeta = 2 * beta # This is just some value to init formBeta > beta.
-    while (beta > accuracy) and (counter <= 50) and (beta < formBeta):
+    formBeta = 20 * beta # This is just some value to init formBeta > beta.
+    while (beta > accuracy) and (counter <= 50) and (beta < 10 * formBeta):
         Tarr[counter][2] = beta
         Tarr.append([0, 0, 0])
         Tarr[counter + 1][0] = beta
@@ -290,9 +292,7 @@ def dmrgStep(HL, HR, H, psi, k, dir, psiCompare=None, opts=None, maxBondDim=128)
     # 2. Performs lancsoz and get a new contracted M.
     # 3. Performs an SVD in order to get the new working site, at k + dir.
     # 4. Calculates HL(k) / HR(k) (according to dir)
-    k1 = k
-    k2 = k + 1
-    [M, E0] = lanczos(HL, HR, H, k1, psi, psiCompare)
+    [M, E0] = lanczos(HL, HR, H, k, psi, psiCompare)
     [psi, truncErr] = bops.assignNewSiteTensors(psi, k, M, dir, maxBondDim=maxBondDim)
     if dir == '>>':
         if psiCompare is not None:
@@ -320,33 +320,25 @@ def dmrgStep(HL, HR, H, psi, k, dir, psiCompare=None, opts=None, maxBondDim=128)
 def dmrgSweep(psi, H, HLs, HRs, psiCompare=None, maxBondDim=128):
     k = len(psi) - 2
     maxTruncErr = 0
+    E0 = stateEnergy(psi, H)
     while k > 0:
         if psiCompare is None:
-            [psi, newHR, E0, truncErr] = dmrgStep(HLs[k], HRs[k+2], H, psi, k, '<<', psiCompare, maxBondDim=maxBondDim)
-            # if HRs[k+1] is not None:
-            # TODO remove all nodes in HLR
-                # tn.remove_node(HRs[k+1])
+            [psi, newHR, ECurr, truncErr] = dmrgStep(HLs[k], HRs[k+2], H, psi, k, '<<', psiCompare, maxBondDim=maxBondDim)
             HRs[k+1] = newHR
         else:
-            [psi, HLs, HRs, E0, truncErr] = dmrgStep(HLs[k], HRs[k+2], H, psi, k, '<<', psiCompare, maxBondDim=maxBondDim)
+            [psi, HLs, HRs, ECurr, truncErr] = dmrgStep(HLs[k], HRs[k+2], H, psi, k, '<<', psiCompare, maxBondDim=maxBondDim)
         if len(truncErr) > 0 and maxTruncErr < max(truncErr):
             maxTruncErr = max(truncErr)
         k -= 1
     for k in range(len(psi) - 2):
-        E0Old = E0
         if psiCompare is None:
-            [psi, newHL, E0, truncErr] = dmrgStep(HLs[k], HRs[k + 2], H, psi, k, '>>', psiCompare, maxBondDim=maxBondDim)
+            [psi, newHL, ECurr, truncErr] = dmrgStep(HLs[k], HRs[k + 2], H, psi, k, '>>', psiCompare, maxBondDim=maxBondDim)
             HLs[k + 1] = newHL
         else:
-            [psi, HLs, HRs, E0, truncErr] = dmrgStep(HLs[k], HRs[k + 2], H, psi, k, '>>', psiCompare, maxBondDim=maxBondDim)
-        # if E0 > E0Old:
-        #     print('E0 > E0Old, k = ' + str(k) + ', E0Old = ' + str(E0Old) + ', E0 = ' + str(E0))
-        # if HLs[k+1] is not None:
-        # TODO remove all nodes in HLR
-        #     tn.remove_node(HLs[k+1])
+            [psi, HLs, HRs, ECurr, truncErr] = dmrgStep(HLs[k], HRs[k + 2], H, psi, k, '>>', psiCompare, maxBondDim=maxBondDim)
         if len(truncErr) > 0 and maxTruncErr < max(truncErr):
             maxTruncErr = max(truncErr)
-    return psi, E0, truncErr, HLs, HRs
+    return psi, ECurr, truncErr, HLs, HRs
 
 
 def getHLRs(H, psi, workingSite=None):
@@ -369,16 +361,15 @@ def getHLRs(H, psi, workingSite=None):
 def getGroundState(H, HLs, HRs, psi, psiCompare=None, accuracy=10**(-12), maxBondDim=1024, initial_bond_dim=2):
     truncErrs = []
     bondDim = initial_bond_dim
-    [psi, E0, truncErr, HLs, HRs] = dmrgSweep(psi, H, HLs, HRs, psiCompare, maxBondDim=maxBondDim)
-    truncErrs.append(truncErr)
-    for i in range(1000):
-        if i == 499:
-            b = 1
+    E0 = stateEnergy(psi, H)
+    for i in range(int(1e10)):
+        # psi_copy = bops.copyState(psi)
         [psi, ECurr, truncErr, HLs, HRs] = dmrgSweep(psi, H, HLs, HRs, psiCompare, maxBondDim=bondDim)
         truncErrs.append(truncErr)
         if np.abs((ECurr - E0) / E0) < accuracy:
             return psi, ECurr, truncErrs
         if (i+1) % 10 == 0:
+            print(ECurr, bondDim, psi[int(len(psi) / 2)].shape[2])
             bondDim = min(bondDim * 2, maxBondDim)
         E0 = ECurr
     print('DMRG: Sweeped for 1000 times and still did not converge.')
