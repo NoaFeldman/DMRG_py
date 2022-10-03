@@ -206,7 +206,6 @@ def applyHToM(HL, HR, H, M, k):
 def lanczos(HL, HR, H, k, psi, psiCompare=None, apply_function=applyHToM, opt='ground_state', dt=1e-2):
     [T, base] = getTridiagonal(HL, HR, H, k, psi, psiCompare, apply_function=apply_function)
     [Es, Vs] = np.linalg.eigh(T)
-    [Es, Vs] = np.linalg.eigh(T)
     # print('min Es = ' + str(min(Es)))
     M = None
 
@@ -358,7 +357,7 @@ def getHLRs(H, psi, workingSite=None):
     return HLs, HRs
 
 
-def getGroundState(H, HLs, HRs, psi, psiCompare=None, accuracy=10**(-12), maxBondDim=1024, initial_bond_dim=2):
+def getGroundState(H, HLs, HRs, psi, psiCompare=None, accuracy=10**(-12), maxBondDim=1024, initial_bond_dim=2, silent=True):
     truncErrs = []
     bondDim = initial_bond_dim
     E0 = stateEnergy(psi, H)
@@ -369,10 +368,11 @@ def getGroundState(H, HLs, HRs, psi, psiCompare=None, accuracy=10**(-12), maxBon
         if np.abs((ECurr - E0) / E0) < accuracy:
             return psi, ECurr, truncErrs
         if (i+1) % 10 == 0:
-            print(ECurr, bondDim, psi[int(len(psi) / 2)].shape[2])
+            if not silent:
+                print(ECurr, bondDim, psi[int(len(psi) / 2)].shape[2])
             bondDim = min(bondDim * 2, maxBondDim)
         E0 = ECurr
-    print('DMRG: Sweeped for 1000 times and still did not converge.')
+    print('DMRG: Sweeped for 1e10 times and still did not converge.')
 
 
 def stateEnergy(psi: List[tn.Node], H: HOp):
@@ -411,11 +411,11 @@ def getidx(N, q):
     return np.array(res).reshape(len(res), 1)
 
 
-def DMRG(psi0, onsiteTerms, neighborTerms, d=2, maxBondDim=1024, accuracy=1e-12, initial_bond_dim=2):
+def DMRG(psi0, onsiteTerms, neighborTerms, d=2, maxBondDim=1024, accuracy=1e-12, initial_bond_dim=2, silent=True):
     H = getDMRGH(len(psi0), onsiteTerms, neighborTerms, d=d)
     psi0Copy = bops.copyState(psi0)
     HLs, HRs = getHLRs(H, psi0Copy)
-    return getGroundState(H, HLs, HRs, psi0Copy, maxBondDim=maxBondDim, accuracy=accuracy, initial_bond_dim=initial_bond_dim)
+    return getGroundState(H, HLs, HRs, psi0Copy, maxBondDim=maxBondDim, accuracy=accuracy, initial_bond_dim=initial_bond_dim, silent=silent)
 
 
 example = False
