@@ -658,6 +658,7 @@ def relaxState(psi, maxBondDim):
         psiCopy = shiftWorkingSite(psiCopy, k, '<<', maxBondDim=maxBondDim)
     for k in range(1, len(psi) - 1):
         psiCopy = shiftWorkingSite(psiCopy, k, '>>', maxBondDim=maxBondDim)
+    psiCopy[-1].tensor /= np.sqrt(getOverlap(psiCopy, psiCopy))
     return psiCopy
 
 

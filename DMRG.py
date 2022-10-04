@@ -329,7 +329,7 @@ def dmrgSweep(psi, H, HLs, HRs, psiCompare=None, maxBondDim=128):
         if len(truncErr) > 0 and maxTruncErr < max(truncErr):
             maxTruncErr = max(truncErr)
         k -= 1
-    for k in range(len(psi) - 2):
+    for k in range(len(psi) - 1):
         if psiCompare is None:
             [psi, newHL, ECurr, truncErr] = dmrgStep(HLs[k], HRs[k + 2], H, psi, k, '>>', psiCompare, maxBondDim=maxBondDim)
             HLs[k + 1] = newHL
