@@ -245,5 +245,7 @@ def ground_states_magic(N, J):
         pickle.dump([gs, state_accuracy, m2s, alpha_squared], open(filename('magic/results', J, N, ising_lambdas, 'PBC'), 'wb'))
         psi_0 = gs
 
-ground_states_magic(11, 1)
+N = int(sys.argv[1])
+ground_states_magic(N, 1)
+ground_states_magic(N, -1)
 
