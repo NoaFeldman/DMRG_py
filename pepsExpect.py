@@ -1,9 +1,7 @@
 import numpy as np
 import basicOperations as bops
 import tensornetwork as tn
-import PEPS as peps
 import randomUs as ru
-import pickle
 import gc
 
 d = 2
@@ -34,7 +32,7 @@ def applyOpTosite(site, op):
                 [9, 10, 11]), [6, 7, 8]), [3, 4, 5], [0, 1, 2])
 
 
-def applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, h, w, ops):
+def applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, h, w, ops, PBC=False):
     cUps = [cUp for i in range(int(w/2))]
     dUps = [dUp for i in range(int(w/2))]
     cDowns = [cDown for i in range(int(w/2))]
@@ -42,33 +40,43 @@ def applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, h, w, o
     leftRows = [leftRow for i in range(int(h/2))]
     rightRows = [rightRow for i in range(int(h/2))]
     return applyLocalOperators_detailedBoundary(
-        cUps, dUps, cDowns, dDowns, leftRows, rightRows, A, B, h, w, ops)
+        cUps, dUps, cDowns, dDowns, leftRows, rightRows, A, B, h, w, ops, PBC=PBC)
 
 
 def applyLocalOperators_detailedBoundary(
-        cUps, dUps, cDowns, dDowns, leftRows, rightRows, A, B, h, w, ops):
+        cUps, dUps, cDowns, dDowns, leftRows, rightRows, A, B, h, w, ops, PBC=False, period_num=None):
     if h == 2:
-        left = leftRows[0]
+        if PBC:
+            dims = [cUps[0][0].dimension, A[4].dimension, B[4].dimension, dDowns[0][2].dimension]
+            left = tn.Node(np.eye(np.prod(dims)).reshape(dims + dims))
+        else:
+            left = leftRows[0]
         for wi in range(int(w / 2)):
             gc.collect()
-            # print(w, left.tensor.shape, cUps[wi].tensor.shape)
-            left = bops.multiContraction(left, cUps[wi], '3', '0', cleanOr1=True)
             leftUp = applyOpTosite(B, ops[wi * 4])
             leftDown = applyOpTosite(A, ops[wi * 4 + 1])
-            left = bops.multiContraction(left, leftUp, '23', '30', cleanOr1=True)
-            left = bops.multiContraction(left, leftDown, '14', '30', cleanOr1=True)
-            left = bops.multiContraction(left, dDowns[wi], '04', '21', cleanOr1=True).reorder_axes([3, 2, 1, 0])
-
-            left = bops.multiContraction(left, dUps[wi], '3', '0', cleanOr1=True)
             rightUp = applyOpTosite(A, ops[wi * 4 + 2])
             rightDown = applyOpTosite(B, ops[wi * 4 + 3])
-            left = bops.multiContraction(left, rightUp, '23', '30', cleanOr1=True)
-            left = bops.multiContraction(left, rightDown, '14', '30', cleanOr1=True)
-            left = bops.multiContraction(left, cDowns[wi], '04', '21', cleanOr1=True).reorder_axes([3, 2, 1, 0])
+            if PBC:
+                left = bops.contract(bops.contract(bops.contract(bops.contract(
+                    left, cUps[wi], '4', '0'), leftUp, '47', '30'), leftDown, '47', '30'), dDowns[wi], '47', '21')
+                left = bops.contract(bops.contract(bops.contract(bops.contract(
+                    left, dUps[wi], '4', '0'), rightUp, '47', '30'), rightDown, '47', '30'), cDowns[wi], '47', '21')
+            else:
+                left = bops.multiContraction(left, cUps[wi], '3', '0', cleanOr1=True)
+                left = bops.multiContraction(left, leftUp, '23', '30', cleanOr1=True)
+                left = bops.multiContraction(left, leftDown, '14', '30', cleanOr1=True)
+                left = bops.multiContraction(left, dDowns[wi], '04', '21', cleanOr1=True).reorder_axes([3, 2, 1, 0])
 
-            bops.removeState([leftUp, leftDown, rightDown, rightUp])
+                left = bops.multiContraction(left, dUps[wi], '3', '0', cleanOr1=True)
+                left = bops.multiContraction(left, rightUp, '23', '30', cleanOr1=True)
+                left = bops.multiContraction(left, rightDown, '14', '30', cleanOr1=True)
+                left = bops.multiContraction(left, cDowns[wi], '04', '21', cleanOr1=True).reorder_axes([3, 2, 1, 0])
 
-        return bops.multiContraction(left, rightRows[0], '0123', '3210').tensor * 1
+        if PBC:
+            return np.linalg.matrix_power(left.tensor.reshape([np.prod(dims)] * 2), period_num).trace()
+        else:
+            return bops.multiContraction(left, rightRows[0], '0123', '3210').tensor * 1
     elif h == 4:
         left = bops.multiContraction(leftRows[0], leftRows[1], '3', '0')
         for wi in range(int(w / 2)):

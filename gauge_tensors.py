@@ -7,22 +7,11 @@ import pickle
 import os
 import sys
 import gc
-import time
 
 
 X = np.array([[0, 1], [1, 0]])
 I = np.eye(2)
 d=2
-
-def boundary_binary_string(i, N):
-    curr = bin(i).split('b')[1]
-    curr = '0' * (N - len(curr)) + curr
-    last = np.prod([int(c) * 2 - 1 for c in curr])
-    curr = str(int(last + 1 / 2)) + curr
-    return curr
-
-
-# TODO doubt everything above this line
 
 
 # |\psi> = \prod_p (1 + cX^p)|0>
@@ -253,21 +242,19 @@ corner_projector_0 = np.diag([1, 0, 0, 1])
 corner_projector_1 = np.diag([0, 1, 1, 0])
 corner_projectors = [corner_projector_0, corner_projector_1]
 wall_projector_0 = np.diag([1, 0, 1, 0])
-def get_block_probability(filename, n, bi, d=2, corner_num=1, corner_charges=[0]):
-    [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, A, B] = get_boundaries_from_file(filename, w=n, h=2)
+wall_projector_1 = np.diag([0, 1, 0, 1])
+wall_projectors = [wall_projector_0, wall_projector_1]
+def get_block_probability(filename, n, bi, d=2, corner_num=1, corner_charges=[0], gap_l=2):
+    [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, A, B] = \
+        get_boundaries_from_file(filename, w=2, h=2)
     boundary = [int(c) for c in bin(bi).split('b')[1].zfill(2 * n + 2)]
-    boundary.append(sum(boundary) % d)
     edge_projectors = [tn.Node(np.diag([1, 0, 0, 0])), tn.Node(np.diag([0, 0, 0, 1]))]
     dDowns = []
     dUps = []
     cDowns = []
     cUps = []
-    # bottom_left_corner = bops.permute(bops.contract(bops.contract(
-    #     dDown, leftRow, '2', '0'), get_corner_projector(boundary[2]), '12', '01'), [0, 3, 4, 1, 2])
-    # [d_down_corner, leftRow, te] = bops.svdTruncation(bottom_left_corner, [0, 1], [2, 3, 4], '>>')
-    # dDowns.append(d_down_corner)
     dDowns.append(dDown)
-    leftRow = bops.permute(bops.contract(leftRow, edge_projectors[boundary[1]], '2', '0'), [0, 1, 3, 2])
+    # leftRow = bops.permute(bops.contract(leftRow, edge_projectors[boundary[1]], '2', '0'), [0, 1, 3, 2])
     cUps.append(bops.permute(bops.contract(cUp, edge_projectors[boundary[0]], '1', '0'), [0, 2, 1]))
     for ni in range(int(n/2) - 1):
         dUps.append(bops.permute(bops.contract(dUp, edge_projectors[boundary[3 + ni * 4]], '1', '0'), [0, 2, 1]))
@@ -276,43 +263,45 @@ def get_block_probability(filename, n, bi, d=2, corner_num=1, corner_charges=[0]
         dDowns.append(bops.permute(bops.contract(dDown, edge_projectors[boundary[6 + ni * 4]], '1', '0'), [0, 2, 1]))
     dUps.append(bops.permute(bops.contract(dUp, edge_projectors[boundary[3 + (int(n/2) - 1) * 4]], '1', '0'), [0, 2, 1]))
     cDowns.append(bops.permute(bops.contract(cDown, edge_projectors[boundary[4 + (int(n/2) - 1) * 4]], '1', '0'), [0, 2, 1]))
-    rightRow = bops.permute(bops.contract(bops.contract(
-        rightRow, edge_projectors[boundary[-2]], '1', '0'), edge_projectors[boundary[-1]], '1', '0'), [0, 2, 3, 1])
+    # rightRow = bops.permute(bops.contract(rightRow, edge_projectors[boundary[-1]], '1', '0'), [0, 3, 1, 2])
     ops = []
     cups_full = []
     dups_full = []
     cdowns_full = []
     ddowns_full = []
     continuous_l = int(n / corner_num)
-    gap_l = 2
-    for ci in range(corner_num):
-        ops += [tn.Node(np.eye(d**2)), tn.Node(corner_projectors[ci])] + \
-            [tn.Node(np.eye(d**2))] * 2 * (continuous_l - 1) + \
-            [tn.Node(wall_projector_0), tn.Node(np.eye(d**2))] + \
-            [tn.Node(np.eye(d**2))] * (gap_l - 1) + [tn.Node(wall_projector_0), tn.Node(np.eye(d**2))]
-        cups_full += cUps[continuous_l * ci: continuous_l * (ci + 1)] + [cUp] * int(gap_l / 2)
-        dups_full += dUps[continuous_l * ci: continuous_l * (ci + 1)] + [dUp] * int(gap_l / 2)
-        cdowns_full += cDowns[continuous_l * ci: continuous_l * (ci + 1)] + [cDown] * int(gap_l / 2)
-        ddowns_full += dDowns[continuous_l * ci: continuous_l * (ci + 1)] + [dDown] * int(gap_l / 2)
-    return pe.applyLocalOperators_detailedBoundary(cUps, dUps, cDowns, dDowns, [leftRow], [rightRow], openA, openA, 2, n,
-                                                   [tn.Node(np.eye(4)) for i in range(2 * n)])
+    for ci in range(1):
+        ops += [tn.Node(np.eye(d**2))] * 2 * (gap_l - 1) + [tn.Node(wall_projectors[0]), tn.Node(np.eye(d**2))] + \
+               [tn.Node(np.eye(d**2)), tn.Node(corner_projectors[corner_charges[ci]])] + \
+               [tn.Node(np.eye(d**2))] * 2 * (continuous_l - 2) + \
+               [tn.Node(wall_projectors[0]), tn.Node(np.eye(d**2))]
+        cups_full += [cUp] * int(gap_l / 2) + cUps[int(continuous_l/2) * ci: int(continuous_l/2) * (ci + 1)]
+        dups_full += [dUp] * int(gap_l / 2) + dUps[int(continuous_l/2) * ci: int(continuous_l/2) * (ci + 1)]
+        cdowns_full += [cDown] * int(gap_l / 2) + cDowns[int(continuous_l/2) * ci: int(continuous_l/2) * (ci + 1)]
+        ddowns_full += [dDown] * int(gap_l / 2) + dDowns[int(continuous_l/2) * ci: int(continuous_l/2) * (ci + 1)]
+    # ops += [tn.Node(np.eye(d**2))] * 2 * gap_l
+    # cups_full += [cUp] * int(gap_l / 2)
+    # dups_full += [dUp] * int(gap_l / 2)
+    # cdowns_full += [cDown] * int(gap_l / 2)
+    # ddowns_full += [dDown] * int(gap_l / 2)
+    return pe.applyLocalOperators_detailedBoundary(cups_full, dups_full, cdowns_full, ddowns_full, [leftRow], [rightRow],
+                openA, openA, 2, continuous_l + gap_l, ops, PBC=True, period_num=corner_num)
+           # / \
+           # pe.applyLocalOperators_detailedBoundary(cups_full, dups_full, cdowns_full, ddowns_full, [leftRow], [rightRow],
+           #      openA, openA, 2, continuous_l + gap_l, [tn.Node(np.eye(4))] * 2 * (n + gap_l), PBC=True, period_num=corner_num)
 
 
-def get_block_purity(filename, n, bi, corner_num=1, corner_charges=[0], d=2):
-    [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, A, B] = get_boundaries_from_file(filename, w=n, h=2)
+def get_block_purity(filename, n, bi, corner_num=1, corner_charges=[0], gap_l=2, d=2):
+    [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, A, B] = \
+        get_boundaries_from_file(filename, w=2, h=2)
     boundary = [int(c) for c in bin(bi).split('b')[1].zfill(2 * n + 2)]
-    boundary.append(sum(boundary) % d)
     edge_projectors = [tn.Node(np.diag([1, 0, 0, 0])), tn.Node(np.diag([0, 0, 0, 1]))]
     dDowns = []
     dUps = []
     cDowns = []
     cUps = []
-    # bottom_left_corner = bops.permute(bops.contract(bops.contract(
-    #     dDown, leftRow, '2', '0'), get_corner_projector(boundary[2]), '12', '01'), [0, 3, 4, 1, 2])
-    # [d_down_corner, leftRow, te] = bops.svdTruncation(bottom_left_corner, [0, 1], [2, 3, 4], '>>')
-    # dDowns.append(d_down_corner)
     dDowns.append(dDown)
-    leftRow = bops.permute(bops.contract(leftRow, edge_projectors[boundary[1]], '2', '0'), [0, 1, 3, 2])
+    # leftRow = bops.permute(bops.contract(leftRow, edge_projectors[boundary[1]], '2', '0'), [0, 1, 3, 2])
     cUps.append(bops.permute(bops.contract(cUp, edge_projectors[boundary[0]], '1', '0'), [0, 2, 1]))
     for ni in range(int(n/2) - 1):
         dUps.append(bops.permute(bops.contract(dUp, edge_projectors[boundary[3 + ni * 4]], '1', '0'), [0, 2, 1]))
@@ -321,14 +310,12 @@ def get_block_purity(filename, n, bi, corner_num=1, corner_charges=[0], d=2):
         dDowns.append(bops.permute(bops.contract(dDown, edge_projectors[boundary[6 + ni * 4]], '1', '0'), [0, 2, 1]))
     dUps.append(bops.permute(bops.contract(dUp, edge_projectors[boundary[3 + (int(n/2) - 1) * 4]], '1', '0'), [0, 2, 1]))
     cDowns.append(bops.permute(bops.contract(cDown, edge_projectors[boundary[4 + (int(n/2) - 1) * 4]], '1', '0'), [0, 2, 1]))
-    rightRow = bops.permute(bops.contract(bops.contract(
-        rightRow, edge_projectors[boundary[-2]], '1', '0'), edge_projectors[boundary[-1]], '1', '0'), [0, 2, 3, 1])
-    return get_purity(n, 2, dirname, model, param_name, 0, corner_num, corner_charges,
-            [cUps, dUps, cDowns, dDowns, [leftRow], [rightRow]])
+    return get_purity(n, 2, corner_num, corner_charges,
+            [cUps, dUps, cDowns, dDowns, [leftRow], [rightRow]], gap_l=gap_l)
 
 
-def get_purity(w, h, dirname, model, param_name, param, corner_num=1, corner_charges=[0], boundary_ops=None):
-    [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, A, B] = get_boundaries_from_file(filename, w=w, h=h)
+def get_purity(w, h, corner_num=1, corner_charges=[0], boundary_ops=None, gap_l=2):
+    [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, A, B] = get_boundaries_from_file(filename, w=n + gap_l * (corner_num + 1), h=h)
     if boundary_ops is None:
         norm = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, w, h,
                                       [tn.Node(np.eye(4)) for i in range(w * h)])
@@ -362,24 +349,25 @@ def get_purity(w, h, dirname, model, param_name, param, corner_num=1, corner_cha
     cdowns_full = []
     ddowns_full = []
     continuous_l = int(w / corner_num)
-    gap_l = 2
     double_corner_projectors = [np.kron(p, p) for p in corner_projectors]
     double_wall_projector_0 = np.kron(wall_projector_0, wall_projector_0)
-    for ci in range(corner_num):
-        # ops += [tn.Node(np.eye(d**4)), tn.Node(double_corner_projectors[ci])] + \
-        #     [tn.Node(double_swap)] * 2 * (continuous_l - 1) + \
-        #     [tn.Node(double_wall_projector_0), tn.Node(np.eye(d**4))] + \
-        #     [tn.Node(np.eye(d**4))] * (gap_l - 1) + [tn.Node(double_wall_projector_0), tn.Node(np.eye(d**4))]
-        ops += [tn.Node(np.eye(d**4)), tn.Node(double_corner_projectors[ci])] + \
-            [tn.Node(double_swap)] * 2 * (continuous_l - 1) + \
-            [tn.Node(double_wall_projector_0), tn.Node(np.eye(d**4))] + \
-            [tn.Node(np.eye(d**4))] * (gap_l - 1) + [tn.Node(np.eye(d**4)), tn.Node(np.eye(d**4))]
-        cups_full += cUps[continuous_l * ci: continuous_l * (ci + 1)] + [cUp] * int(gap_l / 2)
-        dups_full += dUps[continuous_l * ci: continuous_l * (ci + 1)] + [dUp] * int(gap_l / 2)
-        cdowns_full += cDowns[continuous_l * ci: continuous_l * (ci + 1)] + [cDown] * int(gap_l / 2)
-        ddowns_full += dDowns[continuous_l * ci: continuous_l * (ci + 1)] + [dDown] * int(gap_l / 2)
+    for ci in range(1):
+        ops += [tn.Node(np.eye(d**4))] * 2 * (gap_l - 1) + [tn.Node(double_wall_projector_0), tn.Node(np.eye(d**4))] + \
+               [tn.Node(double_swap),
+                tn.Node(np.matmul(double_swap, double_corner_projectors[corner_charges[ci]]))] + \
+            [tn.Node(double_swap)] * 2 * (continuous_l - 2) + \
+            [tn.Node(np.matmul(double_swap, double_wall_projector_0)), tn.Node(double_swap)]
+        cups_full += [cUp] * int(gap_l / 2) + cUps[int(continuous_l/2) * ci: int(continuous_l/2) * (ci + 1)]
+        dups_full += [dUp] * int(gap_l / 2) + dUps[int(continuous_l/2) * ci: int(continuous_l/2) * (ci + 1)]
+        cdowns_full += [cDown] * int(gap_l / 2) + cDowns[int(continuous_l/2) * ci: int(continuous_l/2) * (ci + 1)]
+        ddowns_full += [dDown] * int(gap_l / 2) + dDowns[int(continuous_l/2) * ci: int(continuous_l/2) * (ci + 1)]
+    # ops += [tn.Node(np.eye(d**4))] * 2 * gap_l
+    # cups_full += [cUp] * int(gap_l / 2)
+    # dups_full += [dUp] * int(gap_l / 2)
+    # cdowns_full += [cDown] * int(gap_l / 2)
+    # ddowns_full += [dDown] * int(gap_l / 2)
     purity = pe.applyLocalOperators_detailedBoundary(cups_full, dups_full, cdowns_full, ddowns_full,
-                                leftRows, rightRows, A, B, h, w + gap_l * (corner_num - 1), ops)
+                                leftRows, rightRows, A, B, h, continuous_l + gap_l, ops, PBC=True, period_num=corner_num)
     return purity
 
 
@@ -607,16 +595,29 @@ elif model == 'orus':
     param_name = 'g'
 dirname = 'results/gauge/' + model
 
+charges = [1, 1, 1, 1]
+
 for param in params:
     filename = boundary_filname(dirname, model, param_name, param)
-    b = 0
-    p2 = get_block_purity(filename, 6, b, corner_num=1, corner_charges=[0])
-    p1 = get_block_probability(filename, 6, b, corner_num=1, corner_charges=[0])
-    print(param, p2, p1, p2 / p1**2)
-    p2 = get_block_purity(filename, 6, b, corner_num=1, corner_charges=[1])
-    p1 = get_block_probability(filename, 6, b, corner_num=1, corner_charges=[1])
-    print(param, p2, p1, p2 / p1**2)
+    bs = [0, 2**20 - 1, 173524]
+    ns = [12, 24, 48]
+    corner_nums = [1, 2, 3, 4, 6]
+    gap_ls = [2, 4, 10, 20]
+    corner_charges = [0, 1]
+    for corner_num in corner_nums:
+        for n in ns:
+            for b in bs:
+                for gap_l in gap_ls:
+                    for c in corner_charges:
+                        p1 = get_block_probability(filename, n, b, corner_num=corner_num, corner_charges=[c], gap_l=gap_l)
+                        p2 = get_block_purity(filename, n, b, corner_num=corner_num, corner_charges=[c], gap_l=gap_l)
+                        print(param, corner_num, n, gap_l, p2, p1, p2 / p1**2)
+                        pickle.dump(p2 / p1**2, open('results/gauge/' + model + '/circle_n_' + str(n) + '_cnum_' + str(corner_num)
+                                    + '_b_' + str(b) + '_gap_l_' + str(gap_l) + '_c_' + str(c), 'wb'))
+    # p1 = get_block_probability(filename, 2, b, corner_num=1, corner_charges=[1])
+    # p2 = get_block_purity(filename, 2, b, corner_num=1, corner_charges=[1])
+    # print(param, p2, p1, p2 / p1**2)
 
-Ns = [2 * i for i in range(1, 30)]
-normalized_p2s_data(model, params, Ns, dirname, param_name)
-analyze_normalized_p2_data(model, params, Ns, dirname, param_name)
+# Ns = [2 * i for i in range(1, 30)]
+# normalized_p2s_data(model, params, Ns, dirname, param_name)
+# analyze_normalized_p2_data(model, params, Ns, dirname, param_name)
