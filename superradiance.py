@@ -76,12 +76,13 @@ def fit_exponential(y):
     return a_b_c[0], a_b_c[1], a_b_c[2], p, q
 
 
-def get_single_L_term(Omega, Gamma, sigma, G):
+def get_single_L_term(Omega, Gamma, sigma):
+    G = -1j * Gamma / 2
     return -1j * (np.kron(np.eye(d), np.conj(Omega) * sigma + Omega * sigma.T) -
-                  np.kron(np.conj(Omega) * sigma + Omega * sigma.T, np.eye(d))) \
-        + Gamma * (np.kron(sigma, sigma)
-                   - 0.5 * (np.kron(np.matmul(sigma.T, sigma), np.eye(d)) + np.kron(np.eye(d), np.matmul(sigma.T, sigma)))) \
-        -1j * (G * np.kron(np.matmul(sigma, sigma.T), np.eye(d)) - np.conj(G) * np.kron(np.eye(d), np.matmul(sigma, sigma.T)))
+                  np.kron(Omega * sigma + np.conj(Omega) * sigma.T, np.eye(d))) \
+        + Gamma * np.kron(sigma, sigma) \
+        -1j * (G * np.kron(np.eye(d), np.matmul(sigma.T, sigma).T) -
+               np.conj(G) * np.kron(np.matmul(sigma.T, sigma), np.eye(d)))
 
 
 def get_pair_L_terms(Deltas, gammas, nearest_neighbors_num, sigma):
@@ -127,22 +128,23 @@ def get_photon_green_L_exp(n, Omega, Gamma, k, theta, sigma, case='kernel', with
     if case == 'kernel_1d':
         mu = 3 / (2 * k * n)
         gamma_1d = mu * Gamma
-        Ss = [get_single_L_term(Omega * np.exp(1j * k * i), 0, sigma, -1j * gamma_1d / 2) for i in range(n)]
-        interacting_terms = [[- gamma_1d / 2 * np.kron(I, sigma.T), np.exp(1j * k) * np.kron(I, I),
+        Ss = [get_single_L_term(Omega * np.exp(1j * k * i), gamma_1d, sigma) for i in range(n)]
+        interacting_terms = [
+                             [- gamma_1d / 2 * np.kron(I, sigma.T), np.exp(1j * k) * np.kron(I, I),
                               np.exp(1j * k) * np.kron(I, sigma)],
                              [- gamma_1d / 2 * np.kron(I, sigma), np.exp(1j * k) * np.kron(I, I),
                               np.exp(1j * k) * np.kron(I, sigma.T)],
-                             [- gamma_1d / 2 * np.kron(sigma.T, I), np.conj(np.exp(-1j * k)) * np.kron(I, I),
-                              np.conj(np.exp(-1j * k)) * np.kron(sigma, I)],
-                             [- gamma_1d / 2 * np.kron(sigma, I), np.conj(np.exp(-1j * k)) * np.kron(I, I),
-                              np.conj(np.exp(-1j * k)) * np.kron(sigma.T, I)],
-                             [gamma_1d * np.kron(sigma, I), np.exp(1j * k) * np.kron(I, I), np.exp(1j * k) * np.kron(I, sigma)],
-                             [gamma_1d * np.kron(I, sigma), np.exp(1j * k) * np.kron(I, I), np.exp(1j * k) * np.kron(sigma, I)],
-                             [gamma_1d * np.kron(sigma, I), np.exp(-1j * k) * np.kron(I, I), np.exp(-1j * k) * np.kron(I, sigma)],
-                             [gamma_1d * np.kron(I, sigma), np.exp(-1j * k) * np.kron(I, I), np.exp(-1j * k) * np.kron(sigma, I)],
+                             [- gamma_1d / 2 * np.kron(sigma.T, I), np.conj(np.exp(1j * k)) * np.kron(I, I),
+                              np.conj(np.exp(1j * k)) * np.kron(sigma, I)],
+                             [- gamma_1d / 2 * np.kron(sigma, I), np.conj(np.exp(1j * k)) * np.kron(I, I),
+                              np.conj(np.exp(1j * k)) * np.kron(sigma.T, I)],
+                             [gamma_1d / 2 * np.kron(sigma, I), np.exp(1j * k) * np.kron(I, I), np.exp(1j * k) * np.kron(I, sigma)],
+                             [gamma_1d / 2 * np.kron(sigma, I), np.exp(-1j * k) * np.kron(I, I), np.exp(-1j * k) * np.kron(I, sigma)],
+                             [gamma_1d / 2 * np.kron(I, sigma), np.exp(1j * k) * np.kron(I, I), np.exp(1j * k) * np.kron(sigma, I)],
+                             [gamma_1d / 2 * np.kron(I, sigma), np.exp(-1j * k) * np.kron(I, I), np.exp(-1j * k) * np.kron(sigma, I)],
                              ]
     elif case == 'kernel':
-        S = get_single_L_term(Omega, Gamma, sigma, 0)
+        S = get_single_L_term(Omega, Gamma, sigma)
         Ss = [np.copy(S) for i in range(n)]
         Deltas, gammas = get_gnm(Gamma, k, theta, n - 1, case)
         Gs = Deltas - 1j * gammas / 2
@@ -152,10 +154,10 @@ def get_photon_green_L_exp(n, Omega, Gamma, k, theta, sigma, case='kernel', with
                              [-1j * bG * np.kron(I, sigma), np.exp(pG) * np.kron(I, I), np.exp(pG) * np.kron(I, sigma.T)],
                              [-1j * cG * np.kron(I, sigma.T), np.exp(qG) * np.kron(I, I), np.exp(qG) * np.kron(I, sigma)],
                              [-1j * cG * np.kron(I, sigma), np.exp(qG) * np.kron(I, I), np.exp(qG) * np.kron(I, sigma.T)],
-                             [1j * np.conj(bG) * np.kron(sigma.T, I), np.conj(np.exp(pG)) * np.kron(I, I), np.conj(np.exp(pG)) * np.kron(sigma, I)],
-                             [1j * np.conj(bG) * np.kron(sigma, I), np.conj(np.exp(pG)) * np.kron(I, I), np.conj(np.exp(pG)) * np.kron(sigma.T, I)],
-                             [1j * np.conj(cG) * np.kron(sigma.T, I), np.conj(np.exp(qG)) * np.kron(I, I), np.conj(np.exp(qG)) * np.kron(sigma, I)],
-                             [1j * np.conj(cG) * np.kron(sigma, I), np.conj(np.exp(qG)) * np.kron(I, I), np.conj(np.exp(qG)) * np.kron(sigma.T, I)],
+                             [1j * np.conj(bG) * np.kron(sigma.T, I), np.exp(pG) * np.kron(I, I), np.exp(pG) * np.kron(sigma, I)],
+                             [1j * np.conj(bG) * np.kron(sigma, I), np.exp(pG) * np.kron(I, I), np.exp(pG) * np.kron(sigma.T, I)],
+                             [1j * np.conj(cG) * np.kron(sigma.T, I), np.exp(qG) * np.kron(I, I), np.exp(qG) * np.kron(sigma, I)],
+                             [1j * np.conj(cG) * np.kron(sigma, I), np.exp(qG) * np.kron(I, I), np.exp(qG) * np.kron(sigma.T, I)],
                              [bg * np.kron(sigma, I), np.exp(pg) * np.kron(I, I), np.exp(pg) * np.kron(I, sigma)],
                              [bg * np.kron(I, sigma), np.exp(pg) * np.kron(I, I), np.exp(pg) * np.kron(sigma, I)],
                              [cg * np.kron(sigma, I), np.exp(qg) * np.kron(I, I), np.exp(qg) * np.kron(I, sigma)],
@@ -331,6 +333,63 @@ if results_to == 'plot':
 L_exp = get_photon_green_L_exp(N, Omega, Gamma, k, theta, sigma, case=case)
 # L = get_photon_green_L(N, Omega, Gamma, k, theta, sigma, case=case, nearest_neighbors_num=nn_num)
 psi = [tn.Node(np.array([1, 0, 0, 0]).reshape([1, d**2, 1])) for n in range(N)]
+if N <= 12:
+    sigmas = [np.kron(np.eye(d**i), np.kron(sigma, np.eye(d**(N - i - 1)))) for i in range(N)]
+    mu = 3  / (2 * k * N)
+    gamma_1d = Gamma * mu
+    mpo = bops.contract(L_exp[0], L_exp[1], '3', '2')
+    gammas, deltas = get_gnm(Gamma, k, theta, nn_num, case)
+    gammas = [Gamma] + list(gammas)
+    deltas = [0] + list(deltas)
+    # for i in range(2, N):
+    #     mpo = bops.contract(mpo, L_exp[i], [1 + 2 * i], '2')
+    # L_exp_mat = mpo.tensor.reshape([d] * 4 * N).transpose([i * 4 for i in range(N)] +
+    #                                                       [1 + i * 4 for i in range(N)] +
+    #                                                       [2 + i * 4 for i in range(N)] +
+    #                                                       [3 + i * 4 for i in range(N)]).reshape([d**(2 * N)] * 2).T
+    H = np.zeros([2**N, 2**N], dtype=complex)
+    for i in range(N):
+        if case == 'kernel_1d':
+            H += Omega * (np.exp(-1j * k * i) * sigmas[i] + np.exp(1j * k * i) * sigmas[i].T)
+        elif case == 'kernel':
+            H += Omega * (sigmas[i] + sigmas[i].T)
+        for j in range(N):
+            if case == 'kernel_1d':
+                H += gamma_1d / 2 * (-1j * np.exp(1j * k * np.abs(j - i))) * np.matmul(sigmas[i].T, sigmas[j])
+            elif case == 'kernel':
+                H += (deltas[np.abs(i - j)] - 1j * gammas[np.abs(i - j)] / 2) * np.matmul(sigmas[i].T, sigmas[j])
+    # L_mat = -1j * (np.kron(np.eye(2**N), H) - np.kron(H.conj(), np.eye(2**N)))
+    c_plus = np.zeros((2**N, 2**N), dtype=complex)
+    c_minus = np.zeros((2**N, 2**N), dtype=complex)
+    for i in range(N):
+        c_plus += np.exp(1j * k * i) * sigmas[i]
+        c_minus += np.exp(-1j * k * i) * sigmas[i]
+        # for j in range(N):
+        #     if case == 'kernel_1d':
+        #         L_mat += gamma_1d * np.cos(k * np.abs(j - i)) * \
+        #              (np.kron(sigmas[i], sigmas[j]))
+        #     elif case == 'kernel':
+        #         L_mat += gammas[np.abs(i - j)] * (np.kron(sigmas[i], sigmas[j]))
+    # U = linalg.expm(dt * L_mat)
+    # where = np.where(L_mat - L_exp_mat)
+    psi = np.array([1] + [0] * (4**N - 1), dtype=complex)
+    rho = psi.reshape([2 ** N] * 2)
+    J = np.zeros([2**N, 2**N])
+    for i in range(N):
+        J += np.kron(np.eye(2**i), np.kron(sigma, np.eye(2**(N - 1 - i))))
+    JdJ = np.matmul(J, J.conj().T)
+    Js = np.zeros(timesteps)
+    for ti in range(timesteps):
+        print(ti)
+        # psi = np.matmul(U, psi)
+        # rho = psi.reshape([2**N] * 2)
+        rho += dt * (-1j * (np.matmul(H, rho) - np.matmul(rho, H.conj().T)) + \
+               gamma_1d / 2 * np.matmul(c_plus, np.matmul(rho, c_plus.conj().T)) + \
+               gamma_1d / 2 * np.matmul(c_minus, np.matmul(rho, c_minus.conj().T)))
+        print(np.round(rho.trace(), 14))
+        Js[ti] = np.real(np.matmul(rho / rho.trace(), JdJ).trace())
+    plt.plot(Js)
+    plt.show()
 
 I = np.eye(2).reshape([1, d**2, 1])
 J_expect = np.zeros(timesteps, dtype=complex)
@@ -339,38 +398,20 @@ bond_dims = np.zeros(timesteps, dtype=complex)
 # projectors_left, projectors_right = tdvp.get_initial_projectors(psi, L)
 hl_2_exp, hr_2_exp = tdvp.get_initial_projectors(psi, L_exp)
 
-# psi_1_corrected_w = bops.copyState(psi)
-# hl_1_corrected = bops.copyState(projectors_left)
-# hr_1_corrected = bops.copyState(projectors_right)
-# psi_2 = bops.copyState(psi)
-# hl_2 = bops.copyState(projectors_left)
-# hr_2 = bops.copyState(projectors_right)
 psi_2_exp = bops.copyState(psi)
 psi_1_exp = bops.copyState(psi)
 hl_1_exp = bops.copyState(hl_2_exp)
 hr_1_exp = bops.copyState(hr_2_exp)
 
-runtimes_1 = np.zeros(timesteps)
-runtimes_1_corrected = np.zeros(timesteps)
-runtimes_2 = np.zeros(timesteps)
 runtimes_2_exp = np.zeros(timesteps)
 runtimes_1_exp = np.zeros(timesteps)
 
-tes_1 = np.zeros(timesteps)
-tes_1_corrected = np.zeros(timesteps)
-tes_2 = np.zeros(timesteps)
 tes_2_exp = np.zeros(timesteps)
 tes_1_exp = np.zeros(timesteps)
 
-JdJ_1 = np.zeros(timesteps)
-JdJ_1_corrected = np.zeros(timesteps)
-JdJ_2 = np.zeros(timesteps)
 JdJ_2_exp = np.zeros(timesteps)
 JdJ_1_exp = np.zeros(timesteps)
 
-sigmaz_1 = np.zeros(timesteps)
-sigmaz_1_corrected = np.zeros(timesteps)
-sigmaz_2 = np.zeros(timesteps)
 sigmaz_2_exp = np.zeros(timesteps)
 sigmaz_1_exp = np.zeros(timesteps)
 
@@ -382,31 +423,14 @@ for file in os.listdir(newdir):
             initial_ti = ti + 1
             data = pickle.load(open(newdir + '/' + file, 'rb'))
             [ti, psi, projectors_left, projectors_right] = data[:4]
-            runtimes_1[:len(data[4])] = data[4]
-            if len(data) > 5: tes_1[:len(data[5])] = data[5]
+            runtimes_1_exp[:len(data[4])] = data[4]
+            if len(data) > 5: tes_1_exp[:len(data[5])] = data[5]
 if initial_ti > 0:
     state_filename, data_filename = filenames(newdir, case, N, Omega, nn_num, initial_ti - 1, bond_dim)
     data = pickle.load(open(state_filename + '_2s_exp', 'rb'))
     [_, psi_2_exp, hl_2_exp, hr_2_exp] = data[:4]
     runtimes_2_exp[:len(data[4])] = data[4]
     if len(data) > 5: tes_2_exp[:len(data[5])] = data[5]
-    # data = pickle.load(open(state_filename + '_2s', 'rb'))
-    # [_, psi_2, hl_2, hr_2] = data[:4]
-    # runtimes_2[:len(data[4])] = data[4]
-    # if len(data) > 5: tes_2[:len(data[5])] = data[5]
-    # data = pickle.load(open(state_filename + '_1s_low_preselection', 'rb'))
-    # [_, psi_1_corrected_w, hl_1_corrected, hr_1_corrected] = data[:4]
-    # runtimes_1_corrected[:len(data[4])] = data[4]
-    # if len(data) > 5: tes_1_corrected[:len(data[5])] = data[5]
-    # data = pickle.load(open(state_filename + '_1s', 'rb'))
-    # [_, psi_1_exp, hl_1_exp, hr_1_exp] = data[:4]
-    # runtimes_1_exp[:len(data[4])] = data[4]
-    # JdJ_1_exp[:len(data[5])] = data[5]
-    # sigmaz_1_exp[:len(data[7])] = data[7]
-    # if len(data) > 5:
-    #     tes_1_exp[:len(data[5])] = data[5]
-    #     JdJ_1_exp[:len(data[6])] = data[6]
-    #     sigmaz_1_exp[:len(data[7])] = data[7]
 
 for ti in range(initial_ti, timesteps):
     print('---')
@@ -421,42 +445,16 @@ for ti in range(initial_ti, timesteps):
         runtimes_2_exp[ti] = tf - tstart
 
         old_state_filename, old_data_filename = filenames(newdir, case, N, Omega, nn_num, ti - 1, bond_dim)
-        # os.remove(old_state_filename + '_1s')
-        # os.remove(old_state_filename + '_2s')
-        # os.remove(old_state_filename + '_1s_low_preselection')
         os.remove(old_state_filename + '_2s_exp')
         os.remove(old_state_filename + '_1s_exp')
-    # tstart = time.time()
-    # tes_1[ti] = tdvp.tdvp_sweep(psi, L, projectors_left, projectors_right, dt / 2, max_bond_dim=bond_dim, num_of_sites=1)
-    # tf = time.time()
-    # runtimes_1[ti] = tf - tstart
-    # tstart = time.time()
-    # tes_1_corrected[ti] = tdvp.tdvp_sweep(psi_1_corrected_w, L, hl_1_corrected, hr_1_corrected, dt / 2,
-    #                                       max_bond_dim=bond_dim, num_of_sites=1, max_trunc=12)
-    # tf = time.time()
-    # runtimes_1_corrected[ti] = tf - tstart
-    # tstart = time.time()
-    # tes_2[ti] = tdvp.tdvp_sweep(psi_2, L, hl_2, hr_2, dt / 2, max_bond_dim=bond_dim, num_of_sites=2)
-    # tf = time.time()
-    # runtimes_2[ti] = tf - tstart
-    # tstart = time.time()
-    # tes_2_exp[ti] = tdvp.tdvp_sweep(psi_2_exp, L_exp, hl_2_exp, hr_2_exp, dt / 2, max_bond_dim=bond_dim, num_of_sites=2)
-    # tf = time.time()
-    # runtimes_2_exp[ti] = tf - tstart
     tstart = time.time()
     tes_1_exp[ti] = tdvp.tdvp_sweep(psi_1_exp, L_exp, hl_1_exp, hr_1_exp, dt / 2, max_bond_dim=bond_dim, num_of_sites=1)
     JdJ_1_exp[ti] = get_j_expect(psi_1_exp, N, sigma)
     sigmaz_1_exp[ti] = get_sigma_z_expect(psi_1_exp, N)
     tf = time.time()
     runtimes_1_exp[ti] = tf - tstart
-    print('times = ' + str([runtimes_1[ti], runtimes_2[ti], runtimes_1_corrected[ti], runtimes_2_exp[ti], runtimes_1_exp[ti]]))
+    print('times = ' + str([runtimes_2_exp[ti], runtimes_1_exp[ti]]))
     state_filename, data_filename = filenames(newdir, case, N, Omega, nn_num, ti, bond_dim)
-    # with open(state_filename + '_1s', 'wb') as f:
-    #     pickle.dump([ti, psi, projectors_left, projectors_right, runtimes_1, tes_1], f)
-    # with open(state_filename + '_1s_low_preselection', 'wb') as f:
-    #     pickle.dump([ti, psi_1_corrected_w, hl_1_corrected, hr_1_corrected, runtimes_1_corrected, tes_1_corrected], f)
-    # with open(state_filename + '_2s', 'wb') as f:
-    #     pickle.dump([ti, psi_2, hl_2, hr_2, runtimes_2, tes_2], f)
     with open(state_filename + '_2s_exp', 'wb') as f:
         pickle.dump([ti, psi_2_exp, hl_2_exp, hr_2_exp, runtimes_2_exp], f)
     with open(state_filename + '_1s_exp', 'wb') as f:
