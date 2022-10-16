@@ -194,8 +194,8 @@ def rotate_paulis(theta, phi):
 #         dbg = 1
 
 
-def filename(dirname, J, N, ising_lambdas, boundary_conditions):
-    return dirname + '/ising_' + boundary_conditions + '_J_' + str(J) + '_N_' + str(N) + '_lambda_' + str(ising_lambdas[0]) + '_' + str(ising_lambdas[-1])
+def filename(dirname, J, N, ising_lambda, boundary_conditions):
+    return dirname + '/ising_' + boundary_conditions + '_J_' + str(J) + '_N_' + str(N) + '_lambda_' + str(ising_lambda)
 
 
 def add_mps(psi1, psi2):
@@ -214,11 +214,6 @@ def ground_states_magic(N, J):
     lambda_step = 0.1
     ising_lambdas = [np.round(lambda_step * i, 8) for i in range(1, int(1.5/lambda_step))]
 
-    # psi_0 = antiferromagnetic_state(N)
-    # psi_0[-1].tensor /= np.sqrt(2)
-    # psi_minus = minus_state(N)
-    # psi_minus[-1].tensor /= np.sqrt(2)
-    # psi_0 = add_mps(psi_0, psi_minus)
     psi_0 = minus_state(N)
     for ising_lambda in ising_lambdas:
         print(ising_lambda)
@@ -242,8 +237,8 @@ def ground_states_magic(N, J):
                                         tn.Node(np.eye(d)), '13', '01').tensor
         print(single_site_rdm)
         alpha_squared = sum([np.matmul(single_site_rdm, P).trace()**2 for P in [X, Y, Z]])
-        pickle.dump([gs, state_accuracy, m2s, alpha_squared], open(filename('magic/results', J, N, ising_lambdas, 'PBC'), 'wb'))
         psi_0 = gs
+        pickle.dump([gs, state_accuracy, m2s, alpha_squared], open(filename('magic/results', J, N, ising_lambda, 'PBC'), 'wb'))
 
 N = int(sys.argv[1])
 ground_states_magic(N, 1)
