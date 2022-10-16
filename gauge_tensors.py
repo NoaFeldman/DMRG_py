@@ -596,28 +596,36 @@ elif model == 'orus':
 dirname = 'results/gauge/' + model
 
 charges = [1, 1, 1, 1]
+bs = [0, 2 ** 20 - 1, 173524]
+ns = [12, 24, 48]
+corner_nums = [1, 2, 3, 4, 6]
+gap_ls = [4, 10, 20]
+corner_charges = [0, 1]
 
-for param in params:
+results = np.zeros((len(params), len(corner_nums), len(ns), len(bs), len(gap_ls), len(corner_charges)))
+for pi in range(len(params)):
+    param = params[pi]
     filename = boundary_filname(dirname, model, param_name, param)
-    bs = [0, 2**20 - 1, 173524]
-    ns = [12, 24, 48]
-    corner_nums = [1, 2, 3, 4, 6]
-    gap_ls = [2, 4, 10, 20]
-    corner_charges = [0, 1]
-    for corner_num in corner_nums:
-        for n in ns:
-            for b in bs:
-                for gap_l in gap_ls:
-                    for c in corner_charges:
-                        p1 = get_block_probability(filename, n, b, corner_num=corner_num, corner_charges=[c], gap_l=gap_l)
-                        p2 = get_block_purity(filename, n, b, corner_num=corner_num, corner_charges=[c], gap_l=gap_l)
-                        print(param, corner_num, n, gap_l, p2, p1, p2 / p1**2)
-                        pickle.dump(p2 / p1**2, open('results/gauge/' + model + '/circle_n_' + str(n) + '_cnum_' + str(corner_num)
-                                    + '_b_' + str(b) + '_gap_l_' + str(gap_l) + '_c_' + str(c), 'wb'))
-    # p1 = get_block_probability(filename, 2, b, corner_num=1, corner_charges=[1])
-    # p2 = get_block_purity(filename, 2, b, corner_num=1, corner_charges=[1])
-    # print(param, p2, p1, p2 / p1**2)
+    for cni in range(len(corner_nums)):
+        corner_num = corner_nums[cni]
+        for ni in range(len(ns)):
+            n = ns[ni]
+            for bi in range(len(bs)):
+                b = bs[bi]
+                for gi in range(len(gap_ls)):
+                    gap_l = gap_ls[gi]
+                    for ci in range(len(corner_charges)):
+                        c = corner_charges[ci]
+                        result_filename = 'results/gauge/' + model + '/circle_' + param_name + '_' + str(param) + '_n_' + str(n) + '_cnum_' + str(corner_num) \
+                                        + '_b_' + str(b) + '_gap_l_' + str(gap_l) + '_c_' + str(c)
+                        if not os.path.exists(result_filename):
+                            p1 = get_block_probability(filename, n, b, corner_num=corner_num, corner_charges=[c], gap_l=gap_l)
+                            p2 = get_block_purity(filename, n, b, corner_num=corner_num, corner_charges=[c], gap_l=gap_l)
+                            print(param, corner_num, n, gap_l, p2, p1, p2 / p1**2)
+                            n_p2 = p2 / p1**2
+                            pickle.dump(n_p2, open(result_filename, 'wb'))
+                        else:
+                            n_p2 = pickle.load(open(result_filename, 'rb'))
+                        results[pi, cni, ni, bi, gi, ci] = n_p2
 
-# Ns = [2 * i for i in range(1, 30)]
-# normalized_p2s_data(model, params, Ns, dirname, param_name)
-# analyze_normalized_p2_data(model, params, Ns, dirname, param_name)
+dbg = 1
