@@ -80,7 +80,7 @@ def get_single_L_term(Omega, Gamma, sigma):
     G = -1j * Gamma / 2
     return -1j * (np.kron(np.eye(d), np.conj(Omega) * sigma + Omega * sigma.T) -
                   np.kron(Omega * sigma + np.conj(Omega) * sigma.T, np.eye(d))) \
-        + Gamma * np.kron(sigma, sigma) \
+        + Gamma * np.kron(sigma, sigma) * 0 \
         -1j * (G * np.kron(np.eye(d), np.matmul(sigma.T, sigma).T) -
                np.conj(G) * np.kron(np.matmul(sigma.T, sigma), np.eye(d)))
 
@@ -134,14 +134,14 @@ def get_photon_green_L_exp(n, Omega, Gamma, k, theta, sigma, case='kernel', with
                               np.exp(1j * k) * np.kron(I, sigma)],
                              [- gamma_1d / 2 * np.kron(I, sigma), np.exp(1j * k) * np.kron(I, I),
                               np.exp(1j * k) * np.kron(I, sigma.T)],
-                             # [- gamma_1d / 2 * np.kron(sigma.T, I), np.conj(np.exp(-1j * k)) * np.kron(I, I),
-                             #  np.conj(np.exp(-1j * k)) * np.kron(sigma, I)],
-                             # [- gamma_1d / 2 * np.kron(sigma, I), np.conj(np.exp(-1j * k)) * np.kron(I, I),
-                             #  np.conj(np.exp(-1j * k)) * np.kron(sigma.T, I)],
-                             [gamma_1d / 2 * np.kron(sigma, I), np.exp(1j * k) * np.kron(I, I), np.exp(1j * k) * np.kron(I, sigma)],
-                             [gamma_1d / 2 * np.kron(sigma, I), np.exp(-1j * k) * np.kron(I, I), np.exp(-1j * k) * np.kron(I, sigma)],
-                             [gamma_1d / 2 * np.kron(I, sigma), np.exp(1j * k) * np.kron(I, I), np.exp(1j * k) * np.kron(sigma, I)],
-                             [gamma_1d / 2 * np.kron(I, sigma), np.exp(-1j * k) * np.kron(I, I), np.exp(-1j * k) * np.kron(sigma, I)],
+                             [- gamma_1d / 2 * np.kron(sigma.T, I), np.exp(-1j * k) * np.kron(I, I),
+                              np.exp(-1j * k) * np.kron(sigma, I)],
+                             [- gamma_1d / 2 * np.kron(sigma, I), np.exp(-1j * k) * np.kron(I, I),
+                              np.exp(-1j * k) * np.kron(sigma.T, I)],
+                             # [gamma_1d / 2 * np.kron(sigma, I), np.exp(1j * k) * np.kron(I, I), np.exp(1j * k) * np.kron(I, sigma)],
+                             # [gamma_1d / 2 * np.kron(sigma, I), np.exp(-1j * k) * np.kron(I, I), np.exp(-1j * k) * np.kron(I, sigma)],
+                             # [gamma_1d / 2 * np.kron(I, sigma), np.exp(1j * k) * np.kron(I, I), np.exp(1j * k) * np.kron(sigma, I)],
+                             # [gamma_1d / 2 * np.kron(I, sigma), np.exp(-1j * k) * np.kron(I, I), np.exp(-1j * k) * np.kron(sigma, I)],
                              ]
     elif case == 'kernel':
         S = get_single_L_term(Omega, Gamma, sigma)
@@ -287,16 +287,16 @@ def get_j_expect(rho, N, sigma):
         for sj in range(N):
             if si < sj:
                 res += bops.getOverlap(rho,
-                                    [tn.Node(I) for i in range(si)] + [tn.Node(sigma.T.reshape([1, d ** 2, 1]))]
+                                    [tn.Node(I) for i in range(si)] + [tn.Node(np.exp(1j * k * si) * sigma.T.reshape([1, d ** 2, 1]))]
                                     + [tn.Node(I) for i in range(si + 1, sj)] + [
-                                        tn.Node(sigma.reshape([1, d ** 2, 1]))]
+                                        tn.Node(np.exp(-1j * k * sj) * sigma.reshape([1, d ** 2, 1]))]
                                     + [tn.Node(I) for i in range(sj + 1, N)])
             elif sj < si:
                 res += bops.getOverlap(rho,
                                     [tn.Node(I) for i in range(sj)] + [
-                                        tn.Node(sigma.T.reshape([1, d ** 2, 1]))]
+                                        tn.Node(np.exp(1j * k * sj) * sigma.T.reshape([1, d ** 2, 1]))]
                                     + [tn.Node(I) for i in range(sj + 1, si)] + [
-                                        tn.Node(sigma.reshape([1, d ** 2, 1]))]
+                                        tn.Node(np.exp(-1j * k * si) * sigma.reshape([1, d ** 2, 1]))]
                                     + [tn.Node(I) for i in range(si + 1, N)])
     return res
 
@@ -330,6 +330,7 @@ except FileExistsError:
 if results_to == 'plot':
     import matplotlib.pyplot as plt
 
+
 L_exp = get_photon_green_L_exp(N, Omega, Gamma, k, theta, sigma, case=case)
 # L = get_photon_green_L(N, Omega, Gamma, k, theta, sigma, case=case, nearest_neighbors_num=nn_num)
 psi = [tn.Node(np.array([1, 0, 0, 0]).reshape([1, d**2, 1])) for n in range(N)]
@@ -356,7 +357,7 @@ if N <= 6:
             H += Omega * (sigmas[i] + sigmas[i].T)
         for j in range(N):
             if case == 'kernel_1d':
-                H += (-1j) * gamma_1d / 2 * np.exp(1j * k * np.abs(i - j)) * np.matmul(sigmas[i].conj().T, sigmas[j])
+                H += gamma_1d / 2 * np.sin(k * np.abs(i - j)) * np.matmul(sigmas[i].conj().T, sigmas[j])
             elif case == 'kernel':
                 H += (deltas[np.abs(i - j)] - 1j * gammas[np.abs(i - j)] / 2) * np.matmul(sigmas[i].T, sigmas[j])
     L_mat = -1j * (np.kron(np.eye(2**N), H) - np.kron(H.conj(), np.eye(2**N)))
@@ -367,10 +368,14 @@ if N <= 6:
         c_minus += sigmas[i] * np.exp(-1j * k * i)
         for j in range(N):
             if case == 'kernel_1d':
-                L_mat += gamma_1d / 2 * np.exp(1j * k * np.abs(j - i)) * \
-                     (np.kron(sigmas[i], sigmas[j]))
-                L_mat += gamma_1d / 2 * np.exp(- 1j * k * np.abs(j - i)) * \
-                         (np.kron(sigmas[i], sigmas[j]))
+                # L_mat += gamma_1d / 2 * np.exp(1j * k * np.abs(j - i)) * \
+                #      (np.kron(sigmas[i], sigmas[j])) \
+                #        + gamma_1d / 2 * np.exp(- 1j * k * np.abs(j - i)) * \
+                #      (np.kron(sigmas[i], sigmas[j]))
+                L_mat += - gamma_1d / 2 * np.cos(k * np.abs(i - j)) * \
+                         np.kron(np.eye(2**N), np.matmul(sigmas[i].conj().T, sigmas[j]))
+                L_mat += - gamma_1d / 2 * np.cos(k * np.abs(i - j)) * \
+                         np.kron(np.matmul(sigmas[i].conj().T, sigmas[j]).T, np.eye(2 ** N))
             elif case == 'kernel':
                 L_mat += gammas[np.abs(i - j)] * (np.kron(sigmas[i], sigmas[j]))
     U = linalg.expm(dt * L_mat)
@@ -395,7 +400,7 @@ if N <= 6:
         print(np.round(rho.trace(), 14))
         Js[ti] = np.real(np.matmul(rho / rho.trace(), JdJ).trace())
     plt.plot(dt * np.array(range(timesteps)), Js)
-    plt.show()
+    # plt.show()
 
 I = np.eye(2).reshape([1, d**2, 1])
 J_expect = np.zeros(timesteps, dtype=complex)
@@ -467,7 +472,7 @@ for ti in range(initial_ti, timesteps):
         pickle.dump([ti, psi_1_exp, hl_1_exp, hr_1_exp, runtimes_1_exp, tes_1_exp, JdJ_1_exp, sigmaz_1_exp], f)
 
 if results_to == 'plot':
-    plt.plot(dt * np.array(range(timesteps)), JdJ_1_exp)
+    plt.plot(dt * np.array(range(timesteps)), JdJ_1_exp, '--')
     plt.show()
     print('plot')
     J_expect_1 = np.zeros(int(timesteps / save_each))
