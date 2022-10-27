@@ -390,13 +390,8 @@ if N <= 6:
     Js = np.zeros(timesteps)
     for ti in range(timesteps):
         print(ti)
-        # psi_exact = np.matmul(U, psi_exact)
-        # rho = psi_exact.reshape([2**N] * 2)
-        # rho += dt * (-1j * (np.matmul(H, rho) - np.matmul(rho, H.conj().T)) + \
-        #        gamma_1d / 2 * np.matmul(c_minus, np.matmul(rho, c_minus.conj().T)))
-        rho += dt * (-1j * (np.matmul(H, rho) - np.matmul(rho, H.conj().T)) + \
-               gamma_1d / 2 * np.matmul(c_plus, np.matmul(rho, c_plus.conj().T)) + \
-               gamma_1d / 2 * np.matmul(c_minus, np.matmul(rho, c_minus.conj().T)))
+        psi_exact = np.matmul(U, psi_exact)
+        rho = psi_exact.reshape([2**N] * 2)
         print(np.round(rho.trace(), 14))
         Js[ti] = np.real(np.matmul(rho / rho.trace(), JdJ).trace())
     plt.plot(dt * np.array(range(timesteps)), Js)
