@@ -80,7 +80,7 @@ def get_single_L_term(Omega, Gamma, sigma):
     G = -1j * Gamma / 2
     return -1j * (np.kron(np.eye(d), np.conj(Omega) * sigma + Omega * sigma.T) -
                   np.kron(Omega * sigma + np.conj(Omega) * sigma.T, np.eye(d))) \
-        + Gamma * np.kron(sigma, sigma) * 0 \
+        + Gamma * np.kron(sigma, sigma) \
         -1j * (G * np.kron(np.eye(d), np.matmul(sigma.T, sigma).T) -
                np.conj(G) * np.kron(np.matmul(sigma.T, sigma), np.eye(d)))
 
@@ -138,10 +138,10 @@ def get_photon_green_L_exp(n, Omega, Gamma, k, theta, sigma, case='kernel', with
                               np.exp(-1j * k) * np.kron(sigma, I)],
                              [- gamma_1d / 2 * np.kron(sigma, I), np.exp(-1j * k) * np.kron(I, I),
                               np.exp(-1j * k) * np.kron(sigma.T, I)],
-                             # [gamma_1d / 2 * np.kron(sigma, I), np.exp(1j * k) * np.kron(I, I), np.exp(1j * k) * np.kron(I, sigma)],
-                             # [gamma_1d / 2 * np.kron(sigma, I), np.exp(-1j * k) * np.kron(I, I), np.exp(-1j * k) * np.kron(I, sigma)],
-                             # [gamma_1d / 2 * np.kron(I, sigma), np.exp(1j * k) * np.kron(I, I), np.exp(1j * k) * np.kron(sigma, I)],
-                             # [gamma_1d / 2 * np.kron(I, sigma), np.exp(-1j * k) * np.kron(I, I), np.exp(-1j * k) * np.kron(sigma, I)],
+                             [gamma_1d / 2 * np.kron(sigma, I), np.exp(1j * k) * np.kron(I, I), np.exp(1j * k) * np.kron(I, sigma)],
+                             [gamma_1d / 2 * np.kron(sigma, I), np.exp(-1j * k) * np.kron(I, I), np.exp(-1j * k) * np.kron(I, sigma)],
+                             [gamma_1d / 2 * np.kron(I, sigma), np.exp(1j * k) * np.kron(I, I), np.exp(1j * k) * np.kron(sigma, I)],
+                             [gamma_1d / 2 * np.kron(I, sigma), np.exp(-1j * k) * np.kron(I, I), np.exp(-1j * k) * np.kron(sigma, I)],
                              ]
     elif case == 'kernel':
         S = get_single_L_term(Omega, Gamma, sigma)
@@ -368,10 +368,10 @@ if N <= 6:
         c_minus += sigmas[i] * np.exp(-1j * k * i)
         for j in range(N):
             if case == 'kernel_1d':
-                # L_mat += gamma_1d / 2 * np.exp(1j * k * np.abs(j - i)) * \
-                #      (np.kron(sigmas[i], sigmas[j])) \
-                #        + gamma_1d / 2 * np.exp(- 1j * k * np.abs(j - i)) * \
-                #      (np.kron(sigmas[i], sigmas[j]))
+                L_mat += gamma_1d / 2 * np.exp(1j * k * np.abs(j - i)) * \
+                     (np.kron(sigmas[i], sigmas[j])) \
+                       + gamma_1d / 2 * np.exp(- 1j * k * np.abs(j - i)) * \
+                     (np.kron(sigmas[i], sigmas[j]))
                 L_mat += - gamma_1d / 2 * np.cos(k * np.abs(i - j)) * \
                          np.kron(np.eye(2**N), np.matmul(sigmas[i].conj().T, sigmas[j]))
                 L_mat += - gamma_1d / 2 * np.cos(k * np.abs(i - j)) * \
