@@ -12,11 +12,11 @@ import scipy.linalg as linalg
 
 import string
 digs = string.digits + string.ascii_letters
-def int2base(x, base):
+def int2base(x, base, str_len):
     if x < 0:
         sign = -1
     elif x == 0:
-        return digs[0]
+        return digs[0].zfill(str_len)
     else:
         sign = 1
     x *= sign
@@ -29,7 +29,7 @@ def int2base(x, base):
 
     digits.reverse()
 
-    return ''.join(digits)
+    return ''.join(digits).zfill(str_len)
 
 
 def get_H_terms(N, onsite_term, neighbor_term, d=2):
@@ -59,7 +59,6 @@ def minus_state(N):
         return state
 
 
-
 def antiferromagnetic_state(N):
     if N % 2 == 1:
         basic_mid_site = np.zeros((4, 2, 4), dtype=complex)
@@ -73,6 +72,8 @@ def antiferromagnetic_state(N):
         left_site = np.zeros((1, 2**2, 4**2))
         left_site[0, 1 + 0 * 2, 3 + 1 * 4] = 1
         left_site[0, 0 + 1 * 2, 2 + 0 * 4] = 1
+        left_site[0, 1 + 0 * 2, 3 + 2 * 4] = 1
+        left_site[0, 0 + 1 * 2, 2 + 3 * 4] = 1
         left_site[0, 0 + 0 * 2, 2 + 3 * 4] = 1
         left_site[0, 1 + 1 * 2, 3 + 2 * 4] = 1
 
@@ -102,6 +103,27 @@ def antiferromagnetic_state(N):
         result[i], result[i+1], te = bops.svdTruncation(bops.contract(result[i], result[i+1], '2', '0'),
                                                         [0, 1], [2, 3], '>>')
     result[-1].tensor /= np.sqrt(bops.getOverlap(result, result))
+    return result
+
+
+def ferromagnetic_state(N):
+    basic_mid_site = np.zeros((2, 2, 2), dtype=complex)
+    basic_mid_site[0, 0, 0] = 1
+    basic_mid_site[1, 1, 1] = 1
+
+    redundant_site = np.zeros((2, 2, 2))
+    for di in range(2):
+        redundant_site[di, 0, di] = 1
+    down = np.copy(basic_mid_site)
+    right_site = np.tensordot(down, redundant_site, [2, 0]).transpose([0, 3, 1, 2]).reshape([2 ** 2, 2 ** 2, 1])
+    left_site = np.tensordot(basic_mid_site, basic_mid_site, [2, 0]).transpose([1, 2, 0, 3]).reshape([1, 2 ** 2, 2**2])
+
+    result = [tn.Node(left_site)]
+    for i in range(1, int(N / 2)):
+        down = np.copy(basic_mid_site)
+        up = np.copy(basic_mid_site)
+        result.append(tn.Node(np.kron(down, up.transpose([2, 1, 0]))))
+    result.append(tn.Node(right_site))
     return result
 
 
@@ -148,20 +170,21 @@ def exact_H(N, ising_lambda):
     print(min(vals), vals[1])
 
 
-
 def exact_m2(N, psi):
     vec = psi[0]
     for i in range(1, len(psi)):
         vec = bops.contract(vec, psi[i], [i+1], '0')
-    vec = vec.tensor.reshape([4**len(psi)])
+    vec = vec.tensor.reshape([d**(2*len(psi))])
+    paulis = [np.eye(2), X, Y, Z]
     num_of_strings = len(paulis)**N
     result = 0
-    for st in range(num_of_strings):
-        op = ft.reduce(np.kron, [paulis[int(s, 2)] for s in
-                list(map(''.join, zip(*[iter(bin(st).split('b')[1].zfill(2 * N))]*2)))] + [np.eye(d)])
-        # op = ft.reduce(np.kron, [paulis[int(s, 2)] for s in list(map(''.join, zip(*[iter(bin(st).split('b')[1].zfill(N))]*1)))])
-        result += np.abs(np.matmul(vec.conj().T, np.matmul(op, vec)))**4
-    return result
+    for si in range(num_of_strings):
+        string = int2base(si, len(paulis), N)
+        mat = np.eye(d)
+        for c in string:
+            mat = np.kron(paulis[digs.index(c)], mat)
+        result += np.abs(np.matmul(vec.conj().T, np.matmul(mat, vec)))**4
+    return -np.log(result) / np.log(2) + N
 
 
 d = 2
@@ -178,20 +201,6 @@ def rotate_paulis(theta, phi):
     return [ft.reduce(np.matmul,
         [linalg.expm(1j * theta * Z), linalg.expm(1j * phi * X), unrotated_paulis[i], linalg.expm(-1j * phi * X), linalg.expm(-1j * theta * Z)])
             for i in range(len(unrotated_paulis))]
-
-
-# for ti in range(angle_steps):
-#     for pi in range(angle_steps):
-#         theta = thetas[ti]
-#         phi = phis[pi]
-#         paulis = rotate_paulis(theta, phi)
-#         is_ids = [np.round(np.matmul(p, p), 14) for p in paulis]
-#         is_anticommuting = [np.round(np.matmul(p, q) + np.matmul(q, p), 14) for q in paulis[1:] for p in paulis[1:]]
-#         is_algebra = [[[np.round(np.matmul(q, p) - 1j * r, 14) for q in paulis[1:]] for p in paulis[1:]] for r in paulis[1:]]
-#         cyclic = [is_algebra[0][1][2], is_algebra[1][2][0], is_algebra[2][0][1]]
-#         is_algebra = [[[np.round(np.matmul(q, p) + 1j * r, 14) for q in paulis[1:]] for p in paulis[1:]] for r in paulis[1:]]
-#         anti_cyclic = [is_algebra[0][2][1], is_algebra[1][0][2], is_algebra[2][1][0]]
-#         dbg = 1
 
 
 def filename(dirname, J, N, ising_lambda, boundary_conditions):
@@ -217,6 +226,8 @@ def ground_states_magic(N, J, ising_lambdas, dirname):
 
     psi_0 = minus_state(N)
     for li in range(len(ising_lambdas)):
+        if J == -1:
+            psi_0 = ferromagnetic_state(N)
         ising_lambda = ising_lambdas[li]
         print(N, ising_lambda)
         results_filename = filename(dirname, J, N, ising_lambda, 'PBC')
@@ -243,8 +254,8 @@ def ground_states_magic(N, J, ising_lambdas, dirname):
             psi_0 = gs
             pickle.dump([gs, state_accuracy, m2s, alpha_squared], open(results_filename, 'wb'))
         print(state_accuracy)
-        all_m2s_0_basis[li] = -(np.log(m2s[0, 0]) - N)/ np.log(2)
-        all_m2s_min_basis[li] = np.amin(-(np.log(m2s) - N))/ np.log(2)
+        all_m2s_0_basis[li] = -(np.log(m2s[0, 0])/ np.log(2) - N)
+        all_m2s_min_basis[li] = np.amin(-(np.log(m2s)/ np.log(2) - N))
         all_alphas_squared[li] = alpha_squared
     return all_m2s_0_basis, all_m2s_min_basis, all_alphas_squared
 
@@ -262,9 +273,9 @@ m2s_min_ferro = np.zeros((len(Ns), len(ising_lambdas)), dtype=complex)
 alphas_squared_ferro = np.zeros((len(Ns), len(ising_lambdas)))
 for Ni in range(len(Ns)):
     N = Ns[Ni]
-    curr_m2s_0_basis, curr_m2s_min_basis, curr_alphas_squared = ground_states_magic(N, 1, ising_lambdas, dirname)
     curr_m2s_0_basis_ferro, curr_m2s_min_basis_ferro, curr_alphas_squared_ferro = \
         ground_states_magic(N, -1, ising_lambdas, dirname)
+    curr_m2s_0_basis, curr_m2s_min_basis, curr_alphas_squared = ground_states_magic(N, 1, ising_lambdas, dirname)
     m2s[Ni, :] = curr_m2s_0_basis
     m2s_min[Ni, :] = curr_m2s_min_basis
     alphas_squared[Ni, :] = curr_alphas_squared
@@ -272,7 +283,7 @@ for Ni in range(len(Ns)):
     m2s_min_ferro[Ni, :] = curr_m2s_min_basis_ferro
     alphas_squared_ferro[Ni, :] = curr_alphas_squared_ferro
 
-plot = False
+plot = True
 if plot:
     import matplotlib.pyplot as plt
     ff, axs = plt.subplots(2, 2)
