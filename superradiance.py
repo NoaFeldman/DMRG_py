@@ -312,13 +312,13 @@ N = int(sys.argv[1])
 k = 2 * np.pi / 10
 theta = 0
 nn_num = int(sys.argv[2])
+case = sys.argv[4]
 if case == 'kernel_1d':
     mu = 3 / (2 * k * N)
     gamma_1d = Gamma * mu
     Omega = float(sys.argv[3]) / gamma_1d
 else:
     Omega = float(sys.argv[3]) / Gamma
-case = sys.argv[4]
 outdir = sys.argv[5]
 timesteps = int(sys.argv[6])
 dt = 1e-2
