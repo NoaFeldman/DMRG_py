@@ -124,6 +124,7 @@ def ferromagnetic_state(N):
         up = np.copy(basic_mid_site)
         result.append(tn.Node(np.kron(down, up.transpose([2, 1, 0]))))
     result.append(tn.Node(right_site))
+    result[-1] /= np.sqrt(bops.getOverlap(result, result))
     return result
 
 
@@ -219,17 +220,38 @@ def add_mps(psi1, psi2):
     return result
 
 
+def imps_ground_state(N, J, ising_lambda):
+    h_term = ising_lambda * np.kron(X, np.eye(2)) + J * np.kron(Z, Z)
+    h_term = tn.Node(h_term.reshape([2] * 4))
+    site = tn.Node(np.sqrt(1/2) * np.array([1, 1]).reshape(1, 2, 1))
+    pair = bops.contract(site, site, '2', '0')
+    steps = 200
+    for i in range(steps):
+        [r, s, l, te] = bops.svdTruncation(bops.permute(bops.contract(pair, h_term, '12', '01'), [0, 2, 3, 1]),
+                                           [0, 1], [2, 3], '>*<', maxBondDim=32)
+        pair = bops.contract(bops.contract(s, l, '1', '0'), r, '2', '0')
+    [r, s, l, te] = bops.svdTruncation(pair, [0, 1], [2, 3], '>*<')
+    site = r
+    gs = [tn.Node(np.tensordot(site.tensor, site.tensor, [[0], [2]]).transpose([0, 3, 1, 2]).reshape([1, 2**2, site.tensor.shape[0]*site.tensor.shape[2]]))] + \
+         [tn.Node(np.kron(site.tensor, site.tensor.transpose([2, 1, 0])))] * int((N - 3) / 2) + \
+         [tn.Node(np.kron(site.tensor, np.array([1, 0]).reshape([1, 2, 1])).transpose([0, 2, 1]).reshape([site.tensor.shape[0]*site.tensor.shape[2], 2**2, 1]))]
+    for i in range(len(gs) - 1):
+        pair = bops.contract(gs[i], gs[i+1], '2', '0')
+        gs[i], gs[i+1], te = bops.svdTruncation(pair, [0, 1], [2, 3], '>>', maxBondDim=4)
+    gs[-1].tensor /= np.sqrt(bops.getOverlap(gs, gs))
+    return gs
+
+
+
 def ground_states_magic(N, J, ising_lambdas, dirname):
     all_m2s_0_basis = np.zeros(len(ising_lambdas), dtype=complex)
     all_m2s_min_basis = np.zeros(len(ising_lambdas), dtype=complex)
     all_alphas_squared = np.zeros(len(ising_lambdas))
 
-    psi_0 = minus_state(N)
+    if J == -1:
+        psi_0 = ferromagnetic_state(N)
     for li in range(len(ising_lambdas)):
-        if J == -1:
-            psi_0 = ferromagnetic_state(N)
         ising_lambda = ising_lambdas[li]
-        print(N, ising_lambda)
         results_filename = filename(dirname, J, N, ising_lambda, 'PBC')
         if os.path.exists(results_filename):
             [gs, state_accuracy, m2s, alpha_squared] = pickle.load(open(results_filename, 'rb'))
@@ -254,6 +276,34 @@ def ground_states_magic(N, J, ising_lambdas, dirname):
             psi_0 = gs
             pickle.dump([gs, state_accuracy, m2s, alpha_squared], open(results_filename, 'wb'))
         print(state_accuracy)
+        if J == -1: # and li in [7, 12, 18]:
+            onsite_terms, neighbor_terms = get_H_terms(N, ising_lambda * X, J * np.kron(Z, Z))
+            gsx = bops.copyState(gs)
+            for i in range(len(gsx) - 1):
+                gsx[i] = bops.permute(bops.contract(gsx[i], tn.Node(np.kron(X, X)), '1', '0'), [0, 2, 1])
+            gsx[-1] = bops.permute(bops.contract(gsx[-1], tn.Node(-1 * np.kron(X, np.eye(2))), '1', '0'), [0, 2, 1])
+            if np.round(bops.getExpectationValue(gs, [tn.Node(np.kron(X, X))] * (len(gs) - 1) + [tn.Node(np.kron(X, np.eye(2)))]), 4) == -1:
+                gsplus = gs
+            else:
+                gsplus = bops.addStates(gs, gsx)
+                gsplus[-1] /= np.sqrt(bops.getOverlap(gsplus, gsplus))
+            print('x', bops.getExpectationValue(gsplus,
+                        [tn.Node(np.kron(X, X))] * (len(gsplus) - 1) + [tn.Node(np.kron(X, np.eye(2)))]))
+            relaxed = bops.relaxState(gsplus, 4)
+            state_accuracy = bops.getOverlap(gsplus, relaxed)
+            print('state accuarcy = ' + str(state_accuracy))
+            m2s = np.zeros((angle_steps, angle_steps), dtype=complex)
+            for ti in range(angle_steps):
+                for pi in range(angle_steps):
+                    paulis = rotate_paulis(thetas[ti], phis[pi])
+                    m2 = memory_cheap_m2(relaxed, paulis)
+                    m2s[ti, pi] = m2
+            single_site_rdm_plus = bops.contract(
+                tn.Node(bops.contract(gsplus[-1], gsplus[-1], '02', '02*').tensor.reshape([d] * 4)),
+                tn.Node(np.eye(d)), '13', '01').tensor
+            alpha_squared = sum([np.matmul(single_site_rdm_plus, P).trace() ** 2 for P in [X, Y, Z]])
+            pickle.dump([gs, state_accuracy, m2s, alpha_squared], open(results_filename, 'wb'))
+        print(N, ising_lambda)
         all_m2s_0_basis[li] = -(np.log(m2s[0, 0])/ np.log(2) - N)
         all_m2s_min_basis[li] = np.amin(-(np.log(m2s)/ np.log(2) - N))
         all_alphas_squared[li] = alpha_squared
