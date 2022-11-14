@@ -276,13 +276,13 @@ def ground_states_magic(N, J, ising_lambdas, dirname):
             psi_0 = gs
             pickle.dump([gs, state_accuracy, m2s, alpha_squared], open(results_filename, 'wb'))
         print(state_accuracy)
-        if J == -1: # and li in [7, 12, 18]:
+        if J == -1 and N >= 15 and N <= 19 and li <= 10:
             onsite_terms, neighbor_terms = get_H_terms(N, ising_lambda * X, J * np.kron(Z, Z))
             gsx = bops.copyState(gs)
             for i in range(len(gsx) - 1):
                 gsx[i] = bops.permute(bops.contract(gsx[i], tn.Node(np.kron(X, X)), '1', '0'), [0, 2, 1])
             gsx[-1] = bops.permute(bops.contract(gsx[-1], tn.Node(-1 * np.kron(X, np.eye(2))), '1', '0'), [0, 2, 1])
-            if np.round(bops.getExpectationValue(gs, [tn.Node(np.kron(X, X))] * (len(gs) - 1) + [tn.Node(np.kron(X, np.eye(2)))]), 4) == -1:
+            if np.abs(np.round(bops.getExpectationValue(gs, [tn.Node(np.kron(X, X))] * (len(gs) - 1) + [tn.Node(np.kron(X, np.eye(2)))]), 4)) == 1:
                 gsplus = gs
             else:
                 gsplus = bops.addStates(gs, gsx)
@@ -302,7 +302,9 @@ def ground_states_magic(N, J, ising_lambdas, dirname):
                 tn.Node(bops.contract(gsplus[-1], gsplus[-1], '02', '02*').tensor.reshape([d] * 4)),
                 tn.Node(np.eye(d)), '13', '01').tensor
             alpha_squared = sum([np.matmul(single_site_rdm_plus, P).trace() ** 2 for P in [X, Y, Z]])
-            pickle.dump([gs, state_accuracy, m2s, alpha_squared], open(results_filename, 'wb'))
+            pickle.dump([gsplus, state_accuracy, m2s, alpha_squared], open(results_filename, 'wb'))
+        if alpha_squared > 10:
+            dbg = 1
         print(N, ising_lambda)
         all_m2s_0_basis[li] = -(np.log(m2s[0, 0])/ np.log(2) - N)
         all_m2s_min_basis[li] = np.amin(-(np.log(m2s)/ np.log(2) - N))
