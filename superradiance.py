@@ -316,7 +316,7 @@ case = sys.argv[4]
 if case == 'kernel_1d':
     mu = 3 / (2 * k * N)
     gamma_1d = Gamma * mu
-    Omega = float(sys.argv[3]) / gamma_1d
+    Omega = float(sys.argv[3]) * gamma_1d
 else:
     Omega = float(sys.argv[3]) / Gamma
 outdir = sys.argv[5]
@@ -433,7 +433,7 @@ for file in os.listdir(newdir):
         if ti + 1 > initial_ti:
             initial_ti = ti + 1
             data = pickle.load(open(newdir + '/' + file, 'rb'))
-            [ti, psi, projectors_left, projectors_right] = data[:4]
+            [ti, psi_1_exp, hl_1_exp, hr_1_exp] = data[:4]
             runtimes_1_exp[:len(data[4])] = data[4]
             if len(data) > 5: tes_1_exp[:len(data[5])] = data[5]
 if initial_ti > 0:
