@@ -598,7 +598,7 @@ elif model == 'zohar_gamma':
     params = [np.round(0.2 * a, 8) for a in range(-10, 11)]
     param_name = 'gamma'
 elif model == 'orus':
-    params = [np.round(0.1 * i, 8) for i in range(20)]
+    params = [np.round(0.1 * i, 8) for i in range(13)]
     param_name = 'g'
 elif model == 'toric_c':
     params = [0.5]
