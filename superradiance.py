@@ -322,7 +322,7 @@ else:
 outdir = sys.argv[5]
 timesteps = int(sys.argv[6])
 dt = 1e-2
-save_each = 10
+save_each = 30
 results_to = sys.argv[7]
 bond_dim = int(sys.argv[8])
 
@@ -420,10 +420,8 @@ runtimes_1_exp = np.zeros(timesteps)
 tes_2_exp = np.zeros(timesteps)
 tes_1_exp = np.zeros(timesteps)
 
-JdJ_2_exp = np.zeros(timesteps)
 JdJ_1_exp = np.zeros(timesteps)
 
-sigmaz_2_exp = np.zeros(timesteps)
 sigmaz_1_exp = np.zeros(timesteps)
 
 initial_ti = 0
@@ -436,12 +434,9 @@ for file in os.listdir(newdir):
             [ti, psi_1_exp, hl_1_exp, hr_1_exp] = data[:4]
             runtimes_1_exp[:len(data[4])] = data[4]
             if len(data) > 5: tes_1_exp[:len(data[5])] = data[5]
-if initial_ti > 0:
-    state_filename, data_filename = filenames(newdir, case, N, Omega, nn_num, initial_ti - 1, bond_dim)
-    data = pickle.load(open(state_filename + '_2s_exp', 'rb'))
-    [_, psi_2_exp, hl_2_exp, hr_2_exp] = data[:4]
-    runtimes_2_exp[:len(data[4])] = data[4]
-    if len(data) > 5: tes_2_exp[:len(data[5])] = data[5]
+            if len(data) >= 8:
+                JdJ_1_exp[:ti] = data[6][:ti]
+                sigmaz_1_exp[:ti] = data[7][:ti]
 
 for ti in range(initial_ti, timesteps):
     print('---')
@@ -467,7 +462,7 @@ for ti in range(initial_ti, timesteps):
     print('times = ' + str([runtimes_2_exp[ti], runtimes_1_exp[ti]]))
     state_filename, data_filename = filenames(newdir, case, N, Omega, nn_num, ti, bond_dim)
     with open(state_filename + '_2s_exp', 'wb') as f:
-        pickle.dump([ti, psi_2_exp, hl_2_exp, hr_2_exp, runtimes_2_exp], f)
+        pickle.dump([ti, psi_2_exp, hl_2_exp, hr_2_exp, runtimes_2_exp, tes_2_exp], f)
     with open(state_filename + '_1s_exp', 'wb') as f:
         pickle.dump([ti, psi_1_exp, hl_1_exp, hr_1_exp, runtimes_1_exp, tes_1_exp, JdJ_1_exp, sigmaz_1_exp], f)
 
