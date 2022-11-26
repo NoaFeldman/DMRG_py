@@ -244,11 +244,14 @@ corner_projectors = [corner_projector_0, corner_projector_1]
 wall_projector_0 = np.diag([1, 0, 1, 0])
 wall_projector_1 = np.diag([0, 1, 0, 1])
 wall_projectors = [wall_projector_0, wall_projector_1]
-def get_block_probability(filename, n, bi, d=2, corner_num=1, corner_charges=[0], gap_l=2):
+def get_block_probability(filename, n, bi, d=2, corner_num=1, corner_charges=[0], gap_l=2, edge_dim=2):
     [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, A, B] = \
         get_boundaries_from_file(filename, w=2, h=2)
     boundary = [int(c) for c in bin(bi).split('b')[1].zfill(2 * n + 2)]
     edge_projectors = [tn.Node(np.diag([1, 0, 0, 0])), tn.Node(np.diag([0, 0, 0, 1]))]
+    if edge_dim == 4:
+        edge_projectors = [tn.Node(np.diag([1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1])),
+                           tn.Node(np.diag([0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0]))]
     dDowns = []
     dUps = []
     cDowns = []
@@ -291,11 +294,14 @@ def get_block_probability(filename, n, bi, d=2, corner_num=1, corner_charges=[0]
            #      openA, openA, 2, continuous_l + gap_l, [tn.Node(np.eye(4))] * 2 * (n + gap_l), PBC=True, period_num=corner_num)
 
 
-def get_block_purity(filename, n, bi, corner_num=1, corner_charges=[0], gap_l=2, d=2):
+def get_block_purity(filename, n, bi, corner_num=1, corner_charges=[0], gap_l=2, d=2,  edge_dim=2):
     [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, A, B] = \
         get_boundaries_from_file(filename, w=2, h=2)
     boundary = [int(c) for c in bin(bi).split('b')[1].zfill(2 * n + 2)]
     edge_projectors = [tn.Node(np.diag([1, 0, 0, 0])), tn.Node(np.diag([0, 0, 0, 1]))]
+    if edge_dim == 4:
+        edge_projectors = [tn.Node(np.diag([1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1])),
+                           tn.Node(np.diag([0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0]))]
     dDowns = []
     dUps = []
     cDowns = []
@@ -569,6 +575,7 @@ def analyze_normalized_p2_data(model, params, Ns, dirname, param_name, plot=True
 
 
 model = sys.argv[1]
+edge_dim = 2
 if model == 'zohar':
     params = [[alpha, beta, gamma, delta] for alpha in [np.round(0.5 * i, 8) for i in range(-2, 3)] \
               for beta in [np.round(0.5 * i, 8) for i in range(-2, 3)] \
@@ -591,8 +598,12 @@ elif model == 'zohar_gamma':
     params = [np.round(0.2 * a, 8) for a in range(-10, 11)]
     param_name = 'gamma'
 elif model == 'orus':
-    params = [np.round(0.1 * i, 8) for i in range(20)]
+    params = [np.round(0.1 * i, 8) for i in range(13)]
     param_name = 'g'
+elif model == 'toric_c':
+    params = [0.5]
+    param_name = 'c'
+    edge_dim = 4
 dirname = 'results/gauge/' + model
 
 charges = [1, 1, 1, 1]
@@ -618,9 +629,10 @@ for pi in range(len(params)):
                         c = corner_charges[ci]
                         result_filename = 'results/gauge/' + model + '/circle_' + param_name + '_' + str(param) + '_n_' + str(n) + '_cnum_' + str(corner_num) \
                                         + '_b_' + str(b) + '_gap_l_' + str(gap_l) + '_c_' + str(c)
+                        print(result_filename)
                         if not os.path.exists(result_filename):
-                            p1 = get_block_probability(filename, n, b, corner_num=corner_num, corner_charges=[c], gap_l=gap_l)
-                            p2 = get_block_purity(filename, n, b, corner_num=corner_num, corner_charges=[c], gap_l=gap_l)
+                            p1 = get_block_probability(filename, n, b, corner_num=corner_num, corner_charges=[c], gap_l=gap_l, edge_dim=edge_dim)
+                            p2 = get_block_purity(filename, n, b, corner_num=corner_num, corner_charges=[c], gap_l=gap_l, edge_dim=edge_dim)
                             print(param, corner_num, n, gap_l, p2, p1, p2 / p1**2)
                             n_p2 = p2 / p1**2
                             pickle.dump(n_p2, open(result_filename, 'wb'))

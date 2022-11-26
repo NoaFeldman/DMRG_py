@@ -8,7 +8,7 @@ import sys
 from os import path
 import functools as ft
 import scipy.linalg as linalg
-
+import magicRenyi 
 
 import string
 digs = string.digits + string.ascii_letters
@@ -32,22 +32,27 @@ def int2base(x, base, str_len):
     return ''.join(digits).zfill(str_len)
 
 
-def get_H_terms(N, onsite_term, neighbor_term, d=2):
-    onsite_terms = [np.kron(onsite_term, np.eye(d)) + np.kron(np.eye(d), onsite_term)
-                    for i in range(int(N / 2))]
-    onsite_terms[0] += neighbor_term
-    neighbor_terms = [np.kron(neighbor_term.reshape([d] * 4), np.eye(d**2).reshape([d] * 4)).reshape([d**4, d**4])
-                      + np.kron(np.eye(d**2).reshape([d] * 4), neighbor_term.reshape([d] * 4)).reshape([d**4, d**4])
-                      for i in range(int(N / 2) - 1)]
-    if N % 2 == 0:
-        onsite_terms[-1] += neighbor_term
+def get_H_terms(N, onsite_term, neighbor_term, d=2, bc='p'):
+    if bc == 'p':
+        onsite_terms = [np.kron(onsite_term, np.eye(d)) + np.kron(np.eye(d), onsite_term)
+                        for i in range(int(N / 2))]
+        onsite_terms[0] += neighbor_term
+        neighbor_terms = [np.kron(neighbor_term.reshape([d] * 4), np.eye(d**2).reshape([d] * 4)).reshape([d**4, d**4])
+                          + np.kron(np.eye(d**2).reshape([d] * 4), neighbor_term.reshape([d] * 4)).reshape([d**4, d**4])
+                          for i in range(int(N / 2) - 1)]
+        if N % 2 == 0:
+            onsite_terms[-1] += neighbor_term
+        else:
+            onsite_terms = onsite_terms + [np.kron(onsite_term, np.eye(d))]
+            neighbor_terms = neighbor_terms \
+                             + [np.kron(neighbor_term.reshape([d] * 4), np.eye(d**2).reshape([d] * 4)).reshape([d**4, d**4]) + \
+                                np.kron(neighbor_term.reshape([d] * 4), np.eye(d**2).reshape([d] * 4)).reshape([d] * 8)
+                                    .transpose([1, 0, 2, 3, 5, 4, 6, 7]).reshape([d ** 4] * 2)]
+        return onsite_terms, neighbor_terms
     else:
-        onsite_terms = onsite_terms + [np.kron(onsite_term, np.eye(d))]
-        neighbor_terms = neighbor_terms \
-                         + [np.kron(neighbor_term.reshape([d] * 4), np.eye(d**2).reshape([d] * 4)).reshape([d**4, d**4]) + \
-                            np.kron(neighbor_term.reshape([d] * 4), np.eye(d**2).reshape([d] * 4)).reshape([d] * 8)
-                                .transpose([1, 0, 2, 3, 5, 4, 6, 7]).reshape([d ** 4] * 2)]
-    return onsite_terms, neighbor_terms
+        onsite_terms = [onsite_term for i in range(N)]
+        neighbor_terms = [neighbor_term for i in range(N - 1)]
+        return onsite_terms, neighbor_terms
 
 
 def minus_state(N):
@@ -124,6 +129,7 @@ def ferromagnetic_state(N):
         up = np.copy(basic_mid_site)
         result.append(tn.Node(np.kron(down, up.transpose([2, 1, 0]))))
     result.append(tn.Node(right_site))
+    result[-1] /= np.sqrt(bops.getOverlap(result, result))
     return result
 
 
@@ -203,41 +209,82 @@ def rotate_paulis(theta, phi):
             for i in range(len(unrotated_paulis))]
 
 
-def filename(dirname, J, N, ising_lambda, boundary_conditions):
-    return dirname + '/ising_' + boundary_conditions + '_J_' + str(J) + '_N_' + str(N) + '_lambda_' + str(ising_lambda)
+def filename(dirname, J, N, ising_lambda, boundary_conditions, bc):
+    file_name = dirname + '/ising_' + boundary_conditions + '_J_' + str(J) + '_N_' + str(N) + '_lambda_' + str(ising_lambda)
+    if bc == 'p':
+        return file_name
+    else:
+        return file_name + '_' + bc
 
 
-def add_mps(psi1, psi2):
-    result = []
-    for i in range(len(psi1)):
-        ten = np.zeros((psi1[i][0].dimension + psi2[i][0].dimension, d**2, psi1[i][2].dimension + psi2[i][2].dimension), dtype=complex)
-        ten[:psi1[i][0].dimension, :, :psi1[i][2].dimension] = psi1[i].tensor
-        ten[psi1[i][0].dimension:, :, psi1[i][2].dimension:] = psi2[i].tensor
-        result.append(tn.Node(ten))
-    result[0] = bops.contract(tn.Node(np.ones((1, 2))), result[0], '1', '0')
-    result[-1] = bops.contract(result[-1], tn.Node(np.ones((2, 1))), '2', '0')
-    return result
+
+def imps_ground_state(N, J, ising_lambda):
+    h_term = ising_lambda * np.kron(X, np.eye(2)) + J * np.kron(Z, Z)
+    h_term = tn.Node(h_term.reshape([2] * 4))
+    site = tn.Node(np.sqrt(1/2) * np.array([1, 1]).reshape(1, 2, 1))
+    pair = bops.contract(site, site, '2', '0')
+    steps = 200
+    for i in range(steps):
+        [r, s, l, te] = bops.svdTruncation(bops.permute(bops.contract(pair, h_term, '12', '01'), [0, 2, 3, 1]),
+                                           [0, 1], [2, 3], '>*<', maxBondDim=32)
+        pair = bops.contract(bops.contract(s, l, '1', '0'), r, '2', '0')
+    [r, s, l, te] = bops.svdTruncation(pair, [0, 1], [2, 3], '>*<')
+    site = r
+    gs = [tn.Node(np.tensordot(site.tensor, site.tensor, [[0], [2]]).transpose([0, 3, 1, 2]).reshape([1, 2**2, site.tensor.shape[0]*site.tensor.shape[2]]))] + \
+         [tn.Node(np.kron(site.tensor, site.tensor.transpose([2, 1, 0])))] * int((N - 3) / 2) + \
+         [tn.Node(np.kron(site.tensor, np.array([1, 0]).reshape([1, 2, 1])).transpose([0, 2, 1]).reshape([site.tensor.shape[0]*site.tensor.shape[2], 2**2, 1]))]
+    for i in range(len(gs) - 1):
+        pair = bops.contract(gs[i], gs[i+1], '2', '0')
+        gs[i], gs[i+1], te = bops.svdTruncation(pair, [0, 1], [2, 3], '>>', maxBondDim=4)
+    gs[-1].tensor /= np.sqrt(bops.getOverlap(gs, gs))
+    return gs
 
 
-def ground_states_magic(N, J, ising_lambdas, dirname):
+def ground_states_magic(N, J, ising_lambdas, dirname, bc='p'):
     all_m2s_0_basis = np.zeros(len(ising_lambdas), dtype=complex)
     all_m2s_min_basis = np.zeros(len(ising_lambdas), dtype=complex)
     all_alphas_squared = np.zeros(len(ising_lambdas))
 
-    psi_0 = minus_state(N)
-    for li in range(len(ising_lambdas)):
-        if J == -1:
+    if J == -1:
+        if bc == 'p':
             psi_0 = ferromagnetic_state(N)
+        else:
+            psi_0 = bops.getStartupState(N, d=2)
+    else:
+        if bc == 'p':
+            psi_0 = antiferromagnetic_state(N)
+        else:
+            psi_0 = bops.getStartupState(N, d=2)
+    for li in range(len(ising_lambdas)):
         ising_lambda = ising_lambdas[li]
-        print(N, ising_lambda)
-        results_filename = filename(dirname, J, N, ising_lambda, 'PBC')
+        results_filename = filename(dirname, J, N, ising_lambda, 'PBC', bc=bc)
         if os.path.exists(results_filename):
             [gs, state_accuracy, m2s, alpha_squared] = pickle.load(open(results_filename, 'rb'))
         else:
-            onsite_terms, neighbor_terms = get_H_terms(N, ising_lambda * X, J * np.kron(Z, Z))
-
-            gs, E0, trunc_errs = dmrg.DMRG(psi_0, onsite_terms, neighbor_terms, d=4, initial_bond_dim=16, maxBondDim=512,
+            onsite_terms, neighbor_terms = get_H_terms(N, ising_lambda * X, J * np.kron(Z, Z), bc=bc)
+            if bc == 'p':
+                d = 4
+            else:
+                d = 2
+            gs, E0, trunc_errs = dmrg.DMRG(psi_0, onsite_terms, neighbor_terms, d=d, initial_bond_dim=16, maxBondDim=512,
                                            accuracy=1e-10)
+
+            # TODO allow obc
+            if bc == 'p':
+                x_string = [tn.Node(np.kron(X, X))] * (len(gs) - 1) + [tn.Node(np.kron(X, np.eye(2)))]
+                left_op = tn.Node(-1 * np.kron(X, np.eye(2)))
+            else:
+                x_string = [tn.Node(X)] * len(gs)
+                left_op = tn.Node(X)
+            if np.abs(np.round(bops.getExpectationValue(gs, x_string), 4)) != 1:
+                gsx = bops.copyState(gs)
+                for i in range(len(gsx) - 1):
+                    gsx[i] = bops.permute(bops.contract(gsx[i], x_string[i], '1', '0'), [0, 2, 1])
+                gsx[-1] = bops.permute(bops.contract(gsx[-1], left_op, '1', '0'), [0, 2, 1])
+                gs = bops.addStates(gs, gsx)
+                gs[-1] /= np.sqrt(bops.getOverlap(gs, gs))
+
+
             # split sites so it is consistent with magicRenyi.getRenyiEntropy
             relaxed = bops.relaxState(gs, 4)
             state_accuracy = bops.getOverlap(gs, relaxed)
@@ -245,15 +292,58 @@ def ground_states_magic(N, J, ising_lambdas, dirname):
             for ti in range(angle_steps):
                 for pi in range(angle_steps):
                     paulis = rotate_paulis(thetas[ti], phis[pi])
-                    m2 = memory_cheap_m2(relaxed, paulis)
+                    if bc == 'p':
+                        m2 = memory_cheap_m2(relaxed, paulis)
+                    else:
+                        m2 =  magicRenyi.getSecondRenyi_basis(relaxed, 2, thetas[ti], phis[pi], 0)
                     m2s[ti, pi] = m2
-            single_site_rdm = bops.contract(tn.Node(bops.contract(gs[-1], gs[-1], '02', '02*').tensor.reshape([d] * 4)),
+            if bc == 'p':
+                single_site_rdm = bops.contract(gs[0], gs[0], '01', '01*')
+                for i in range(1, len(gs) - 1):
+                    single_site_rdm = bops.contract(bops.contract(
+                        single_site_rdm, gs[i], '0', '0'), gs[i], '01', '01*')
+
+                # TODO maybe alpha_squared should be redone as in the if False part (non-canonical)
+                single_site_rdm = bops.contract(tn.Node(bops.contract(gs[-1], gs[-1], '02', '02*').tensor.reshape([d] * 4)),
                                             tn.Node(np.eye(d)), '13', '01').tensor
+            else:
+                single_site_rdm = bops.contract(gs[-1], gs[-1], '02', '02*').tensor
             print(single_site_rdm)
             alpha_squared = sum([np.matmul(single_site_rdm, P).trace()**2 for P in [X, Y, Z]])
             psi_0 = gs
             pickle.dump([gs, state_accuracy, m2s, alpha_squared], open(results_filename, 'wb'))
         print(state_accuracy)
+        if False: #J == -1 and (ising_lambda == 0.8 and N >= 21): # or (N == 17 and ising_lambda == 0.6):
+            gsx = bops.copyState(gs)
+            for i in range(len(gsx) - 1):
+                gsx[i] = bops.permute(bops.contract(gsx[i], tn.Node(np.kron(X, X)), '1', '0'), [0, 2, 1])
+            gsx[-1] = bops.permute(bops.contract(gsx[-1], tn.Node(-1 * np.kron(X, np.eye(2))), '1', '0'), [0, 2, 1])
+            if np.abs(np.round(bops.getExpectationValue(gs, [tn.Node(np.kron(X, X))] * (len(gs) - 1) + [tn.Node(np.kron(X, np.eye(2)))]), 4)) == 1:
+                gsplus = gs
+            else:
+                gsplus = bops.addStates(gs, gsx)
+                gsplus[-1] /= np.sqrt(bops.getOverlap(gsplus, gsplus))
+            print('x', bops.getExpectationValue(gsplus,
+                        [tn.Node(np.kron(X, X))] * (len(gsplus) - 1) + [tn.Node(np.kron(X, np.eye(2)))]))
+            relaxed = bops.relaxState(gsplus, 8)
+            state_accuracy = bops.getOverlap(gsplus, relaxed)
+            print('state accuarcy = ' + str(state_accuracy))
+            m2s = np.zeros((angle_steps, angle_steps), dtype=complex)
+            for ti in range(angle_steps):
+                for pi in range(angle_steps):
+                    paulis = rotate_paulis(thetas[ti], phis[pi])
+                    m2 = memory_cheap_m2(relaxed, paulis)
+                    m2s[ti, pi] = m2
+            single_site_rdm_plus = bops.contract(gsplus[0], gsplus[0], '01', '01*')
+            for i in range(1, len(gsplus) - 1):
+                single_site_rdm_plus = bops.contract(bops.contract(
+                    single_site_rdm_plus, gsplus[i], '0', '0'), gsplus[i], '01', '01*')
+            single_site_rdm_plus = bops.contract(tn.Node(bops.contract(bops.contract(
+                single_site_rdm_plus, gsplus[-1], '0', '0'), gsplus[-1], '02', '02*').tensor.reshape([d] * 4)),
+                                                 tn.Node(np.eye(d)), '13', '01').tensor
+            alpha_squared = sum([np.matmul(single_site_rdm_plus, P).trace() ** 2 for P in [X, Y, Z]])
+            pickle.dump([gsplus, state_accuracy, m2s, alpha_squared], open(results_filename, 'wb'))
+        print(N, ising_lambda)
         all_m2s_0_basis[li] = -(np.log(m2s[0, 0])/ np.log(2) - N)
         all_m2s_min_basis[li] = np.amin(-(np.log(m2s)/ np.log(2) - N))
         all_alphas_squared[li] = alpha_squared
@@ -263,7 +353,13 @@ def ground_states_magic(N, J, ising_lambdas, dirname):
 dirname = sys.argv[1]
 Ns = [i * 2 + 1 for i in range(int(sys.argv[2]), int(sys.argv[3]))]
 lambda_step = 0.1
-ising_lambdas = [np.round(lambda_step * i, 8) for i in range(int(2.5 / lambda_step))]
+lambda_critical_step = 0.01
+phase_transition = 1
+ising_lambdas = [np.round(lambda_step * i, 8) for i in range(int(phase_transition / lambda_step))] \
+    + [np.round(phase_transition + lambda_critical_step * i, 8) for i in range(-9, 10)] \
+    + [np.round(lambda_step * i, 8) for i in range(int((phase_transition + lambda_step) / lambda_step), int(2.5 / lambda_step))]
+bc = 'o'
+
 
 m2s = np.zeros((len(Ns), len(ising_lambdas)), dtype=complex)
 m2s_min = np.zeros((len(Ns), len(ising_lambdas)), dtype=complex)
@@ -274,8 +370,8 @@ alphas_squared_ferro = np.zeros((len(Ns), len(ising_lambdas)))
 for Ni in range(len(Ns)):
     N = Ns[Ni]
     curr_m2s_0_basis_ferro, curr_m2s_min_basis_ferro, curr_alphas_squared_ferro = \
-        ground_states_magic(N, -1, ising_lambdas, dirname)
-    curr_m2s_0_basis, curr_m2s_min_basis, curr_alphas_squared = ground_states_magic(N, 1, ising_lambdas, dirname)
+        ground_states_magic(N, -1, ising_lambdas, dirname, bc)
+    curr_m2s_0_basis, curr_m2s_min_basis, curr_alphas_squared = ground_states_magic(N, 1, ising_lambdas, dirname, bc)
     m2s[Ni, :] = curr_m2s_0_basis
     m2s_min[Ni, :] = curr_m2s_min_basis
     alphas_squared[Ni, :] = curr_alphas_squared
@@ -283,8 +379,8 @@ for Ni in range(len(Ns)):
     m2s_min_ferro[Ni, :] = curr_m2s_min_basis_ferro
     alphas_squared_ferro[Ni, :] = curr_alphas_squared_ferro
 
-plot = True
-if plot:
+
+def full_plot():
     import matplotlib.pyplot as plt
     ff, axs = plt.subplots(2, 2)
     for li in range(len(ising_lambdas)):
@@ -292,7 +388,7 @@ if plot:
         axs[0, 1].plot(Ns, m2s_min[:, li])
         axs[1, 0].plot(Ns, m2s_ferro[:, li])
         axs[1, 1].plot(Ns, m2s_min_ferro[:, li])
-    axs[0, 0].legend([str(ising_lambdas[li]) for li in range(len(ising_lambdas))])
+    axs[1, 0].legend([str(ising_lambdas[li]) for li in range(len(ising_lambdas))])
     plt.show()
     ff, axs = plt.subplots(2, 3)
     m = axs[0, 0].pcolormesh(ising_lambdas, Ns, np.real(m2s))
@@ -315,3 +411,16 @@ if plot:
     axs[0, 0].set_ylabel('antiferromagnetic \n N')
     axs[1, 0].set_ylabel('ferromagnetic \n N')
     plt.show()
+
+
+def check_log_dependence():
+    import matplotlib.pyplot as plt
+    J = -1
+    lambda_inds = [5, 6, 7, 8, 9, 10]
+    for li in lambda_inds:
+        plt.plot(Ns, np.exp(m2s_min_ferro[:, li]))
+    plt.legend([str(ising_lambdas[li]) for li in lambda_inds])
+    plt.show()
+full_plot()
+# check_log_dependence()
+
