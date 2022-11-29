@@ -329,7 +329,7 @@ def ground_states_magic(N, J, ising_lambdas, dirname, bc='p'):
                             else:
                                 m2 =  magicRenyi.getSecondRenyi_basis(relaxed, 2, thetas[ti], phis[pi], 0)
                             m2s_singled_out_site[ti, pi, ti_l, pi_l] = m2
-            data = data + [m2s_singled_out_site]
+            data.append(m2s_singled_out_site)
             pickle.dump(data, open(results_filename, 'wb'))
         [gs, state_accuracy, m2s, alpha_squared] = data[:4]
         if different_bases:
