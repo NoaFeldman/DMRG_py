@@ -200,9 +200,6 @@ X = np.array([[0, 1], [1, 0]])
 Z = np.diag([1, -1])
 Y = np.array([[0, -1j], [1j, 0]])
 unrotated_paulis = [np.eye(d), Z, Y, X]
-angle_steps = 5 # 10
-thetas = [np.pi * i / (2 * angle_steps) for i in range(angle_steps)]
-phis = [np.pi * i / (2 * angle_steps) for i in range(angle_steps)]
 
 
 def rotate_paulis(theta, phi):
@@ -242,11 +239,13 @@ def imps_ground_state(N, J, ising_lambda):
     return gs
 
 
-def ground_states_magic(N, J, ising_lambdas, dirname, bc='p'):
+def ground_states_magic(N, J, ising_lambdas, dirname, bc='p', optimal_thetas=False):
     all_m2s_0_basis = np.zeros(len(ising_lambdas), dtype=complex)
     all_m2s_min_basis = np.zeros(len(ising_lambdas), dtype=complex)
+    all_m2s_0_basis_single_site = np.zeros(len(ising_lambdas), dtype=complex)
+    all_m2s_min_basis_single_site = np.zeros(len(ising_lambdas), dtype=complex)
     all_alphas_squared = np.zeros(len(ising_lambdas))
-    all_zz = np.zeros(len(ising_lambdas))
+    all_p2s = np.zeros(len(ising_lambdas))
 
     if J == -1:
         if bc == 'p':
@@ -291,15 +290,27 @@ def ground_states_magic(N, J, ising_lambdas, dirname, bc='p'):
             # split sites so it is consistent with magicRenyi.getRenyiEntropy
             relaxed = bops.relaxState(gs, 4)
             state_accuracy = bops.getOverlap(gs, relaxed)
-            m2s = np.zeros((angle_steps, angle_steps), dtype=complex)
-            for ti in range(angle_steps):
-                for pi in range(angle_steps):
-                    paulis = rotate_paulis(thetas[ti], phis[pi])
+            if optimal_thetas:
+                m2s = np.zeros((1, 2), dtype=complex)
+                former_results_filename = filename(dirname, J, N - 2, ising_lambda, 'PBC', bc=bc)
+                former_data = pickle.load(open(former_results_filename, 'rb'))
+                former_min = np.where(former_data[2] - np.amin(former_data[2]) == 0)
+                angle_pairs = [[0, 0], [former_min[0][0], former_min[1][0]]]
+                for pi in range(len(angle_pairs)):
+                    paulis = rotate_paulis(angle_pairs[pi][0], angle_pairs[pi][1])
                     if bc == 'p':
                         m2 = memory_cheap_m2(relaxed, paulis)
-                    else:
-                        m2 =  magicRenyi.getSecondRenyi_basis(relaxed, 2, thetas[ti], phis[pi], 0)
-                    m2s[ti, pi] = m2
+                        m2s[0, pi] = m2
+            else:
+                m2s = np.zeros((angle_steps, angle_steps), dtype=complex)
+                for ti in range(angle_steps):
+                    for pi in range(angle_steps):
+                        paulis = rotate_paulis(thetas[ti], phis[pi])
+                        if bc == 'p':
+                            m2 = memory_cheap_m2(relaxed, paulis)
+                        else:
+                            m2 =  magicRenyi.getSecondRenyi_basis(relaxed, 2, thetas[ti], phis[pi], 0)
+                        m2s[ti, pi] = m2
             if bc == 'p':
                 single_site_rdm = bops.contract(gs[0], gs[0], '01', '01*')
                 for i in range(1, len(gs) - 1):
@@ -307,8 +318,8 @@ def ground_states_magic(N, J, ising_lambdas, dirname, bc='p'):
                         single_site_rdm, gs[i], '0', '0'), gs[i], '01', '01*')
 
                 # TODO maybe alpha_squared should be redone as in the if False part (non-canonical)
-                single_site_rdm = bops.contract(tn.Node(bops.contract(gs[-1], gs[-1], '02', '02*').tensor.reshape([d] * 4)),
-                                            tn.Node(np.eye(d)), '13', '01').tensor
+                single_site_rdm = bops.contract(tn.Node(bops.contract(gs[-1], gs[-1], '02', '02*').tensor.reshape([2] * 4)),
+                                            tn.Node(np.eye(2)), '13', '01').tensor
             else:
                 single_site_rdm = bops.contract(gs[-1], gs[-1], '02', '02*').tensor
             alpha_squared = sum([np.matmul(single_site_rdm, P).trace()**2 for P in [X, Y, Z]])
@@ -334,64 +345,110 @@ def ground_states_magic(N, J, ising_lambdas, dirname, bc='p'):
         [gs, state_accuracy, m2s, alpha_squared] = data[:4]
         if different_bases:
             m2s_singled_out_site = data[4]
-        print(J, N, ising_lambda)
+        # print(J, N, ising_lambda)
         if bc == 'p':
             if different_bases:
-                all_m2s_0_basis[li] = -(np.log(m2s_singled_out_site[0, 0, 0, 0])/ np.log(2) - N)
-                all_m2s_min_basis[li] = np.amin(-(np.log(m2s_singled_out_site)/ np.log(2) - N))
-            else:
-                all_m2s_0_basis[li] = -(np.log(m2s[0, 0])/ np.log(2) - N)
-                all_m2s_min_basis[li] = np.amin(-(np.log(m2s)/ np.log(2) - N))
+                all_m2s_0_basis_single_site[li] = -(np.log(m2s_singled_out_site[0, 0, 0, 0])/ np.log(2) - N)
+                all_m2s_min_basis_single_site[li] = np.amin(-(np.log(m2s_singled_out_site)/ np.log(2) - N))
+            all_m2s_0_basis[li] = -(np.log(m2s[0, 0])/ np.log(2) - N)
+            all_m2s_min_basis[li] = np.amin(-(np.log(m2s)/ np.log(2) - N))
         else:
             all_m2s_0_basis[li] = m2s[0, 0]
             all_m2s_min_basis[li] = np.amin(m2s)
         all_alphas_squared[li] = alpha_squared
-    return all_m2s_0_basis, all_m2s_min_basis, all_alphas_squared, all_zz
+        if (len(data) == 5 and different_bases) or (len(data) == 4 and not different_bases):
+            p2 = bops.getRenyiEntropy(gs, 2, int(len(gs) / 2))
+            data = data + [p2]
+            pickle.dump(data, open(results_filename, 'wb'))
+        all_p2s[li] = data[-1]
+        psi_0 = gs
+    return all_m2s_0_basis, all_m2s_min_basis, all_m2s_0_basis_single_site, all_m2s_min_basis_single_site, all_alphas_squared, all_p2s
 
 
 dirname = sys.argv[1]
 Ns = [i * 2 + 1 for i in range(int(sys.argv[2]), int(sys.argv[3]))]
-different_bases = True
+different_bases = False
+optimal_thetas = True
 lambda_step = 0.1
 lambda_critical_step = 0.01
 phase_transition = 1
 ising_lambdas = [np.round(lambda_step * i, 8) for i in range(1, int(phase_transition / lambda_step))] \
     + [np.round(phase_transition + lambda_critical_step * i, 8) for i in range(-9, 10)] \
-    + [np.round(lambda_step * i, 8) for i in range(int((phase_transition + lambda_step) / lambda_step), int(2.5 / lambda_step))]
+    + [np.round(lambda_step * i, 8) for i in range(int((phase_transition + lambda_step) / lambda_step), int(1.8 / lambda_step))]
 bc = 'p'
+angle_steps = 10
+thetas = [np.pi * i / (2 * angle_steps) for i in range(angle_steps)]
+phis = [np.pi * i / (2 * angle_steps) for i in range(angle_steps)]
 
 
 m2s = np.zeros((len(Ns), len(ising_lambdas)), dtype=complex)
 m2s_min = np.zeros((len(Ns), len(ising_lambdas)), dtype=complex)
+m2s_min_single_site = np.zeros((len(Ns), len(ising_lambdas)), dtype=complex)
 alphas_squared = np.zeros((len(Ns), len(ising_lambdas)))
 m2s_ferro = np.zeros((len(Ns), len(ising_lambdas)), dtype=complex)
 m2s_min_ferro = np.zeros((len(Ns), len(ising_lambdas)), dtype=complex)
+m2s_min_single_site_ferro = np.zeros((len(Ns), len(ising_lambdas)), dtype=complex)
 alphas_squared_ferro = np.zeros((len(Ns), len(ising_lambdas)))
-zz = np.zeros((len(Ns), len(ising_lambdas)))
-zz_ferro = np.zeros((len(Ns), len(ising_lambdas)))
+p2s = np.zeros((len(Ns), len(ising_lambdas)))
+p2s_ferro = np.zeros((len(Ns), len(ising_lambdas)))
 for Ni in range(len(Ns)):
     N = Ns[Ni]
-    curr_m2s_0_basis_ferro, curr_m2s_min_basis_ferro, curr_alphas_squared_ferro, curr_zz_ferro = \
-        ground_states_magic(N, -1, ising_lambdas, dirname, bc)
-    curr_m2s_0_basis, curr_m2s_min_basis, curr_alphas_squared, curr_zz = ground_states_magic(N, 1, ising_lambdas, dirname, bc)
-    m2s[Ni, :] = curr_m2s_0_basis
-    m2s_min[Ni, :] = curr_m2s_min_basis
-    alphas_squared[Ni, :] = curr_alphas_squared
-    zz[Ni, :] = curr_zz
+    curr_m2s_0_basis_ferro, curr_m2s_min_basis_ferro, curr_m2s_0_basis_single_site_ferro, \
+        curr_m2s_min_basis_single_site_ferro, curr_alphas_squared_ferro, curr_p2s_ferro = \
+        ground_states_magic(N, -1, ising_lambdas, dirname, bc, optimal_thetas=optimal_thetas)
+    # # curr_m2s_0_basis, curr_m2s_min_basis, curr_m2s_0_basis_single_site, curr_m2s_min_basis_single_site, \
+    # #     curr_alphas_squared, curr_p2s = ground_states_magic(N, 1, ising_lambdas, dirname, bc)
+    # m2s[Ni, :] = curr_m2s_0_basis
+    # m2s_min[Ni, :] = curr_m2s_min_basis
+    # m2s_min_single_site[Ni, :] = curr_m2s_min_basis_single_site
+    # alphas_squared[Ni, :] = curr_alphas_squared
+    # p2s[Ni, :] = curr_p2s
     m2s_ferro[Ni, :] = curr_m2s_0_basis_ferro
     m2s_min_ferro[Ni, :] = curr_m2s_min_basis_ferro
+    m2s_min_single_site_ferro[Ni, :] = curr_m2s_min_basis_single_site_ferro
     alphas_squared_ferro[Ni, :] = curr_alphas_squared_ferro
-    zz_ferro[Ni, :] = curr_zz_ferro
+    p2s_ferro[Ni, :] = curr_p2s_ferro
+
+
+def min_angles_plot():
+    import matplotlib.pyplot as plt
+    for li in range(len(ising_lambdas)):
+        ff, axs = plt.subplots(int((31 - 19)/2))
+        for Ni in range(int((31 - 19)/2)):
+            results_filename = filename(dirname, -1, 21 + Ni * 2, ising_lambdas[li], 'PBC', bc=bc)
+            data = pickle.load(open(results_filename, 'rb'))
+            m = axs[Ni].pcolormesh(np.real(data[2]))
+            # plt.colorbar(m, ax=axs[Ni])
+        plt.title(str(ising_lambdas[li]))
+        plt.show()
+
+
+import matplotlib as mpl
+def colorFader(c1='green', c2='#1f77b4', mix=0): #fade (linear interpolate) from color c1 (at mix=0) to c2 (mix=1)
+    c1 = np.array([0, 0, 1])
+    c2 = np.array([1, 0, 0])
+    print((1-mix)*c1 + mix*c2)
+    return mpl.colors.to_hex((1-mix)*c1 + mix*c2)
+
 
 def full_plot():
     import matplotlib.pyplot as plt
     ff, axs = plt.subplots(2, 2)
-    for li in range(len(ising_lambdas)):
-        axs[0, 0].plot(Ns, m2s[:, li])
-        axs[0, 1].plot(Ns, m2s_min[:, li])
-        axs[1, 0].plot(Ns, m2s_ferro[:, li])
-        axs[1, 1].plot(Ns, m2s_min_ferro[:, li])
-    axs[1, 0].legend([str(ising_lambdas[li]) for li in range(len(ising_lambdas))])
+    range_i = 0
+    range_f = len(ising_lambdas)
+    colors = [colorFader(mix=x/(range_f - range_i + 1)) for x in range(range_f - range_i)]
+    colors[ising_lambdas.index(1.0)] = 'green'
+    for li in range(range_i, range_f):
+        axs[1, 0].plot(Ns, m2s_ferro[:, li], color=colors[li - range_i])
+        axs[1, 1].plot(Ns, np.exp(m2s_min_ferro[:, li]), color=colors[li - range_i])
+        axs[0, 0].plot(Ns, m2s[:, li], color=colors[li - range_i])
+        axs[0, 1].plot(Ns, m2s_min[:, li], color=colors[li - range_i])
+    axs[0, 1].legend([str(ising_lambdas[li]) for li in range(range_i, range_f)], loc='best', bbox_to_anchor=(-0.05, -0.1))
+    for i in range(2):
+        axs[i, 0].set_ylabel(r'$m_2$', fontsize=16)
+        axs[i, 0].set_ylabel(r'min($m_2$)', fontsize=16)
+        for j in range(2):
+            axs[i, j].set_xlabel('N', fontsize=16)
     plt.show()
     ff, axs = plt.subplots(2, 3)
     m = axs[0, 0].pcolormesh(ising_lambdas, Ns, np.real(m2s), shading='auto')
@@ -400,19 +457,40 @@ def full_plot():
     m = axs[0, 1].pcolormesh(ising_lambdas, Ns, np.real(m2s_min), shading='auto')
     plt.colorbar(m, ax=axs[0, 1])
     axs[0, 1].set_title(r'min$(m_2)$')
-    m = axs[0, 2].pcolormesh(ising_lambdas, Ns, np.real(alphas_squared), shading='auto')
+    m = axs[0, 2].pcolormesh(ising_lambdas, Ns, np.real(m2s_min_single_site), shading='auto')
     plt.colorbar(m, ax=axs[0, 2])
-    axs[0, 2].set_title(r'$|\alpha|^2$')
-    m = axs[1, 0].pcolormesh(ising_lambdas, Ns, np.real(m2s_ferro), shading='auto')
+    axs[0, 2].set_title(r'min$(m_2)$ (changed basis in single site)')
+    m = axs[1, 0].pcolormesh(ising_lambdas, Ns, np.real(alphas_squared), shading='auto')
     plt.colorbar(m, ax=axs[1, 0])
-    m = axs[1, 1].pcolormesh(ising_lambdas, Ns, np.real(m2s_min_ferro), shading='auto')
+    axs[1, 0].set_title(r'$|\alpha|^2$')
+    m = axs[1, 1].pcolormesh(ising_lambdas, Ns, np.real(p2s), shading='auto')
     plt.colorbar(m, ax=axs[1, 1])
-    m = axs[1, 2].pcolormesh(ising_lambdas, Ns, np.real(alphas_squared_ferro), shading='auto')
-    plt.colorbar(m, ax=axs[1, 2])
+    axs[1, 1].set_title(r'$p_2$')
     for j in range(3):
         axs[1, j].set_xlabel(r'$\lambda$')
-    axs[0, 0].set_ylabel('antiferromagnetic \n N')
-    axs[1, 0].set_ylabel('ferromagnetic \n N')
+    axs[0, 0].set_ylabel('N')
+    axs[1, 0].set_ylabel('N')
+    plt.show()
+    ff, axs = plt.subplots(2, 3)
+    m = axs[0, 0].pcolormesh(ising_lambdas, Ns, np.real(m2s_ferro), shading='auto')
+    plt.colorbar(m, ax=axs[0, 0])
+    axs[0, 0].set_title(r'$m_2$')
+    m = axs[0, 1].pcolormesh(ising_lambdas, Ns, np.real(m2s_min_ferro), shading='auto')
+    plt.colorbar(m, ax=axs[0, 1])
+    axs[0, 1].set_title(r'min$(m_2)$')
+    m = axs[0, 2].pcolormesh(ising_lambdas, Ns, np.real(m2s_min_single_site_ferro), shading='auto')
+    plt.colorbar(m, ax=axs[0, 2])
+    axs[0, 1].set_title(r'min$(m_2)$ (changed basis in single site)')
+    m = axs[1, 0].pcolormesh(ising_lambdas, Ns, np.real(alphas_squared_ferro), shading='auto')
+    plt.colorbar(m, ax=axs[1, 0])
+    axs[0, 2].set_title(r'$|\alpha|^2$')
+    m = axs[1, 1].pcolormesh(ising_lambdas, Ns, np.real(p2s_ferro), shading='auto')
+    plt.colorbar(m, ax=axs[1, 1])
+    axs[0, 2].set_title(r'$p_2$')
+    for j in range(3):
+        axs[1, j].set_xlabel(r'$\lambda$')
+    axs[0, 0].set_ylabel('N')
+    axs[1, 0].set_ylabel('N')
     plt.show()
 
 
