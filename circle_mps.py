@@ -239,6 +239,8 @@ def imps_ground_state(N, J, ising_lambda):
     return gs
 
 
+angles = [[]]
+
 def ground_states_magic(N, J, ising_lambdas, dirname, bc='p', optimal_thetas=False):
     all_m2s_0_basis = np.zeros(len(ising_lambdas), dtype=complex)
     all_m2s_min_basis = np.zeros(len(ising_lambdas), dtype=complex)
@@ -292,7 +294,7 @@ def ground_states_magic(N, J, ising_lambdas, dirname, bc='p', optimal_thetas=Fal
             state_accuracy = bops.getOverlap(gs, relaxed)
             if optimal_thetas:
                 m2s = np.zeros((1, 2), dtype=complex)
-                former_results_filename = filename(dirname, J, N - 2, ising_lambda, 'PBC', bc=bc)
+                former_results_filename = filename(dirname, J, 15, ising_lambda, 'PBC', bc=bc)
                 former_data = pickle.load(open(former_results_filename, 'rb'))
                 former_min = np.where(former_data[2] - np.amin(former_data[2]) == 0)
                 angle_pairs = [[0, 0], [former_min[0][0], former_min[1][0]]]
@@ -418,10 +420,10 @@ def min_angles_plot():
             results_filename = filename(dirname, -1, 21 + Ni * 2, ising_lambdas[li], 'PBC', bc=bc)
             data = pickle.load(open(results_filename, 'rb'))
             m = axs[Ni].pcolormesh(np.real(data[2]))
-            # plt.colorbar(m, ax=axs[Ni])
+            plt.colorbar(m, ax=axs[Ni])
         plt.title(str(ising_lambdas[li]))
         plt.show()
-
+# min_angles_plot()
 
 import matplotlib as mpl
 def colorFader(c1='green', c2='#1f77b4', mix=0): #fade (linear interpolate) from color c1 (at mix=0) to c2 (mix=1)
