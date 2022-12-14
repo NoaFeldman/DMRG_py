@@ -30,7 +30,7 @@ m2s_mins = np.zeros(len(ising_lambdas))
 for li in range(len(ising_lambdas)):
     non_normalized_m2s = np.zeros((len(thetas), len(phis)))
     ising_lambda = ising_lambdas[li]
-    print(ising_lambda)   
+    print(ising_lambda)
     results_filename = 'magic/results/bmps_ising_lambda_' + str(ising_lambda) + '_J_' + str(J)
     if os.path.exists(results_filename):
         data = pickle.load(open(results_filename, 'rb'))
