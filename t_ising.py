@@ -12,11 +12,11 @@ import scipy.linalg as linalg
 import os
 import functools as ft
 
-J = -1
+J = 1
 lambda_step = 0.1
-lambda_critical_step = 0.01
+lambda_critical_step = 0.04
 phase_transition = 1
-ising_lambdas = [np.round(phase_transition + lambda_critical_step * i, 8) for i in range(-39, 40)]
+ising_lambdas = [np.round(phase_transition + lambda_critical_step * i, 8) for i in range(-9, 13)]
 I = np.eye(2, dtype=complex)
 Z = np.diag([1, -1])
 X = np.array([[0, 1], [1, 0]], dtype=complex)
@@ -27,6 +27,8 @@ thetas = [np.round(0.1 * i, 3) for i in range(angle_step)]
 phis = [np.round(0.1 * i, 3) for i in range(angle_step)]
 m2s = np.zeros(len(ising_lambdas))
 m2s_mins = np.zeros(len(ising_lambdas))
+p2s_C = np.zeros(len(ising_lambdas))
+p2s_D = np.zeros(len(ising_lambdas))
 for li in range(len(ising_lambdas)):
     non_normalized_m2s = np.zeros((len(thetas), len(phis)))
     ising_lambda = ising_lambdas[li]
@@ -36,7 +38,7 @@ for li in range(len(ising_lambdas)):
         data = pickle.load(open(results_filename, 'rb'))
         [GammaC, LambdaC, GammaD, LambdaD, non_normalized_m2s] = data
     else:
-        dbeta = 1e-2
+        dbeta = 1e-4
         H_term = J * np.kron(Z, Z) + ising_lambda * np.kron(X, np.eye(2))
         imag_time_term = linalg.expm(-dbeta * H_term).reshape([1, 2, 2, 2, 2, 1]).transpose([0, 1, 3, 2, 4, 5])
         A, B, te = bops.svdTruncation(tn.Node(imag_time_term), [0, 1, 2], [3, 4, 5], '>>')
@@ -48,10 +50,11 @@ for li in range(len(ising_lambdas)):
         initial_c = tn.Node(initial_c_tensor)
         initial_lambda = tn.Node(np.array([1, 1], dtype=complex))
 
-        GammaC, LambdaC, GammaD, LambdaD = peps.getBMPSRowOps(initial_c, initial_lambda, initial_c, initial_lambda, A, B, int(1e5), 128)
-        results_filename = 'magic/results/bmps_ising_lambda_' + str(ising_lambda)
+        GammaC, LambdaC, GammaD, LambdaD = peps.getBMPSRowOps(initial_c, initial_lambda, initial_c, initial_lambda, A, B, int(1e6), 128)
         LambdaC_shrinked = tn.Node(LambdaC.tensor[:4] / np.sqrt(np.sum(np.abs(LambdaC.tensor[:4])**2)))
+        print(np.sum(LambdaC_shrinked.tensor**2) / (np.sum(LambdaC.tensor**2) / np.sum(np.abs(LambdaC.tensor[:4])**2)))
         LambdaD_shrinked = tn.Node(LambdaD.tensor[:2])
+        print(np.sum(LambdaD_shrinked.tensor**2) / np.sum(LambdaD.tensor**2))
         GammaC_shrinked = tn.Node(GammaC.tensor[:2, :, :4])
         GammaD_shrinked = tn.Node(GammaD.tensor[:4, :, :2])
         C = bops.contract(LambdaD_shrinked, GammaC_shrinked, '1', '0', isDiag1=True)
@@ -80,7 +83,13 @@ for li in range(len(ising_lambdas)):
         pickle.dump([GammaC, LambdaC, GammaD, LambdaD, non_normalized_m2s], open(results_filename, 'wb'))
     m2s[li] = non_normalized_m2s[0, 0]
     m2s_mins[li] = np.amin(non_normalized_m2s)
+    LambdaC.tensor /= np.sqrt(np.sum(LambdaC.tensor**2))
+    p2s_C[li] = np.sum(np.abs(LambdaC.tensor**4))
+    p2s_D[li] = np.sum(np.abs(LambdaD.tensor**4))
+    print(LambdaD.tensor)
     dbg = 1
 plt.plot(ising_lambdas, m2s)
 plt.plot(ising_lambdas, m2s_mins)
+plt.plot(ising_lambdas, p2s_C)
+plt.plot(ising_lambdas, p2s_D)
 plt.show()
