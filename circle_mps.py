@@ -202,9 +202,10 @@ Y = np.array([[0, -1j], [1j, 0]])
 unrotated_paulis = [np.eye(d), Z, Y, X]
 
 
-def rotate_paulis(theta, phi):
+def rotate_paulis(theta, phi, rho):
     return [ft.reduce(np.matmul,
-        [linalg.expm(1j * theta * Z), linalg.expm(1j * phi * X), unrotated_paulis[i], linalg.expm(-1j * phi * X), linalg.expm(-1j * theta * Z)])
+        [linalg.expm(1j * theta * Z), linalg.expm(1j * phi * X), linalg.expm(1j * rho * Z), unrotated_paulis[i],
+         linalg.expm(-1j * rho * Z), linalg.expm(-1j * phi * X), linalg.expm(-1j * theta * Z)])
             for i in range(len(unrotated_paulis))]
 
 
@@ -304,15 +305,16 @@ def ground_states_magic(N, J, ising_lambdas, dirname, bc='p', optimal_thetas=Fal
                         m2 = memory_cheap_m2(relaxed, paulis)
                         m2s[0, pi] = m2
             else:
-                m2s = np.zeros((angle_steps, angle_steps), dtype=complex)
+                m2s = np.zeros((angle_steps, angle_steps, angle_steps), dtype=complex)
                 for ti in range(angle_steps):
                     for pi in range(angle_steps):
-                        paulis = rotate_paulis(thetas[ti], phis[pi])
-                        if bc == 'p':
-                            m2 = memory_cheap_m2(relaxed, paulis)
-                        else:
-                            m2 =  magicRenyi.getSecondRenyi_basis(relaxed, 2, thetas[ti], phis[pi], 0)
-                        m2s[ti, pi] = m2
+                        for ri in range(angle_steps):
+                            paulis = rotate_paulis(thetas[ti], phis[pi], rhos[ri])
+                            if bc == 'p':
+                                m2 = memory_cheap_m2(relaxed, paulis)
+                            else:
+                                m2 =  magicRenyi.getSecondRenyi_basis(relaxed, 2, thetas[ti], phis[pi], 0)
+                            m2s[ti, pi, ri] = m2
             if bc == 'p':
                 single_site_rdm = bops.contract(gs[0], gs[0], '01', '01*')
                 for i in range(1, len(gs) - 1):
@@ -347,12 +349,12 @@ def ground_states_magic(N, J, ising_lambdas, dirname, bc='p', optimal_thetas=Fal
         [gs, state_accuracy, m2s, alpha_squared] = data[:4]
         if different_bases:
             m2s_singled_out_site = data[4]
-        # print(J, N, ising_lambda)
+        print(J, N, ising_lambda)
         if bc == 'p':
             if different_bases:
                 all_m2s_0_basis_single_site[li] = -(np.log(m2s_singled_out_site[0, 0, 0, 0])/ np.log(2) - N)
                 all_m2s_min_basis_single_site[li] = np.amin(-(np.log(m2s_singled_out_site)/ np.log(2) - N))
-            all_m2s_0_basis[li] = -(np.log(m2s[0, 0])/ np.log(2) - N)
+            all_m2s_0_basis[li] = -(np.log(m2s[0, 0, 0])/ np.log(2) - N)
             all_m2s_min_basis[li] = np.amin(-(np.log(m2s)/ np.log(2) - N))
         else:
             all_m2s_0_basis[li] = m2s[0, 0]
@@ -370,7 +372,7 @@ def ground_states_magic(N, J, ising_lambdas, dirname, bc='p', optimal_thetas=Fal
 dirname = sys.argv[1]
 Ns = [i * 2 + 1 for i in range(int(sys.argv[2]), int(sys.argv[3]))]
 different_bases = False
-optimal_thetas = True
+optimal_thetas = False
 lambda_step = 0.1
 lambda_critical_step = 0.01
 phase_transition = 1
@@ -381,6 +383,7 @@ bc = 'p'
 angle_steps = 10
 thetas = [np.pi * i / (2 * angle_steps) for i in range(angle_steps)]
 phis = [np.pi * i / (2 * angle_steps) for i in range(angle_steps)]
+rhos = [np.pi * i / (2 * angle_steps) for i in range(angle_steps)]
 
 
 m2s = np.zeros((len(Ns), len(ising_lambdas)), dtype=complex)
@@ -398,13 +401,13 @@ for Ni in range(len(Ns)):
     curr_m2s_0_basis_ferro, curr_m2s_min_basis_ferro, curr_m2s_0_basis_single_site_ferro, \
         curr_m2s_min_basis_single_site_ferro, curr_alphas_squared_ferro, curr_p2s_ferro = \
         ground_states_magic(N, -1, ising_lambdas, dirname, bc, optimal_thetas=optimal_thetas)
-    # # curr_m2s_0_basis, curr_m2s_min_basis, curr_m2s_0_basis_single_site, curr_m2s_min_basis_single_site, \
-    # #     curr_alphas_squared, curr_p2s = ground_states_magic(N, 1, ising_lambdas, dirname, bc)
-    # m2s[Ni, :] = curr_m2s_0_basis
-    # m2s_min[Ni, :] = curr_m2s_min_basis
-    # m2s_min_single_site[Ni, :] = curr_m2s_min_basis_single_site
-    # alphas_squared[Ni, :] = curr_alphas_squared
-    # p2s[Ni, :] = curr_p2s
+    curr_m2s_0_basis, curr_m2s_min_basis, curr_m2s_0_basis_single_site, curr_m2s_min_basis_single_site, \
+        curr_alphas_squared, curr_p2s = ground_states_magic(N, 1, ising_lambdas, dirname, bc)
+    m2s[Ni, :] = curr_m2s_0_basis
+    m2s_min[Ni, :] = curr_m2s_min_basis
+    m2s_min_single_site[Ni, :] = curr_m2s_min_basis_single_site
+    alphas_squared[Ni, :] = curr_alphas_squared
+    p2s[Ni, :] = curr_p2s
     m2s_ferro[Ni, :] = curr_m2s_0_basis_ferro
     m2s_min_ferro[Ni, :] = curr_m2s_min_basis_ferro
     m2s_min_single_site_ferro[Ni, :] = curr_m2s_min_basis_single_site_ferro
