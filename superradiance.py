@@ -10,6 +10,73 @@ import swap_dmrg as swap
 from typing import List
 import time
 
+
+def get_pair_L_terms(Deltas, gammas, nearest_neighbors_num, sigma):
+    A = np.kron(np.eye(d), sigma.T)
+    B = np.kron(np.eye(d), sigma)
+    C = np.kron(sigma.T, np.eye(d))
+    D = np.kron(sigma, np.eye(d))
+    return [[[(-1j * Deltas[i] - gammas[i] / 2) * A + gammas[i] * D for i in range(nearest_neighbors_num)], B],
+     [[(1j * Deltas[i] - gammas[i] / 2) * C + gammas[i] * B for i in range(nearest_neighbors_num)], D],
+     [[(-1j * Deltas[i] - gammas[i] / 2) * B for i in range(nearest_neighbors_num)], A],
+     [[(1j * Deltas[i] - gammas[i] / 2) * D for i in range(nearest_neighbors_num)], C]]
+
+
+def get_photon_green_L(n, Omega, Gamma, k, theta, sigma, opt='NN', case='kernel', nearest_neighbors_num=1, exp_coeffs=[0]):
+    d = 2
+    S = get_single_L_term(Omega, Gamma, sigma)
+    Deltas, gammas = get_gnm(Gamma, k, theta, nearest_neighbors_num, case)
+    pairs = get_pair_L_terms(Deltas, gammas, nearest_neighbors_num, sigma)
+    operators_len = 2 + 4 * nearest_neighbors_num
+    if opt == 'NN':
+        left_tensor = np.zeros((d**2, d**2, 1, operators_len), dtype=complex)
+        left_tensor[:, :, 0, 0] = S.T
+        curr_ind = 1
+        for pi in range(len(pairs)):
+            for ri in range(len(pairs[pi][0])):
+                left_tensor[:, :, 0, curr_ind] = pairs[pi][0][ri].T
+                curr_ind += 1
+        nothing_yet_ind = curr_ind
+        left_tensor[:, :, 0, nothing_yet_ind] = np.eye(d**2)
+
+        mid_tensor = np.zeros((d**2, d**2, operators_len, operators_len), dtype=complex)
+        mid_tensor[:, :, 0, 0] = np.eye(d**2)
+        mid_tensor[:, :, nothing_yet_ind, 0] = S.T
+        mid_tensor[:, :, nothing_yet_ind, nothing_yet_ind] = np.eye(d**2)
+        curr_ind = 1
+        for pi in range(len(pairs)):
+            mid_tensor[:, :, curr_ind, 0] = pairs[pi][1].T
+            for ri in range(len(pairs[pi][0])):
+                mid_tensor[:, :, nothing_yet_ind, curr_ind] = pairs[pi][0][ri].T
+                if ri > 0:
+                    mid_tensor[:, :, curr_ind, curr_ind - 1] = np.eye(d**2)
+                curr_ind += 1
+
+        right_tensor = np.zeros((d**2, d**2, operators_len, 1), dtype=complex)
+        right_tensor[:, :, :, 0] = mid_tensor[:, :, :, 0]
+    elif opt == 'exp':
+        pairs = pairs[0]
+        left_tensor = np.zeros((d**2, d**2, 1, 2 + len(pairs)), dtype=complex)
+        right_tensor = np.zeros((d**2, d**2, 2 + len(pairs), 1), dtype=complex)
+        left_tensor[:, :, 0, 0] = S
+        left_tensor[:, :, 0, 0] = np.eye(d**2)
+        for pi in range(len(pairs)):
+            left_tensor[:, :, 0, pi + 1] = pairs[pi][0]
+            right_tensor[:, :, pi + 1, 0] = pairs[pi][1]
+        left_tensor[:, :, 0, -1] = np.eye(d**2)
+        left_tensor[:, :, -1, 0] = S
+        mid_tensor = np.zeros((d**2, d**2, 2 + len(pairs), 2+ len(pairs)))
+        mid_tensor[:, :, :, 0] = right_tensor[:, :, :, 0]
+        mid_tensor[:, :, -1, :] = left_tensor[:, :, 0, :]
+        for pi in range(len(pairs)):
+            mid_tensor[:, :, pi + 1, pi + 1] = exp_coeffs[pi] * np.eye(d**2)
+    L = [tn.Node(left_tensor)] + [tn.Node(mid_tensor) for i in range(n - 2)] + [tn.Node(right_tensor)]
+    # for i in range(len(L) - 1):
+    #     [r, l, te] = bops.svdTruncation(bops.contract(L[i], L[i+1], '3', '2'), [0, 1, 2], [3, 4, 5], '>>')
+    #     L[i] = r
+    #     L[i+1] = bops.permute(l, [1, 2, 0, 3])
+    return L
+
 def get_gnm(gamma, k, theta, nearest_neighbors_num, case):
     if case == 'dicke':
         Deltas = np.ones(nearest_neighbors_num + 1)
@@ -76,24 +143,17 @@ def fit_exponential(y):
     return a_b_c[0], a_b_c[1], a_b_c[2], p, q
 
 
-def get_single_L_term(Omega, Gamma, sigma):
-    G = -1j * Gamma / 2
-    return -1j * (np.kron(np.eye(d), np.conj(Omega) * sigma + Omega * sigma.T) -
-                  np.kron(Omega * sigma + np.conj(Omega) * sigma.T, np.eye(d))) \
-        + Gamma * np.kron(sigma, sigma) \
-        -1j * (G * np.kron(np.eye(d), np.matmul(sigma.T, sigma).T) -
-               np.conj(G) * np.kron(np.matmul(sigma.T, sigma), np.eye(d)))
-
-
-def get_pair_L_terms(Deltas, gammas, nearest_neighbors_num, sigma):
-    A = np.kron(np.eye(d), sigma.T)
-    B = np.kron(np.eye(d), sigma)
-    C = np.kron(sigma.T, np.eye(d))
-    D = np.kron(sigma, np.eye(d))
-    return [[[(-1j * Deltas[i] - gammas[i] / 2) * A + gammas[i] * D for i in range(nearest_neighbors_num)], B],
-     [[(1j * Deltas[i] - gammas[i] / 2) * C + gammas[i] * B for i in range(nearest_neighbors_num)], D],
-     [[(-1j * Deltas[i] - gammas[i] / 2) * B for i in range(nearest_neighbors_num)], A],
-     [[(1j * Deltas[i] - gammas[i] / 2) * D for i in range(nearest_neighbors_num)], C]]
+def get_single_L_term(Omega, Gamma, sigma, case='kernel_1d'):
+    if case == 'kernel_1d':
+        G = -1j * Gamma / 2
+        return -1j * (np.kron(np.eye(d), np.conj(Omega) * sigma + Omega * sigma.T) -
+                      np.kron(Omega * sigma + np.conj(Omega) * sigma.T, np.eye(d))) \
+            + Gamma * np.kron(sigma, sigma) \
+            -1j * (G * np.kron(np.eye(d), np.matmul(sigma.T, sigma).T) -
+                   np.conj(G) * np.kron(np.matmul(sigma.T, sigma), np.eye(d)))
+    elif case == 'dicke' or case == 'dicke_no_phase':
+        return -1j * (np.kron(np.eye(d), np.conj(Omega) * sigma + Omega * sigma.T) -
+                      np.kron(Omega * sigma + np.conj(Omega) * sigma.T, np.eye(d))) \
 
 
 def check_exponent_approximation(n, Gamma, k, theta, case='kernel'):
@@ -128,7 +188,7 @@ def get_photon_green_L_exp(n, Omega, Gamma, k, theta, sigma, case='kernel', with
     if case == 'kernel_1d':
         mu = 3 / (2 * k * n)
         gamma_1d = mu * Gamma
-        Ss = [get_single_L_term(Omega * np.exp(1j * k * i), gamma_1d, sigma) for i in range(n)]
+        Ss = [get_single_L_term(Omega * np.exp(1j * k * i), Gamma, sigma, case) for i in range(n)]
         interacting_terms = [
                              [- gamma_1d / 2 * np.kron(I, sigma.T), np.exp(1j * k) * np.kron(I, I),
                               np.exp(1j * k) * np.kron(I, sigma)],
@@ -143,6 +203,28 @@ def get_photon_green_L_exp(n, Omega, Gamma, k, theta, sigma, case='kernel', with
                              [gamma_1d / 2 * np.kron(I, sigma), np.exp(1j * k) * np.kron(I, I), np.exp(1j * k) * np.kron(sigma, I)],
                              [gamma_1d / 2 * np.kron(I, sigma), np.exp(-1j * k) * np.kron(I, I), np.exp(-1j * k) * np.kron(sigma, I)],
                              ]
+    elif case == 'dicke':
+        mu = 3 / (2 * k * n)
+        gamma_1d = mu * Gamma
+        Ss = [get_single_L_term(Omega * np.exp(1j * k * i), Gamma, sigma, case) for i in range(n)]
+        interacting_terms = [
+            [- gamma_1d / 2 * np.kron(I, sigma.T), np.exp(1j * k) * np.kron(I, I),
+             np.exp(1j * k) * np.kron(I, sigma)],
+            [- gamma_1d / 2 * np.kron(sigma.T, I), np.exp(-1j * k) * np.kron(I, I),
+             np.exp(-1j * k) * np.kron(sigma, I)],
+            [gamma_1d / 2 * np.kron(sigma, I), np.exp(1j * k) * np.kron(I, I), np.exp(1j * k) * np.kron(I, sigma)],
+            [gamma_1d / 2 * np.kron(I, sigma), np.exp(-1j * k) * np.kron(I, I), np.exp(-1j * k) * np.kron(sigma, I)],
+        ]
+    elif case == 'dicke_no_phase':
+        mu = 3 / (2 * k * n)
+        gamma_1d = mu * Gamma
+        Ss = [get_single_L_term(Omega, Gamma, sigma, case) for i in range(n)]
+        interacting_terms = [
+            [- gamma_1d / 2 * np.kron(I, sigma.T), np.kron(I, I), np.kron(I, sigma)],
+            [- gamma_1d / 2 * np.kron(sigma.T, I), np.kron(I, I), np.kron(sigma, I)],
+            [gamma_1d / 2 * np.kron(sigma, I), np.kron(I, I), np.kron(I, sigma)],
+            [gamma_1d / 2 * np.kron(I, sigma), np.kron(I, I), np.kron(sigma, I)],
+        ]
     elif case == 'kernel':
         S = get_single_L_term(Omega, Gamma, sigma)
         Ss = [np.copy(S) for i in range(n)]
@@ -199,61 +281,6 @@ def get_photon_green_L_exp(n, Omega, Gamma, k, theta, sigma, case='kernel', with
     return L
 
 
-def get_photon_green_L(n, Omega, Gamma, k, theta, sigma, opt='NN', case='kernel', nearest_neighbors_num=1, exp_coeffs=[0]):
-    d = 2
-    S = get_single_L_term(Omega, Gamma, sigma)
-    Deltas, gammas = get_gnm(Gamma, k, theta, nearest_neighbors_num, case)
-    pairs = get_pair_L_terms(Deltas, gammas, nearest_neighbors_num, sigma)
-    operators_len = 2 + 4 * nearest_neighbors_num
-    if opt == 'NN':
-        left_tensor = np.zeros((d**2, d**2, 1, operators_len), dtype=complex)
-        left_tensor[:, :, 0, 0] = S.T
-        curr_ind = 1
-        for pi in range(len(pairs)):
-            for ri in range(len(pairs[pi][0])):
-                left_tensor[:, :, 0, curr_ind] = pairs[pi][0][ri].T
-                curr_ind += 1
-        nothing_yet_ind = curr_ind
-        left_tensor[:, :, 0, nothing_yet_ind] = np.eye(d**2)
-
-        mid_tensor = np.zeros((d**2, d**2, operators_len, operators_len), dtype=complex)
-        mid_tensor[:, :, 0, 0] = np.eye(d**2)
-        mid_tensor[:, :, nothing_yet_ind, 0] = S.T
-        mid_tensor[:, :, nothing_yet_ind, nothing_yet_ind] = np.eye(d**2)
-        curr_ind = 1
-        for pi in range(len(pairs)):
-            mid_tensor[:, :, curr_ind, 0] = pairs[pi][1].T
-            for ri in range(len(pairs[pi][0])):
-                mid_tensor[:, :, nothing_yet_ind, curr_ind] = pairs[pi][0][ri].T
-                if ri > 0:
-                    mid_tensor[:, :, curr_ind, curr_ind - 1] = np.eye(d**2)
-                curr_ind += 1
-
-        right_tensor = np.zeros((d**2, d**2, operators_len, 1), dtype=complex)
-        right_tensor[:, :, :, 0] = mid_tensor[:, :, :, 0]
-    elif opt == 'exp':
-        pairs = pairs[0]
-        left_tensor = np.zeros((d**2, d**2, 1, 2 + len(pairs)), dtype=complex)
-        right_tensor = np.zeros((d**2, d**2, 2 + len(pairs), 1), dtype=complex)
-        left_tensor[:, :, 0, 0] = S
-        left_tensor[:, :, 0, 0] = np.eye(d**2)
-        for pi in range(len(pairs)):
-            left_tensor[:, :, 0, pi + 1] = pairs[pi][0]
-            right_tensor[:, :, pi + 1, 0] = pairs[pi][1]
-        left_tensor[:, :, 0, -1] = np.eye(d**2)
-        left_tensor[:, :, -1, 0] = S
-        mid_tensor = np.zeros((d**2, d**2, 2 + len(pairs), 2+ len(pairs)))
-        mid_tensor[:, :, :, 0] = right_tensor[:, :, :, 0]
-        mid_tensor[:, :, -1, :] = left_tensor[:, :, 0, :]
-        for pi in range(len(pairs)):
-            mid_tensor[:, :, pi + 1, pi + 1] = exp_coeffs[pi] * np.eye(d**2)
-    L = [tn.Node(left_tensor)] + [tn.Node(mid_tensor) for i in range(n - 2)] + [tn.Node(right_tensor)]
-    # for i in range(len(L) - 1):
-    #     [r, l, te] = bops.svdTruncation(bops.contract(L[i], L[i+1], '3', '2'), [0, 1, 2], [3, 4, 5], '>>')
-    #     L[i] = r
-    #     L[i+1] = bops.permute(l, [1, 2, 0, 3])
-    return L
-
 
 def get_density_matrix_from_mps(psi, N):
     return bops.getExplicitVec(psi, d=4).reshape([2] * 2 * N).\
@@ -272,9 +299,9 @@ def get_sigma_z_expect(rho, N):
     res = 0
     for si in range(5, N-5):
         res += bops.getOverlap(rho,
-                               [tn.Node(I) for i in range(si)] + [
-                                   tn.Node(np.diag([1, -1]).reshape([1, d ** 2, 1]))]
-                               + [tn.Node(I) for i in range(si + 1, N)])
+            [tn.Node(I) for i in range(si)] + [
+               tn.Node(np.diag([1, -1]).reshape([1, d ** 2, 1]))]
+            + [tn.Node(I) for i in range(si + 1, N)])
     return res
 
 
@@ -443,15 +470,15 @@ for ti in range(initial_ti, timesteps):
     print(ti)
     if ti > 0 and ti % save_each != 1:
         tstart = time.time()
-        psi_2_exp = bops.copyState(psi_1_exp)
-        hl_2_exp = bops.copyState(hl_1_exp)
-        hr_2_exp = bops.copyState(hr_1_exp)
-        tes_2_exp[ti] = tdvp.tdvp_sweep(psi_2_exp, L_exp, hl_2_exp, hr_2_exp, dt / 2, max_bond_dim=bond_dim, num_of_sites=2)
+        # psi_2_exp = bops.copyState(psi_1_exp)
+        # hl_2_exp = bops.copyState(hl_1_exp)
+        # hr_2_exp = bops.copyState(hr_1_exp)
+        # tes_2_exp[ti] = tdvp.tdvp_sweep(psi_2_exp, L_exp, hl_2_exp, hr_2_exp, dt / 2, max_bond_dim=bond_dim, num_of_sites=2)
         tf = time.time()
         runtimes_2_exp[ti] = tf - tstart
 
         old_state_filename, old_data_filename = filenames(newdir, case, N, Omega, nn_num, ti - 1, bond_dim)
-        os.remove(old_state_filename + '_2s_exp')
+        # os.remove(old_state_filename + '_2s_exp')
         os.remove(old_state_filename + '_1s_exp')
     tstart = time.time()
     tes_1_exp[ti] = tdvp.tdvp_sweep(psi_1_exp, L_exp, hl_1_exp, hr_1_exp, dt / 2, max_bond_dim=bond_dim, num_of_sites=1)
@@ -461,56 +488,7 @@ for ti in range(initial_ti, timesteps):
     runtimes_1_exp[ti] = tf - tstart
     print('times = ' + str([runtimes_2_exp[ti], runtimes_1_exp[ti]]))
     state_filename, data_filename = filenames(newdir, case, N, Omega, nn_num, ti, bond_dim)
-    with open(state_filename + '_2s_exp', 'wb') as f:
-        pickle.dump([ti, psi_2_exp, hl_2_exp, hr_2_exp, runtimes_2_exp, tes_2_exp], f)
+    # with open(state_filename + '_2s_exp', 'wb') as f:
+    #     pickle.dump([ti, psi_2_exp, hl_2_exp, hr_2_exp, runtimes_2_exp, tes_2_exp], f)
     with open(state_filename + '_1s_exp', 'wb') as f:
         pickle.dump([ti, psi_1_exp, hl_1_exp, hr_1_exp, runtimes_1_exp, tes_1_exp, JdJ_1_exp, sigmaz_1_exp], f)
-
-if results_to == 'plot':
-    plt.plot(dt * np.array(range(timesteps)), JdJ_1_exp, '--')
-    plt.show()
-    print('plot')
-    J_expect_1 = np.zeros(int(timesteps / save_each))
-    J_expect_2 = np.zeros(int(timesteps / save_each))
-    J_expect_1_corrected = np.zeros(int(timesteps / save_each))
-    J_expect_1_exp = np.zeros(int(timesteps / save_each))
-    J_expect_2_exp = np.zeros(int(timesteps / save_each))
-    runtimes_1 = np.zeros(int(timesteps / save_each))
-    runtimes_2 = np.zeros(int(timesteps / save_each))
-    runtimes_1_corrected = np.zeros(int(timesteps / save_each))
-    bd_1 = np.zeros(int(timesteps / save_each))
-    bd_2 = np.zeros(int(timesteps / save_each))
-    bd_1_corrected = np.zeros(int(timesteps / save_each))
-    for ti in range(0, int(timesteps / save_each)):
-        print(ti)
-        state_filename, data_filename = filenames(newdir, case, N, Omega, nn_num, ti * save_each, bond_dim)
-        # psi = pickle.load(open(state_filename + '_1s', 'rb'))[1]
-        # bd_1[ti] = psi[int(N/2)][0].dimension
-        # runtimes_1 = pickle.load(open(state_filename + '_1s', 'rb'))[-1]
-        # J_expect_1[ti] = get_j_expect(psi, N, sigma)
-        # psi_2 = pickle.load(open(state_filename + '_2s', 'rb'))[1]
-        # bd_2[ti] = psi_2[int(N/2)][0].dimension
-        # runtimes_2 = pickle.load(open(state_filename + '_2s', 'rb'))[-1]
-        # J_expect_2[ti] = get_j_expect(psi_2, N, sigma)
-        # psi_1_corrected_w = pickle.load(open(state_filename + '_1s_low_preselection', 'rb'))[1]
-        # bd_1_corrected[ti] = psi_1_corrected_w[int(N/2)][0].dimension
-        # runtimes_1_corrected = pickle.load(open(state_filename + '_1s_low_preselection', 'rb'))[-1]
-        # J_expect_1_corrected[ti] = get_j_expect(psi_1_corrected_w, N, sigma)
-        psi_1_exp = pickle.load(open(state_filename + '_1s_exp', 'rb'))[1]
-        J_expect_1_exp[ti] = get_j_expect(psi_1_exp, N, sigma)
-        psi_2_exp = pickle.load(open(state_filename + '_2s_exp', 'rb'))[1]
-        J_expect_2_exp[ti] = get_j_expect(psi_2_exp, N, sigma)
-    # plt.plot(np.array(range(int(timesteps / save_each))) * dt * save_each, J_expect_1)
-    # plt.plot(np.array(range(int(timesteps / save_each))) * dt * save_each, J_expect_2, '--')
-    # plt.plot(np.array(range(int(timesteps / save_each))) * dt * save_each, J_expect_1_corrected, ':')
-    plt.plot(np.array(range(int(timesteps / save_each))) * dt * save_each, J_expect_1_exp, ':')
-    plt.plot(np.array(range(int(timesteps / save_each))) * dt * save_each, J_expect_2_exp, '--')
-    plt.show()
-    # plt.plot(runtimes_1)
-    # plt.plot(runtimes_2)
-    # plt.plot(runtimes_1_corrected)
-    # plt.show()
-    # plt.plot(bd_1)
-    # plt.plot(bd_2)
-    # plt.plot(bd_1_corrected)
-    # plt.show()
