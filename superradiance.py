@@ -143,116 +143,38 @@ def fit_exponential(y):
     return a_b_c[0], a_b_c[1], a_b_c[2], p, q
 
 
-def get_single_L_term(Omega, Gamma, sigma, case='kernel_1d'):
-    if case == 'kernel_1d':
-        G = -1j * Gamma / 2
-        return -1j * (np.kron(np.eye(d), np.conj(Omega) * sigma + Omega * sigma.T) -
-                      np.kron(Omega * sigma + np.conj(Omega) * sigma.T, np.eye(d))) \
-            + Gamma * np.kron(sigma, sigma) \
-            -1j * (G * np.kron(np.eye(d), np.matmul(sigma.T, sigma).T) -
-                   np.conj(G) * np.kron(np.matmul(sigma.T, sigma), np.eye(d)))
-    elif case == 'dicke' or case == 'dicke_no_phase':
-        return -1j * (np.kron(np.eye(d), np.conj(Omega) * sigma + Omega * sigma.T) -
-                      np.kron(Omega * sigma + np.conj(Omega) * sigma.T, np.eye(d))) \
+def get_single_L_term(Omega, Gamma, sigma, is_single):
+    result = -1j * (np.kron(np.eye(d), np.conj(Omega) * sigma + Omega * sigma.T) -
+                      np.kron(Omega * sigma + np.conj(Omega) * sigma.T, np.eye(d)))
+    if is_single:
+        result += Gamma * np.kron(sigma, sigma) \
+            - (Gamma / 2) * (np.kron(np.eye(d), np.matmul(sigma.T, sigma).T) +
+                             np.kron(np.matmul(sigma.T, sigma), np.eye(d)))
 
-
-def check_exponent_approximation(n, Gamma, k, theta, case='kernel'):
-    Deltas, gammas = get_gnm(Gamma, k, theta, n - 1, case)
-    Gs = Deltas - 1j * gammas / 2
-    aG, bG, cG, pG, qG = fit_exponential(Gs)
-    ag, bg, cg, pg, qg = fit_exponential(gammas)
-    import matplotlib.pyplot as plt
-    ns = np.array(range(1, n))
-    plt.scatter(ns, gammas)
-    plt.scatter(ns, ag + bg * np.exp(pg * ns) + cg * np.exp(qg * ns))
-    plt.title(r'$\gamma(r)$')
-    plt.xlabel(r'$r$')
-    plt.legend(['exact', 'exponent sum'])
-    plt.show()
-    plt.scatter(ns, np.real(Gs))
-    plt.scatter(ns, np.real(bG * np.exp(pG * ns) + cG * np.exp(qG * ns)))
-    plt.title(r'Re($G(r)$)')
-    plt.xlabel(r'$r$')
-    plt.legend(['exact', 'exponent sum'])
-    plt.show()
-    plt.scatter(ns, np.imag(Gs))
-    plt.scatter(ns, np.imag(bG * np.exp(pG * ns) + cG * np.exp(qG * ns)))
-    plt.legend(['exact', 'exponent sum'])
-    plt.title(r'Im($G(r)$)')
-    plt.xlabel(r'$r$')
-    plt.show()
-
-
-def get_photon_green_L_exp(n, Omega, Gamma, k, theta, sigma, case='kernel', with_a=False):
+def get_photon_green_L_exp(n, Omega, Gamma, k, theta, sigma, is_Delta=True, is_chiral=False, is_single=True, is_same_site=False, with_a=False):
     d = 2
-    if case == 'kernel_1d':
-        mu = 3 / (2 * k * n)
-        gamma_1d = mu * Gamma
-        Ss = [get_single_L_term(Omega * np.exp(1j * k * i), Gamma, sigma, case) for i in range(n)]
-        interacting_terms = [
-                             [- gamma_1d / 2 * np.kron(I, sigma.T), np.exp(1j * k) * np.kron(I, I),
-                              np.exp(1j * k) * np.kron(I, sigma)],
-                             [- gamma_1d / 2 * np.kron(I, sigma), np.exp(1j * k) * np.kron(I, I),
-                              np.exp(1j * k) * np.kron(I, sigma.T)],
-                             [- gamma_1d / 2 * np.kron(sigma.T, I), np.exp(-1j * k) * np.kron(I, I),
-                              np.exp(-1j * k) * np.kron(sigma, I)],
-                             [- gamma_1d / 2 * np.kron(sigma, I), np.exp(-1j * k) * np.kron(I, I),
-                              np.exp(-1j * k) * np.kron(sigma.T, I)],
-                             [gamma_1d / 2 * np.kron(sigma, I), np.exp(1j * k) * np.kron(I, I), np.exp(1j * k) * np.kron(I, sigma)],
-                             [gamma_1d / 2 * np.kron(sigma, I), np.exp(-1j * k) * np.kron(I, I), np.exp(-1j * k) * np.kron(I, sigma)],
-                             [gamma_1d / 2 * np.kron(I, sigma), np.exp(1j * k) * np.kron(I, I), np.exp(1j * k) * np.kron(sigma, I)],
-                             [gamma_1d / 2 * np.kron(I, sigma), np.exp(-1j * k) * np.kron(I, I), np.exp(-1j * k) * np.kron(sigma, I)],
-                             ]
-    elif case == 'dicke':
-        mu = 3 / (2 * k * n)
-        gamma_1d = mu * Gamma
-        Ss = [get_single_L_term(Omega * np.exp(1j * k * i), Gamma, sigma, case) for i in range(n)]
-        interacting_terms = [
-            [- gamma_1d / 2 * np.kron(I, sigma.T), np.exp(1j * k) * np.kron(I, I),
-             np.exp(1j * k) * np.kron(I, sigma)],
-            [- gamma_1d / 2 * np.kron(sigma.T, I), np.exp(-1j * k) * np.kron(I, I),
-             np.exp(-1j * k) * np.kron(sigma, I)],
-            [gamma_1d / 2 * np.kron(sigma, I), np.exp(1j * k) * np.kron(I, I), np.exp(1j * k) * np.kron(I, sigma)],
-            [gamma_1d / 2 * np.kron(I, sigma), np.exp(-1j * k) * np.kron(I, I), np.exp(-1j * k) * np.kron(sigma, I)],
+    mu = 3 / (2 * k * n)
+    gamma_1d = mu * Gamma
+    phase = 1 if is_same_site else phase = np.exp(1j * k)
+    Ss = [get_single_L_term(Omega * phase**i, Gamma, sigma, is_single) for i in range(n)]
+    interacting_terms = [
+        [gamma_1d / 2 * np.kron(sigma, I), phase**(-1) * np.kron(I, I), phase**(-1) * np.kron(I, sigma)],
+        [gamma_1d / 2 * np.kron(I, sigma), phase**(-1) * np.kron(I, I), phase**(-1) * np.kron(sigma, I)],
+    ]
+    if not is_chiral:
+        interacting_terms += [
+            [gamma_1d / 2 * np.kron(sigma, I), phase * np.kron(I, I), phase * np.kron(I, sigma)],
+            [gamma_1d / 2 * np.kron(I, sigma), phase * np.kron(I, I), phase * np.kron(sigma, I)],
         ]
-    elif case == 'dicke_no_phase':
-        mu = 3 / (2 * k * n)
-        gamma_1d = mu * Gamma
-        Ss = [get_single_L_term(Omega, Gamma, sigma, case) for i in range(n)]
-        interacting_terms = [
-            [- gamma_1d / 2 * np.kron(I, sigma.T), np.kron(I, I), np.kron(I, sigma)],
-            [- gamma_1d / 2 * np.kron(sigma.T, I), np.kron(I, I), np.kron(sigma, I)],
-            [gamma_1d / 2 * np.kron(sigma, I), np.kron(I, I), np.kron(I, sigma)],
-            [gamma_1d / 2 * np.kron(I, sigma), np.kron(I, I), np.kron(sigma, I)],
-        ]
-    elif case == 'kernel':
-        S = get_single_L_term(Omega, Gamma, sigma)
-        Ss = [np.copy(S) for i in range(n)]
-        Deltas, gammas = get_gnm(Gamma, k, theta, n - 1, case)
-        Gs = Deltas - 1j * gammas / 2
-        aG, bG, cG, pG, qG = fit_exponential(Gs)
-        ag, bg, cg, pg, qg = fit_exponential(gammas)
-        interacting_terms = [[-1j * bG * np.kron(I, sigma.T), np.exp(pG) * np.kron(I, I), np.exp(pG) * np.kron(I, sigma)],
-                             [-1j * bG * np.kron(I, sigma), np.exp(pG) * np.kron(I, I), np.exp(pG) * np.kron(I, sigma.T)],
-                             [-1j * cG * np.kron(I, sigma.T), np.exp(qG) * np.kron(I, I), np.exp(qG) * np.kron(I, sigma)],
-                             [-1j * cG * np.kron(I, sigma), np.exp(qG) * np.kron(I, I), np.exp(qG) * np.kron(I, sigma.T)],
-                             [1j * np.conj(bG) * np.kron(sigma.T, I), np.exp(pG) * np.kron(I, I), np.exp(pG) * np.kron(sigma, I)],
-                             [1j * np.conj(bG) * np.kron(sigma, I), np.exp(pG) * np.kron(I, I), np.exp(pG) * np.kron(sigma.T, I)],
-                             [1j * np.conj(cG) * np.kron(sigma.T, I), np.exp(qG) * np.kron(I, I), np.exp(qG) * np.kron(sigma, I)],
-                             [1j * np.conj(cG) * np.kron(sigma, I), np.exp(qG) * np.kron(I, I), np.exp(qG) * np.kron(sigma.T, I)],
-                             [bg * np.kron(sigma, I), np.exp(pg) * np.kron(I, I), np.exp(pg) * np.kron(I, sigma)],
-                             [bg * np.kron(I, sigma), np.exp(pg) * np.kron(I, I), np.exp(pg) * np.kron(sigma, I)],
-                             [cg * np.kron(sigma, I), np.exp(qg) * np.kron(I, I), np.exp(qg) * np.kron(I, sigma)],
-                             [cg * np.kron(I, sigma), np.exp(qg) * np.kron(I, I), np.exp(qg) * np.kron(sigma, I)],
-                             [ag * np.kron(sigma, I), np.kron(I, I), np.kron(I, sigma)],
-                             [ag * np.kron(I, sigma), np.kron(I, I), np.kron(sigma, I)]
-                             ]
-        if with_a:
-            interacting_terms = interacting_terms + [
-                [-1j * aG * np.kron(I, sigma), np.kron(I, I), np.kron(I, sigma.T)],
-                [-1j * aG * np.kron(I, sigma.T), np.kron(I, I), np.kron(I, sigma)],
-                [1j * np.conj(aG) * np.kron(sigma, I), np.kron(I, I), np.kron(sigma.T, I)],
-                [1j * np.conj(aG) * np.kron(sigma.T, I), np.kron(I, I), np.kron(sigma, I)]
+    if is_Delta:
+        if is_chiral:
+            return None
+        else:
+            interacting_terms += [
+                [- gamma_1d / 2 * np.kron(I, sigma.T), phase * np.kron(I, I), phase * np.kron(I, sigma)],
+                         [- gamma_1d / 2 * np.kron(I, sigma), phase * np.kron(I, I), phase * np.kron(I, sigma.T)],
+                         [- gamma_1d / 2 * np.kron(sigma.T, I), phase**(-1) * np.kron(I, I), phase**(-1) * np.kron(sigma, I)],
+                         [- gamma_1d / 2 * np.kron(sigma, I), phase**(-1) * np.kron(I, I), phase**(-1) * np.kron(sigma.T, I)],
             ]
     operators_len = 2 + len(interacting_terms)
     nothing_yet_ind = operators_len - 1
@@ -363,8 +285,12 @@ if results_to == 'plot':
     import matplotlib.pyplot as plt
 
 
-L_exp = get_photon_green_L_exp(N, Omega, Gamma, k, theta, sigma, case=case)
-# L = get_photon_green_L(N, Omega, Gamma, k, theta, sigma, case=case, nearest_neighbors_num=nn_num)
+if case == 'kernel_1d':
+    L_exp = get_photon_green_L_exp(N, Omega, Gamma, k, theta, sigma, is_Delta=True, is_single=True, is_chiral=False, is_same_site=False)
+elif case == 'Dicke_phase':
+    L_exp = get_photon_green_L_exp(N, Omega, Gamma, k, theta, sigma, is_Delta=False, is_single=False, is_chiral=True, is_same_site=False)
+elif case == 'Dicke_single':
+    L_exp = get_photon_green_L_exp(N, Omega, Gamma, k, theta, sigma, is_Delta=False, is_single=True, is_chiral=True, is_same_site=False)
 psi = [tn.Node(np.array([1, 0, 0, 0]).reshape([1, d**2, 1])) for n in range(N)]
 if N <= 6:
     print('starting exact tests')
@@ -465,30 +391,26 @@ for file in os.listdir(newdir):
                 JdJ_1_exp[:ti] = data[6][:ti]
                 sigmaz_1_exp[:ti] = data[7][:ti]
 
+curr_bond_dim = 8
 for ti in range(initial_ti, timesteps):
     print('---')
     print(ti)
+    if ti % 400 and curr_bond_dim < bond_dim:
+        curr_bond_dim *= 2
     if ti > 0 and ti % save_each != 1:
         tstart = time.time()
-        # psi_2_exp = bops.copyState(psi_1_exp)
-        # hl_2_exp = bops.copyState(hl_1_exp)
-        # hr_2_exp = bops.copyState(hr_1_exp)
-        # tes_2_exp[ti] = tdvp.tdvp_sweep(psi_2_exp, L_exp, hl_2_exp, hr_2_exp, dt / 2, max_bond_dim=bond_dim, num_of_sites=2)
         tf = time.time()
         runtimes_2_exp[ti] = tf - tstart
 
         old_state_filename, old_data_filename = filenames(newdir, case, N, Omega, nn_num, ti - 1, bond_dim)
-        # os.remove(old_state_filename + '_2s_exp')
         os.remove(old_state_filename + '_1s_exp')
     tstart = time.time()
-    tes_1_exp[ti] = tdvp.tdvp_sweep(psi_1_exp, L_exp, hl_1_exp, hr_1_exp, dt / 2, max_bond_dim=bond_dim, num_of_sites=1)
+    tes_1_exp[ti] = tdvp.tdvp_sweep(psi_1_exp, L_exp, hl_1_exp, hr_1_exp, dt / 2, max_bond_dim=curr_bond_dim, num_of_sites=1)
     JdJ_1_exp[ti] = get_j_expect(psi_1_exp, N, sigma)
     sigmaz_1_exp[ti] = get_sigma_z_expect(psi_1_exp, N)
     tf = time.time()
     runtimes_1_exp[ti] = tf - tstart
     print('times = ' + str([runtimes_2_exp[ti], runtimes_1_exp[ti]]))
     state_filename, data_filename = filenames(newdir, case, N, Omega, nn_num, ti, bond_dim)
-    # with open(state_filename + '_2s_exp', 'wb') as f:
-    #     pickle.dump([ti, psi_2_exp, hl_2_exp, hr_2_exp, runtimes_2_exp, tes_2_exp], f)
     with open(state_filename + '_1s_exp', 'wb') as f:
         pickle.dump([ti, psi_1_exp, hl_1_exp, hr_1_exp, runtimes_1_exp, tes_1_exp, JdJ_1_exp, sigmaz_1_exp], f)
