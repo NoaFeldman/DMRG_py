@@ -394,11 +394,11 @@ for file in os.listdir(newdir):
                 JdJ_1_exp[:ti] = data[6][:ti]
                 sigmaz_1_exp[:ti] = data[7][:ti]
 
-curr_bond_dim = 8
+curr_bond_dim = 4
 for ti in range(initial_ti, timesteps):
     print('---')
     print(ti)
-    if ti % 400 and curr_bond_dim < bond_dim:
+    if ti % 400 == 0 and curr_bond_dim < bond_dim:
         curr_bond_dim *= 2
     if ti > 0 and ti % save_each != 1:
         tstart = time.time()
