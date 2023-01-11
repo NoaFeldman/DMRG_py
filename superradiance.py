@@ -155,7 +155,10 @@ def get_photon_green_L_exp(n, Omega, Gamma, k, theta, sigma, is_Delta=True, is_c
     d = 2
     mu = 3 / (2 * k * n)
     gamma_1d = mu * Gamma
-    phase = 1 if is_same_site else phase = np.exp(1j * k)
+    if is_same_site:
+        phase = 1
+    else:
+        phase = np.exp(1j * k)
     Ss = [get_single_L_term(Omega * phase**i, Gamma, sigma, is_single) for i in range(n)]
     interacting_terms = [
         [gamma_1d / 2 * np.kron(sigma, I), phase**(-1) * np.kron(I, I), phase**(-1) * np.kron(I, sigma)],
