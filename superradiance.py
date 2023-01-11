@@ -150,6 +150,7 @@ def get_single_L_term(Omega, Gamma, sigma, is_single):
         result += Gamma * np.kron(sigma, sigma) \
             - (Gamma / 2) * (np.kron(np.eye(d), np.matmul(sigma.T, sigma).T) +
                              np.kron(np.matmul(sigma.T, sigma), np.eye(d)))
+    return result
 
 def get_photon_green_L_exp(n, Omega, Gamma, k, theta, sigma, is_Delta=True, is_chiral=False, is_single=True, is_same_site=False, with_a=False):
     d = 2
