@@ -576,7 +576,7 @@ bs = [0, 2, 160606, 2 ** 20 - 1, 173524]
 ns = [12] #, 8] # [12, 24, 48]
 corner_nums = [1, 2, 3] # [1, 2, 3, 4, 6]
 gap_ls = [2] # [4, 10, 20]
-corner_charges = [0, 1]
+corner_charges = [0, 3]
 
 normalized_purity_results = np.zeros((len(params), len(corner_nums), len(ns), len(bs), len(gap_ls), len(corner_charges)))
 for pi in range(len(params)):
