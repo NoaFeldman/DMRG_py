@@ -44,7 +44,7 @@ def applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, h, w, o
 
 
 def applyLocalOperators_detailedBoundary(
-        cUps, dUps, cDowns, dDowns, leftRows, rightRows, A, B, h, w, ops, PBC=False, period_num=None):
+        cUps, dUps, cDowns, dDowns, leftRows, rightRows, A, B, h, w, ops, PBC=False, period_num=None, envOps=None):
     if h == 2:
         if PBC:
             dims = [cUps[0][0].dimension, A[4].dimension, B[4].dimension, dDowns[0][2].dimension]
@@ -53,15 +53,18 @@ def applyLocalOperators_detailedBoundary(
             left = leftRows[0]
         for wi in range(int(w / 2)):
             gc.collect()
-            leftUp = applyOpTosite(B, ops[wi * 4])
-            leftDown = applyOpTosite(A, ops[wi * 4 + 1])
-            rightUp = applyOpTosite(A, ops[wi * 4 + 2])
-            rightDown = applyOpTosite(B, ops[wi * 4 + 3])
+            if envOps is None:
+                leftUp = applyOpTosite(B, ops[wi * 4])
+                leftDown = applyOpTosite(A, ops[wi * 4 + 1])
+                rightUp = applyOpTosite(A, ops[wi * 4 + 2])
+                rightDown = applyOpTosite(B, ops[wi * 4 + 3])
+            else:
+                leftUp, leftDown, rightUp, rightDown = envOps[wi * 4: wi * 4 + 4]
             if PBC:
                 left = bops.contract(bops.contract(bops.contract(bops.contract(
-                    left, cUps[wi], '4', '0'), leftUp, '47', '30'), leftDown, '47', '30'), dDowns[wi], '47', '21')
+                    left, cUps[wi], '4', '0'), leftUp, '47', '30'), leftDown, '48', '30'), dDowns[wi], '48', '21')
                 left = bops.contract(bops.contract(bops.contract(bops.contract(
-                    left, dUps[wi], '4', '0'), rightUp, '47', '30'), rightDown, '47', '30'), cDowns[wi], '47', '21')
+                    left, dUps[wi], '4', '0'), rightUp, '47', '30'), rightDown, '48', '30'), cDowns[wi], '48', '21')
             else:
                 left = bops.multiContraction(left, cUps[wi], '3', '0', cleanOr1=True)
                 left = bops.multiContraction(left, leftUp, '23', '30', cleanOr1=True)
@@ -82,10 +85,13 @@ def applyLocalOperators_detailedBoundary(
         for wi in range(int(w / 2)):
             gc.collect()
             left = bops.multiContraction(left, cUps[wi], '5', '0', cleanOr1=True)
-            left0 = applyOpTosite(B, ops[wi * 8])
-            left1 = applyOpTosite(A, ops[wi * 8 + 1])
-            left2 = applyOpTosite(B, ops[wi * 8 + 2])
-            left3 = applyOpTosite(A, ops[wi * 8 + 3])
+            if envOps is None:
+                left0 = applyOpTosite(B, ops[wi * 8])
+                left1 = applyOpTosite(A, ops[wi * 8 + 1])
+                left2 = applyOpTosite(B, ops[wi * 8 + 2])
+                left3 = applyOpTosite(A, ops[wi * 8 + 3])
+            else:
+                left0, left1, left2, left3 = envOps[wi * 8: wi * 8 + 4]
             left = bops.multiContraction(left, left0, '45', '30', cleanOr1=True, cleanOr2=True)
             left = bops.multiContraction(left, left1, '36', '30', cleanOr1=True, cleanOr2=True)
             left = bops.multiContraction(left, left2, '26', '30', cleanOr1=True, cleanOr2=True)
@@ -93,10 +99,13 @@ def applyLocalOperators_detailedBoundary(
             left = bops.multiContraction(left, dDowns[wi], '06', '21', cleanOr1=True).reorder_axes([5, 4, 3, 2, 1, 0])
 
             left = bops.multiContraction(left, dUps[wi], '5', '0', cleanOr1=True)
-            right0 = applyOpTosite(A, ops[wi * 8 + 4])
-            right1 = applyOpTosite(B, ops[wi * 8 + 5])
-            right2 = applyOpTosite(A, ops[wi * 8 + 6])
-            right3 = applyOpTosite(B, ops[wi * 8 + 7])
+            if envOps is None:
+                right0 = applyOpTosite(A, ops[wi * 8 + 4])
+                right1 = applyOpTosite(B, ops[wi * 8 + 5])
+                right2 = applyOpTosite(A, ops[wi * 8 + 6])
+                right3 = applyOpTosite(B, ops[wi * 8 + 7])
+            else:
+                right0, right1, right2, right3 = envOps[wi * 8 + 4: wi * 8 + 8]
             left = bops.multiContraction(left, right0, '45', '30', cleanOr1=True, cleanOr2=True)
             left = bops.multiContraction(left, right1, '36', '30', cleanOr1=True, cleanOr2=True)
             left = bops.multiContraction(left, right2, '26', '30', cleanOr1=True, cleanOr2=True)

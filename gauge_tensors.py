@@ -146,6 +146,19 @@ def get_2_by_n_explicit_block(filename, n, bi, d=2):
             block[ci, cj] = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, h=2, w=n, ops=ops)
     return block
 
+
+def get_zohar_tensor(alpha, beta, gamma, delta):
+    tensor = np.zeros([d] * 6, dtype=complex)
+    tensor[0, 0, 0, 0, 0, 0] = alpha
+    tensor[1, 1, 0, 0, 1, 1] = beta
+    tensor[1, 0, 0, 1, 1, 0] = beta
+    tensor[0, 0, 1, 1, 0, 0] = beta
+    tensor[0, 1, 1, 0, 0, 1] = beta
+    tensor[1, 0, 1, 0, 1, 0] = gamma
+    tensor[0, 1, 0, 1, 0, 1] = gamma
+    tensor[1, 1, 1, 1, 1, 1] = delta
+    return tensor
+
 def toric_tensors_lgt_approach(model, param, d=2):
     # u, r, d, l, t, s
     tensor = np.zeros([d] * 6, dtype=complex)
@@ -161,6 +174,24 @@ def toric_tensors_lgt_approach(model, param, d=2):
         tensor[0, 0, 0, 0, 0, 0] = param
     elif model == 'zohar_alpha':
         tensor[0, 0, 0, 0, 0, 0] = param
+    elif model == 'alpha_1_beta_05_delta_08':
+        alpha = 1
+        beta = 0.5
+        gamma = param
+        delta = 0.8
+        tensor = get_zohar_tensor(alpha, beta, gamma, delta)
+    elif model == 'alpha_1_beta_05_delta_1':
+        alpha = 1
+        beta = 0.5
+        gamma = param
+        delta = 1
+        tensor = get_zohar_tensor(alpha, beta, gamma, delta)
+    elif model == 'alpha_1_beta_1_delta_1':
+        alpha = 1
+        beta = 1
+        gamma = param
+        delta = 1
+        tensor = get_zohar_tensor(alpha, beta, gamma, delta)
     elif model == 'zohar_gamma':
         tensor[1, 0, 1, 0, 1, 0] = param
         tensor[0, 1, 0, 1, 0, 1] = param
@@ -232,6 +263,7 @@ def block_contribution(filename, n, corner_num, gap_l, edge_dim=2, replica=2, d=
     [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, A, B] = \
         get_boundaries_from_file(filename, w=2, h=2)
     normalization = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, h, w, [tn.Node(np.eye(d**2))] * h * w)
+    leftRow.tensor /= normalization
     corner_charges_num = d**corner_num
     wall_charges_num = d**(2 * corner_num)
     boundaries_num = d**(2 * n - corner_num)
@@ -239,17 +271,33 @@ def block_contribution(filename, n, corner_num, gap_l, edge_dim=2, replica=2, d=
     for bi in range(boundaries_num):
         for cci in range(corner_charges_num):
             for wci in range(wall_charges_num):
-                sum += np.abs(get_block_probability(filename, n, bi, d, corner_num, cci, wci, gap_l, PBC=False, purity_mode=purity_mode)) ** replica
-    return sum, np.abs(normalization)
+                if bi == 0 and cci == 1 and wci == 3:
+                    dbg = 1
+                sum += np.abs(get_block_probability(filename, n, bi, d, corner_num, cci, wci, gap_l, PBC=False,
+                    purity_mode=purity_mode, boundaries=[cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB])) ** replica
+    return sum
 
 def block_division_contribution(filename, n, corner_num, gap_l, edge_dim=2, replica=2, d=2):
-    sum, norm = block_contribution(filename, n, corner_num, gap_l, edge_dim, replica, d)
-    return sum / norm**replica
+    sum = block_contribution(filename, n, corner_num, gap_l, edge_dim, replica, d)
+    return sum
 
 
 def get_full_purity(filename, n, corner_num, gap_l, edge_dim=2, d=2):
-    sum, norm = block_contribution(filename, n, corner_num, gap_l, edge_dim, replica=1, d=d, purity_mode=True)
-    return sum / norm**2
+    continuous_l = int(n / corner_num)
+    w = corner_num * (continuous_l + gap_l)
+    h = 2
+    [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, A, B] = \
+        get_boundaries_from_file(filename, w=2, h=2)
+    normalization = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, h, w,
+                                           [tn.Node(np.eye(d ** 2))] * h * w)
+    leftRow.tensor /= normalization
+    cUp, dUp, cDown, dDown, leftRow, rightRow, openA = [tn.Node(np.kron(o.tensor, o.tensor)) for o in [cUp, dUp, cDown, dDown, leftRow, rightRow, openA]]
+    single_period_ops = [swap_op] * h * continuous_l + [tn.Node(np.eye(4**2))] * h * gap_l
+    ops = []
+    for ci in range(corner_num):
+        ops = ops + single_period_ops
+    purity = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openA, h, w, ops)
+    return purity
 
 
 def get_corner_projector(b, d=2):
@@ -275,9 +323,18 @@ for i in range(d**2):
     for j in range(d**2):
         swap_op_tensor[i + j * d**2, j + i * d**2] = 1
 swap_op = tn.Node(swap_op_tensor)
-def get_block_probability(filename, n, bi, d=2, corner_num=1, corner_charges_i=0, wall_charges_i=0, gap_l=2, edge_dim=2, PBC=False, purity_mode=False):
-    [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, A, B] = \
-        get_boundaries_from_file(filename, w=2, h=2)
+def get_block_probability(filename, n, bi, d=2, corner_num=1, corner_charges_i=0, wall_charges_i=0, gap_l=2, edge_dim=2, PBC=False, purity_mode=False, normalize=False, boundaries=None):
+    if boundaries is None:
+        [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB] = \
+            get_boundaries(dirname, model, param_name, param, silent=True)
+    else:
+        cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB = boundaries
+    continuous_l = int(n / corner_num)
+    if normalize:
+        w = corner_num * (continuous_l + gap_l)
+        norm = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow,
+                openA, openA, 2, w, [tn.Node(np.eye(d**2))] * 2 * w, PBC=PBC)
+        leftRow.tensor /= norm
     boundary = [int(c) for c in bin(bi).split('b')[1].zfill(2 * n - corner_num)]
     corner_charges = [int(c) for c in bin(corner_charges_i).split('b')[1].zfill(corner_num)]
     wall_charges = [int(c) for c in bin(wall_charges_i).split('b')[1].zfill(2 * corner_num)]
@@ -294,7 +351,6 @@ def get_block_probability(filename, n, bi, d=2, corner_num=1, corner_charges_i=0
     dups_full = []
     cdowns_full = []
     ddowns_full = []
-    continuous_l = int(n / corner_num)
     for ci in range(corner_num):
         ops += [tn.Node(np.eye(d**2))] * 2 * (gap_l - 1) + [tn.Node(wall_projectors[wall_charges[2 * ci]]), tn.Node(np.eye(d**2))] + \
                [tn.Node(np.eye(d**2)), tn.Node(corner_projectors[corner_charges[ci]])] + \
@@ -312,13 +368,13 @@ def get_block_probability(filename, n, bi, d=2, corner_num=1, corner_charges_i=0
         ddowns_full = [tn.Node(np.kron(o.tensor, o.tensor)) for o in ddowns_full]
         leftRow = tn.Node(np.kron(leftRow.tensor, leftRow.tensor))
         rightRow = tn.Node(np.kron(rightRow.tensor, rightRow.tensor))
-        A = tn.Node(np.kron(openA.tensor, openA.tensor))
+        openA = tn.Node(np.kron(openA.tensor, openA.tensor))
         ops = [tn.Node(np.kron(node.tensor, node.tensor)) for node in ops]
         for ci in range(corner_num):
             for si in range((gap_l + continuous_l) * 2 * ci + gap_l * 2, (gap_l + continuous_l) * 2 * (ci + 1)):
                 ops[si] = bops.contract(ops[si], swap_op, '1', '0')
     return pe.applyLocalOperators_detailedBoundary(cups_full, dups_full, cdowns_full, ddowns_full, [leftRow], [rightRow],
-                A, A, 2, corner_num * (continuous_l + gap_l), ops, PBC=PBC, period_num=corner_num)
+                openA, openA, 2, corner_num * (continuous_l + gap_l), ops, PBC=PBC, period_num=corner_num)
 
 
 def get_purity(w, h, filename, boundary_ops=None, gap_l=2, PBC=False, corner_num=1):
@@ -473,80 +529,6 @@ def wilson_expectations(model, param, param_name, dirname, plot=False, d=2, boun
     return wilson_area, wilson_perimeter
 
 
-def normalized_p2s_data(model, params, Ns, dirname, param_name, d=2):
-    if not os.path.exists(dirname):
-        os.mkdir(dirname)
-    for pi in range(len(params)):
-        param = params[pi]
-        print(param)
-        filename = results_filename(dirname, model, param_name, param, Ns)
-        if os.path.exists(filename):
-            continue
-        boundary_filename = boundary_filname(dirname, model, param_name, param)
-
-        wilson_area, wilson_perimeter = wilson_expectations(model, param, param_name, dirname)
-
-        A, tau, openA, singlet_projector = tensors_from_transfer_matrix(model, param, d=d)
-        tau = np.real(tau.tensor.transpose([0, 2, 1, 3]).reshape([d**2, d**2]))
-        tau_eigenvals = np.zeros(d**2)
-        tau_eigenvals[:2] = np.real(np.linalg.eigvals([[tau[0, 0], tau[0, 3]], [tau[3, 0], tau[3, 3]]]))
-        tau_eigenvals[2:] = np.real(np.linalg.eigvals([[tau[1, 1], tau[1, 2]], [tau[2, 1], tau[2, 2]]]))
-        num_of_sampled_blocks = 63
-        sampled_blocks = [[int(i * d**(2 * n + 2) / num_of_sampled_blocks) for i in range(num_of_sampled_blocks)] for n in Ns]
-        p2s = [np.zeros(num_of_sampled_blocks) for n in Ns]
-        p1s = [np.zeros(num_of_sampled_blocks) for n in Ns]
-        # curr_rdm_eigvals = [[None for bi in range(num_of_sampled_blocks)] for n in Ns]
-        for ni in range(len(Ns)):
-            n = Ns[ni]
-            for bi in range(num_of_sampled_blocks):
-                b = sampled_blocks[ni][bi]
-                print(n, b)
-                p2s[ni][bi] = get_block_purity(boundary_filename, n, b)
-                p1s[ni][bi] = get_block_probability(boundary_filename, n, b)
-
-        pickle.dump([tau_eigenvals, wilson_area, wilson_perimeter, p2s, p1s, sampled_blocks],
-                    open(filename, 'wb'))
-
-
-def analyze_normalized_p2_data(model, params, Ns, dirname, param_name, plot=True):
-    import matplotlib.pyplot as plt
-    wilson_areas = np.zeros(len(params))
-    wilson_perimeters = np.zeros(len(params))
-    tau_purities = np.zeros((len(params), 2))
-    num_of_sampled_blocks = 63
-    normalized_p2s = np.zeros((len(params), len(Ns), num_of_sampled_blocks))
-    full_p2s = np.zeros(len(params))
-    for pi in range(len(params)):
-        param = params[pi]
-        print(param)
-        full_p2s[pi] = get_purity(2, 2, dirname, model, param_name, param)
-        print(full_p2s[pi])
-        filename = results_filename(dirname, model, param_name, param, Ns)
-        [tau_eigenvals, wilson_area, wilson_perimeter, p2s, p1s, sampled_blocks] = pickle.load(open(filename, 'rb'))
-        print(tau_eigenvals / np.sum(tau_eigenvals))
-        tau_purities[pi, 0] = sum(np.abs(tau_eigenvals[:2] / sum(tau_eigenvals))**2)
-        tau_purities[pi, 1] = sum(np.real(tau_eigenvals[2:])**2)
-        for ni in range(len(Ns)):
-            for bi in range(num_of_sampled_blocks):
-                normalized_p2s[pi, ni, bi] = p2s[ni][bi] / p1s[ni][bi]**2
-
-            wilson_areas[pi] = wilson_area
-            wilson_perimeters[pi] = wilson_perimeter
-
-    ff, axs = plt.subplots(2)
-    for i in range(4):
-        axs[0].plot(params, wilson_areas)
-        axs[0].plot(params, wilson_perimeters)
-    axs[0].legend([r'area law $\chi^2$'])
-    axs[0].legend([r'perimeter law $\chi^2$'])
-    axs[1].plot(params, full_p2s)
-    plt.show()
-    for sbi in range(len(sampled_blocks)):
-        plt.pcolormesh(Ns, params, normalized_p2s[:, :, sbi])
-        plt.title(sampled_blocks[sbi])
-        plt.show()
-
-
 model = sys.argv[1]
 edge_dim = 2
 if model == 'zohar':
@@ -577,38 +559,26 @@ elif model == 'toric_c':
     params = [np.round(0.25 * i, 3) for i in range(8)]
     param_name = 'c'
     edge_dim = 4
+elif model == 'alpha_1_beta_05_delta_08':
+    params = [np.round(0.1 * i, 4) for i in range(20)] + [np.round(1 * i, 4) for i in range(2, 6)]
+    param_name = 'gamma'
+elif model == 'alpha_1_beta_05_delta_1':
+    params = [np.round(0.1 * i, 4) for i in range(20)] + [np.round(1 * i, 4) for i in range(2, 6)]
+    param_name = 'gamma'
+elif model == 'alpha_1_beta_1_delta_1':
+    params = [np.round(0.1 * i, 4) for i in range(20)] + [np.round(1 * i, 4) for i in range(2, 6)]
+    param_name = 'gamma'
 dirname = 'results/gauge/' + model
+if not os.path.exists(dirname):
+    os.mkdir(dirname)
 
-charges = [1, 1, 1, 1]
-bs = [0, 2 ** 20 - 1, 173524]
-ns = [4] #, 8] # [12, 24, 48]
-corner_nums = [1, 2] # [1, 2, 3, 4, 6]
-gap_ls = [2, 4, 8] # [4, 10, 20]
+bs = [0, 2, 160606, 2 ** 20 - 1, 173524]
+ns = [12] #, 8] # [12, 24, 48]
+corner_nums = [1, 2, 3] # [1, 2, 3, 4, 6]
+gap_ls = [2] # [4, 10, 20]
 corner_charges = [0, 1]
 
-block_results = np.zeros((len(params), len(corner_nums), len(ns), len(gap_ls)))
-for pi in range(len(params)):
-    param = params[pi]
-    filename = boundary_filname(dirname, model, param_name, param)
-    for cni in range(len(corner_nums)):
-        corner_num = corner_nums[cni]
-        for ni in range(len(ns)):
-            n = ns[ni]
-            for gi in range(len(gap_ls)):
-                gap_l = gap_ls[gi]
-                res_filename = 'results/gauge/' + model + '/block_division_' + param_name + '_' + str(param) + '_n_' + str(n) + '_cnum_' + str(corner_num) + '_gap_' + str(gap_l)
-                if not os.path.exists(res_filename):
-                    pickle.dump(block_division_contribution(boundary_filname(dirname, model, param_name, param), n, corner_num, gap_l),
-                                open(res_filename, 'wb'))
-                block_results[pi, cni, ni, gi] = pickle.load(open(res_filename, 'rb'))
-
-
-
-bs = [0, 2 ** 20 - 1, 173524]
-ns = [4, 8] # [12, 24, 48]
-corner_nums = [1, 2] # [1, 2, 3, 4, 6]
-gap_ls = [2] # [4, 10, 20]
-results = np.zeros((len(params), len(corner_nums), len(ns), len(bs), len(gap_ls), len(corner_charges)))
+normalized_purity_results = np.zeros((len(params), len(corner_nums), len(ns), len(bs), len(gap_ls), len(corner_charges)))
 for pi in range(len(params)):
     param = params[pi]
     filename = boundary_filname(dirname, model, param_name, param)
@@ -622,31 +592,114 @@ for pi in range(len(params)):
                     c = corner_charges[ci]
                     for cni in range(len(corner_nums)):
                         corner_num = corner_nums[cni]
-                        result_filename = 'results/gauge/' + model + '/circle_' + param_name + '_' + str(param) + '_n_' + str(n) + '_cnum_' + str(corner_num) \
+                        result_filename = 'results/gauge/' + model + '/normalized_purity_' + param_name + '_' + str(param) + '_n_' + str(n) + '_cnum_' + str(corner_num) \
                                         + '_b_' + str(b) + '_gap_l_' + str(gap_l) + '_c_' + str(c)
                         if not os.path.exists(result_filename):
-                            p1 = get_block_probability(filename, n, b, corner_num=corner_num, corner_charges_i=c, gap_l=gap_l, edge_dim=edge_dim)
-                            p2 = get_block_probability(filename, n, b, corner_num=corner_num, corner_charges_i=c, gap_l=gap_l, edge_dim=edge_dim, purity_mode=True)
-                            print(param, corner_num, n, gap_l, p2, p1, p2 / p1**2)
+                            # block_contribution(boundary_filname(dirname, model, param_name, param), n, corner_num, gap_l, replica=1)
+                            p1 = get_block_probability(filename, n, b, corner_num=corner_num, corner_charges_i=c, gap_l=gap_l, edge_dim=edge_dim, normalize=True)
+                            p2 = get_block_probability(filename, n, b, corner_num=corner_num, corner_charges_i=c, gap_l=gap_l, edge_dim=edge_dim, purity_mode=True, normalize=True)
+                            print(param, corner_num, n, gap_l, b, c, p2, p1, p2 / p1**2)
                             n_p2 = p2 / p1**2
                             pickle.dump(n_p2, open(result_filename, 'wb'))
+                            # full_p2 = get_full_purity(boundary_filname(dirname, model, param_name, param), ns[0], corner_num=corner_num, gap_l=gap_l)
+                            # classical_p2 = block_division_contribution(boundary_filname(dirname, model, param_name, param), n, corner_num, gap_l)
+                            dbg = 1
                         else:
                             n_p2 = pickle.load(open(result_filename, 'rb'))
-                        results[pi, cni, ni, bi, gi, ci] = n_p2
-w = 4
-corner_num = 2
-gap_l = 8
-purity_filename = 'results/gauge/' + model + '/purities_w_' + str(w) + '_cnum_' + str(corner_num) + '_gapl_' + str(gap_l)
-for param in params:
-    curr_file_name = purity_filename + '_' + param_name + '_' + str(param)
-    if not os.path.exists(curr_file_name):
-        pickle.dump(get_full_purity(boundary_filname(dirname, model, param_name, param), w, corner_num=corner_num, gap_l=gap_l),
-                open(curr_file_name, 'wb'))
-purities = pickle.load(open(purity_filename, 'rb'))
-import matplotlib.pyplot as plt
-plt.plot(results[:, 1, 0, 0, 0, 0])
-plt.plot(results[:, 1, 0, 0, 0, 1], '--')
-plt.plot(block_results[:, 1, 0, 2])
-plt.plot(purities)
-plt.show()
+                        normalized_purity_results[pi, cni, ni, bi, gi, ci] = n_p2
+
+
+
+purity_filename = 'results/gauge/' + model + '/purities_w_' + str(ns[0]) + '_cnum_' + str(corner_nums[0]) + '_gapl_' + str(gap_ls[0])
+full_purities_results = np.zeros((len(params), len(corner_nums), len(ns), len(gap_ls)))
+for pi in range(len(params)):
+    param = params[pi]
+    filename = boundary_filname(dirname, model, param_name, param)
+    for ni in range(len(ns)):
+        n = ns[ni]
+        for gi in range(len(gap_ls)):
+            gap_l = gap_ls[gi]
+            for ci in range(len(corner_charges)):
+                c = corner_charges[ci]
+                for cni in range(len(corner_nums)):
+                    corner_num = corner_nums[cni]
+                    curr_file_name = purity_filename + '_' + param_name + '_' + str(param) + '_n_' + str(n) + '_cnum_' + str(corner_num) + '_gap_l_' + str(gap_l)
+                    if not os.path.exists(curr_file_name):
+                        pickle.dump(get_full_purity(boundary_filname(dirname, model, param_name, param), ns[0], corner_num=corner_nums[0], gap_l=gap_ls[0]),
+                                open(curr_file_name, 'wb'))
+                    full_purities_results[pi, cni, ni, gi] = pickle.load(open(curr_file_name, 'rb'))
+
+
+classical_purity_results = np.zeros((len(params), len(corner_nums), len(ns), len(gap_ls)))
+for pi in range(len(params)):
+    param = params[pi]
+    print(param)
+    filename = boundary_filname(dirname, model, param_name, param)
+    for cni in range(len(corner_nums)):
+        corner_num = corner_nums[cni]
+        for ni in range(len(ns)):
+            n = ns[ni]
+            for gi in range(len(gap_ls)):
+                gap_l = gap_ls[gi]
+                res_filename = 'results/gauge/' + model + '/block_division_' + param_name + '_' + str(param) + '_n_' + str(n) + '_cnum_' + str(corner_num) + '_gap_' + str(gap_l)
+                if not os.path.exists(res_filename):
+                    print(res_filename)
+                    pickle.dump(block_division_contribution(boundary_filname(dirname, model, param_name, param), n, corner_num, gap_l),
+                                open(res_filename, 'wb'))
+                classical_purity_results[pi, cni, ni, gi] = pickle.load(open(res_filename, 'rb'))
+
+
+wilson_areas_results = np.zeros(len(params))
+wilson_perimeter_results = np.zeros(len(params))
+for pi in range(len(params)):
+    param = params[pi]
+    wilson_filename = 'results/gauge/' + model + '/wilson_' + model + '_' + param_name + '_' + str(param)
+    if os.path.exists(wilson_filename):
+        area, perimeter = pickle.load(open(wilson_filename, 'rb'))
+    else:
+        area, perimeter = wilson_expectations(model, params[pi], param_name, dirname)
+        pickle.dump([area, perimeter], open(wilson_filename, 'wb'))
+    wilson_areas_results[pi] = area
+    wilson_perimeter_results[pi] = perimeter
+
+tau_eigenvalues_1 = np.zeros(len(params))
+tau_eigenvalues_2 = np.zeros(len(params))
+tau_eigenvalues_3 = np.zeros(len(params))
+tau_eigenvalues_4 = np.zeros(len(params))
+for pi in range(len(params)):
+    [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, A, B] = get_boundaries_from_file(boundary_filname(dirname, model, param_name, params[pi]), w=2, h=2)
+    tau = bops.contract(A, A, '4', '4*').tensor.transpose([0, 4, 1, 5, 2, 6, 3, 7]).reshape([4, 4, 4, 4])
+    for di in [1, 2]:
+        for ri in [1, 2]:
+            tau[:, :, di, ri] *= 0
+    tau = tau.transpose([0, 2, 1, 3]).reshape([16, 16])
+    evals = np.linalg.eigvals(tau)
+    evals.sort()
+    evals /= np.sum(evals**2)
+    tau_eigenvalues_1[pi] = evals[0]
+    tau_eigenvalues_2[pi] = evals[1]
+    tau_eigenvalues_3[pi] = evals[2]
+    tau_eigenvalues_4[pi] = evals[3]
+
 dbg = 1
+import matplotlib.pyplot as plt
+plt.plot(params, normalized_purity_results[:, 0, 0, 0, 0, 0])
+plt.plot(params, normalized_purity_results[:, 0, 0, 1, 0, 0])
+plt.plot(params, normalized_purity_results[:, 0, 0, 2, 0, 0])
+plt.plot(params, normalized_purity_results[:, 0, 0, 3, 0, 0])
+plt.plot(params, normalized_purity_results[:, 0, 0, 4, 0, 0])
+plt.plot(params, normalized_purity_results[:, 0, 0, 0, 0, 1], '--')
+plt.plot(params, normalized_purity_results[:, 0, 0, 1, 0, 1], '--')
+plt.plot(params, normalized_purity_results[:, 0, 0, 2, 0, 1], '--')
+plt.plot(params, normalized_purity_results[:, 0, 0, 3, 0, 1], '--')
+plt.plot(params, normalized_purity_results[:, 0, 0, 4, 0, 1], '--')
+plt.plot(params, full_purities_results)
+plt.plot(params, classical_purity_results[:, 0, 0, 0], '--k')
+plt.plot(params, full_purities_results / classical_purity_results[:, 0, 0, 0], '--k')
+plt.plot(params, tau_eigenvalues_1)
+plt.plot(params, tau_eigenvalues_2)
+plt.plot(params, tau_eigenvalues_3, '--')
+plt.plot(params, tau_eigenvalues_4, ':')
+plt.plot(params, wilson_areas_results)
+plt.plot(params, wilson_perimeter_results, '--')
+plt.show()

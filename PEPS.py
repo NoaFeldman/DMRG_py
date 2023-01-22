@@ -3,7 +3,7 @@ import basicOperations as bops
 import tensornetwork as tn
 import gc
 
-def bmpsRowStep(gammaL, lambdaMid, gammaR, lambdaSide, envOp, lattice='squared', chi=128, shrink=True):
+def bmpsRowStep(gammaL, lambdaMid, gammaR, lambdaSide, envOp, lattice='squared', chi=128, cannonical=True):
     if lattice == 'squared':
         row = bops.multiContraction(bops.multiContraction(
             bops.multiContraction(bops.multiContraction(lambdaSide, gammaL, '0', '0', isDiag1=True),
@@ -54,7 +54,7 @@ def bmpsRowStep(gammaL, lambdaMid, gammaR, lambdaSide, envOp, lattice='squared',
         if np.max(truncErr) > 1e-5:
             # print(np.max(truncErr))
             b = 1
-    newLambdaMid = tn.Node(np.diag(S.tensor) / np.sqrt(sum(np.diag(S.tensor)**2))) # bops.multNode(S, 1 / np.sqrt(sum(S.tensor**2)))
+    newLambdaMid = tn.Node(np.diag(S.tensor) / np.sqrt(sum(np.diag(S.tensor)**2)))
     lambdaSideInv = tn.Node(np.array([1 / val if val > 1e-15 else 0 for val in lambdaSide.tensor], dtype=gammaL.dtype))
     newGammaL = bops.multiContraction(lambdaSideInv, U, '0', '0', cleanOr2=True, isDiag1=True)
     splitter = tn.Node(bops.getLegsSplitterTensor([newGammaL[i].dimension for i in range(sideLegsNumber)]))
@@ -68,8 +68,21 @@ def bmpsRowStep(gammaL, lambdaMid, gammaR, lambdaSide, envOp, lattice='squared',
     temp = newLambdaSide
     newLambdaSide = tn.Node(np.diag(newLambdaSide.tensor))
     tn.remove_node(temp)
-    if shrink:
-        b = 1
+
+    if cannonical:
+        # get to cannonical form based on Fig 3 here https://journals.aps.org/prb/pdf/10.1103/PhysRevB.91.115137
+        node_l = bops.contract(newLambdaSide, newGammaL, '1', '0', isDiag1=True)
+        if not np.all(np.round(bops.contract(node_l, node_l, '01', '01*').tensor / bops.contract(node_l, node_l, '01', '01*').tensor[0, 0], 1)
+                      == np.eye(len(newLambdaMid.tensor))):
+            dbg = 1
+        Yt, S, Yt_dagger, te = bops.svdTruncation(bops.contract(node_l, node_l, '01', '01*'), [0], [1], '>*<')
+        Yt = bops.contract(Yt, tn.Node(np.sqrt(S.tensor)), '1', '0')
+        node_r = bops.contract(newGammaL, newLambdaMid, '2', '0', isDiag2=True)
+        if not np.all(np.round(bops.contract(node_r, node_r, '12', '12*').tensor / bops.contract(node_r, node_r, '12', '12*').tensor[0, 0], 1)
+                      == np.eye(len(newLambdaSide.tensor))):
+            dbg = 1
+        X, S, X_dagger, te = bops.svdTruncation(bops.contract(node_r, node_r, '12', '12*'), [0], [1], '>*<')
+        X = bops.contract(X, tn.Node(np.sqrt(S.tensor)), '1', '0')
     return newGammaL, newLambdaMid, newGammaR, newLambdaSide
 
 def fidelity(rho, sigma):
@@ -106,16 +119,19 @@ def getRowDM(GammaL, LambdaL, GammaR, LambdaR, sites, d):
     rho = np.reshape(dm.tensor, [d**((2 + 2 * sites)), d**((2 + 2 * sites))])
     return rho / np.trace(rho)
 
-
+import time
 def getBMPSRowOps(GammaC, LambdaC, GammaD, LambdaD, AEnv, BEnv, steps, chi):
     convergence = []
     envOpAB = bops.permute(bops.multiContraction(AEnv, BEnv, '1', '3'), [0, 3, 2, 4, 1, 5])
     envOpBA = bops.permute(bops.multiContraction(BEnv, AEnv, '1', '3'), [0, 3, 2, 4, 1, 5])
     op = envOpBA
+    start = time.time()
     for i in range(steps):
-        oldGammaC, oldLambdaC, oldGammaD, oldLambdaD = GammaC, LambdaC, GammaD, LambdaD
+        oldGammaC, oldLambdaC, oldGammaD, oldLambdaD = [bops.copyState([node])[0] for node in [GammaC, LambdaC, GammaD, LambdaD]]
         GammaC, LambdaC, GammaD, LambdaD = bmpsRowStep(GammaC, LambdaC, GammaD, LambdaD, op, chi=chi)
         GammaD, LambdaD, GammaC, LambdaC = bmpsRowStep(GammaD, LambdaD, GammaC, LambdaC, op, chi=chi)
+        LambdaC.set_tensor(LambdaC.tensor / np.sqrt(np.sum(np.abs(LambdaC.tensor**2))))
+        LambdaD.set_tensor(LambdaD.tensor / np.sqrt(np.sum(np.abs(LambdaD.tensor**2))))
         if i > 0:
             convergence.append(checkConvergence(oldGammaC, oldLambdaC, oldGammaD, oldLambdaD,
                                  GammaC, LambdaC, GammaD, LambdaD, AEnv[0].dimension))
@@ -268,12 +284,13 @@ def twoCopiesEntanglement(circle, A, B):
 
 # TODO I stopped getting A, B and return openA, openB, which would cause problems with old code.
 #  Fix this by checking the case (for example, shape of A)
-def applyBMPS(AEnv: tn.Node, BEnv:tn.Node, d=2, steps=100, chi=128):
+def applyBMPS(AEnv: tn.Node, BEnv:tn.Node, d=2, steps=400, chi=128):
     envOpAB = bops.permute(bops.multiContraction(AEnv, BEnv, '1', '3'), [0, 3, 2, 4, 1, 5])
     envOpBA = bops.permute(bops.multiContraction(BEnv, AEnv, '1', '3'), [0, 3, 2, 4, 1, 5])
 
 
-    rowTensor = np.ones((11, AEnv[0].dimension, BEnv[0].dimension, 11), dtype=AEnv.dtype)
+    rowTensor = np.ones((3, AEnv[0].dimension, BEnv[0].dimension, 3), dtype=AEnv.dtype)
+    # TODO Better Row here!
     row = tn.Node(rowTensor)
     #
     # upRow = bops.unifyLegs(bops.unifyLegs(bops.unifyLegs(bops.unifyLegs(
@@ -281,6 +298,8 @@ def applyBMPS(AEnv: tn.Node, BEnv:tn.Node, d=2, steps=100, chi=128):
     #                  [0, 2, 3, 4, 7, 1, 5, 6]), [5, 6]),
     #     [5, 6]), [0, 1]), [0, 1])
     upRow = row
+    upRow = tn.Node(bops.contract(bops.contract(row, AEnv, '1', '0'), BEnv, '13', '03').tensor.transpose([0, 3, 2, 5, 1, 4])\
+        .reshape([3 * AEnv[3].dimension, AEnv[2].dimension, BEnv[2].dimension, 3 * BEnv[1].dimension]))
     [C, D, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>', normalize=True)
     upRow = bops.multiContraction(D, C, '2', '0')
     [cUp_orig, dUp_orig, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>', normalize=True)
