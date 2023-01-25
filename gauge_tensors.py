@@ -572,11 +572,11 @@ dirname = 'results/gauge/' + model
 if not os.path.exists(dirname):
     os.mkdir(dirname)
 
-bs = [0, 2, 160606, 2 ** 20 - 1, 173524]
+bs = [0, 2 ** 20 - 1, 173524]
 ns = [12] #, 8] # [12, 24, 48]
-corner_nums = [1, 2, 3] # [1, 2, 3, 4, 6]
+corner_nums = [1, 2] # [1, 2, 3, 4, 6]
 gap_ls = [2] # [4, 10, 20]
-corner_charges = [0, 3]
+corner_charges = [0, 1]
 
 normalized_purity_results = np.zeros((len(params), len(corner_nums), len(ns), len(bs), len(gap_ls), len(corner_charges)))
 for pi in range(len(params)):
@@ -588,10 +588,10 @@ for pi in range(len(params)):
             gap_l = gap_ls[gi]
             for bi in range(len(bs)):
                 b = bs[bi]
-                for ci in range(len(corner_charges)):
-                    c = corner_charges[ci]
-                    for cni in range(len(corner_nums)):
-                        corner_num = corner_nums[cni]
+                for cni in range(len(corner_nums)):
+                    corner_num = corner_nums[cni]
+                    for ci in range(len(corner_charges)):
+                        c = sum([corner_charges[ci] * 2**i for i in range(corner_num)])
                         result_filename = 'results/gauge/' + model + '/normalized_purity_' + param_name + '_' + str(param) + '_n_' + str(n) + '_cnum_' + str(corner_num) \
                                         + '_b_' + str(b) + '_gap_l_' + str(gap_l) + '_c_' + str(c)
                         if not os.path.exists(result_filename):
@@ -600,6 +600,13 @@ for pi in range(len(params)):
                             p2 = get_block_probability(filename, n, b, corner_num=corner_num, corner_charges_i=c, gap_l=gap_l, edge_dim=edge_dim, purity_mode=True, normalize=True)
                             print(param, corner_num, n, gap_l, b, c, p2, p1, p2 / p1**2)
                             n_p2 = p2 / p1**2
+                            if n_p2 > 10:
+                                dbg = 1
+                                p1 = get_block_probability(filename, n, b, corner_num=corner_num, corner_charges_i=c,
+                                                           gap_l=gap_l, edge_dim=edge_dim, normalize=True)
+                                p2 = get_block_probability(filename, n, b, corner_num=corner_num, corner_charges_i=c,
+                                                           gap_l=gap_l, edge_dim=edge_dim, purity_mode=True,
+                                                           normalize=True)
                             pickle.dump(n_p2, open(result_filename, 'wb'))
                             # full_p2 = get_full_purity(boundary_filname(dirname, model, param_name, param), ns[0], corner_num=corner_num, gap_l=gap_l)
                             # classical_p2 = block_division_contribution(boundary_filname(dirname, model, param_name, param), n, corner_num, gap_l)
@@ -630,23 +637,22 @@ for pi in range(len(params)):
                     full_purities_results[pi, cni, ni, gi] = pickle.load(open(curr_file_name, 'rb'))
 
 
-classical_purity_results = np.zeros((len(params), len(corner_nums), len(ns), len(gap_ls)))
+classical_purity_results = np.zeros(len(params))
+full_purity_results_small = np.zeros(len(params))
 for pi in range(len(params)):
     param = params[pi]
     print(param)
     filename = boundary_filname(dirname, model, param_name, param)
-    for cni in range(len(corner_nums)):
-        corner_num = corner_nums[cni]
-        for ni in range(len(ns)):
-            n = ns[ni]
-            for gi in range(len(gap_ls)):
-                gap_l = gap_ls[gi]
-                res_filename = 'results/gauge/' + model + '/block_division_' + param_name + '_' + str(param) + '_n_' + str(n) + '_cnum_' + str(corner_num) + '_gap_' + str(gap_l)
-                if not os.path.exists(res_filename):
-                    print(res_filename)
-                    pickle.dump(block_division_contribution(boundary_filname(dirname, model, param_name, param), n, corner_num, gap_l),
-                                open(res_filename, 'wb'))
-                classical_purity_results[pi, cni, ni, gi] = pickle.load(open(res_filename, 'rb'))
+    n = 2
+    corner_num = 1
+    gap_l = 2
+    res_filename = 'results/gauge/' + model + '/block_division_' + param_name + '_' + str(param) + '_n_' + str(n) + '_cnum_' + str(corner_num) + '_gap_' + str(gap_l)
+    if not os.path.exists(res_filename):
+        print(res_filename)
+        pickle.dump(block_division_contribution(boundary_filname(dirname, model, param_name, param), n, corner_num, gap_l),
+                    open(res_filename, 'wb'))
+    classical_purity_results[pi] = pickle.load(open(res_filename, 'rb'))
+    full_purity_results_small[pi] = get_full_purity(boundary_filname(dirname, model, param_name, param), n, corner_num=corner_num, gap_l=gap_l)
 
 
 wilson_areas_results = np.zeros(len(params))
