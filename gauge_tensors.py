@@ -654,45 +654,44 @@ corner_nums = [1]  # [1, 2, 3, 4, 6]
 gap_ls = [2]  # [4, 10, 20]
 corner_charges = [0, 1]
 
-if False:
-    normalized_purity_results = np.zeros(
-        (len(params), len(corner_nums), len(ns), len(bs), len(gap_ls), len(corner_charges)))
-    for pi in range(len(params)):
-        param = params[pi]
-        filename = boundary_filname(dir_name, model, param_name, param)
-        for ni in range(len(ns)):
-            n = ns[ni]
-            for gi in range(len(gap_ls)):
-                gap_l = gap_ls[gi]
-                for bi in range(len(bs)):
-                    b = bs[bi]
-                    for cni in range(len(corner_nums)):
-                        corner_num = corner_nums[cni]
-                        for ci in range(len(corner_charges)):
-                            c = sum([corner_charges[ci] * 2 ** i for i in range(corner_num)])
-                            result_filename = 'results/gauge/' + model + '/normalized_purity_' + param_name + '_' + str(
-                                param) + '_n_' + str(n) + '_cnum_' + str(corner_num) \
-                                              + '_b_' + str(b) + '_gap_l_' + str(gap_l) + '_c_' + str(c)
-                            if not os.path.exists(result_filename):
-                                # block_contribution(boundary_filname(dirname, model, param_name, param), n, corner_num, gap_l, replica=1)
+normalized_purity_results = np.zeros(
+    (len(params), len(corner_nums), len(ns), len(bs), len(gap_ls), len(corner_charges)))
+for pi in range(len(params)):
+    param = params[pi]
+    filename = boundary_filname(dir_name, model, param_name, param)
+    for ni in range(len(ns)):
+        n = ns[ni]
+        for gi in range(len(gap_ls)):
+            gap_l = gap_ls[gi]
+            for bi in range(len(bs)):
+                b = bs[bi]
+                for cni in range(len(corner_nums)):
+                    corner_num = corner_nums[cni]
+                    for ci in range(len(corner_charges)):
+                        c = sum([corner_charges[ci] * 2 ** i for i in range(corner_num)])
+                        result_filename = 'results/gauge/' + model + '/normalized_purity_' + param_name + '_' + str(
+                            param) + '_n_' + str(n) + '_cnum_' + str(corner_num) \
+                                          + '_b_' + str(b) + '_gap_l_' + str(gap_l) + '_c_' + str(c)
+                        if not os.path.exists(result_filename):
+                            # block_contribution(boundary_filname(dirname, model, param_name, param), n, corner_num, gap_l, replica=1)
+                            p1 = get_block_probability(filename, n, b, corner_num=corner_num, corner_charges_i=c,
+                                                       gap_l=gap_l, edge_dim=edge_dim, normalize=True)
+                            p2 = get_block_probability(filename, n, b, corner_num=corner_num, corner_charges_i=c,
+                                                       gap_l=gap_l, edge_dim=edge_dim, purity_mode=True, normalize=True)
+                            print(param, corner_num, n, gap_l, b, c, p2, p1, p2 / p1 ** 2)
+                            n_p2 = p2 / p1 ** 2
+                            if n_p2 > 10:
                                 p1 = get_block_probability(filename, n, b, corner_num=corner_num, corner_charges_i=c,
                                                            gap_l=gap_l, edge_dim=edge_dim, normalize=True)
                                 p2 = get_block_probability(filename, n, b, corner_num=corner_num, corner_charges_i=c,
-                                                           gap_l=gap_l, edge_dim=edge_dim, purity_mode=True, normalize=True)
-                                print(param, corner_num, n, gap_l, b, c, p2, p1, p2 / p1 ** 2)
-                                n_p2 = p2 / p1 ** 2
-                                if n_p2 > 10:
-                                    p1 = get_block_probability(filename, n, b, corner_num=corner_num, corner_charges_i=c,
-                                                               gap_l=gap_l, edge_dim=edge_dim, normalize=True)
-                                    p2 = get_block_probability(filename, n, b, corner_num=corner_num, corner_charges_i=c,
-                                                               gap_l=gap_l, edge_dim=edge_dim, purity_mode=True,
-                                                               normalize=True)
-                                pickle.dump(n_p2, open(result_filename, 'wb'))
-                                # full_p2 = get_full_purity(boundary_filname(dirname, model, param_name, param), ns[0], corner_num=corner_num, gap_l=gap_l)
-                                # classical_p2 = block_division_contribution(boundary_filname(dirname, model, param_name, param), n, corner_num, gap_l)
-                            else:
-                                n_p2 = pickle.load(open(result_filename, 'rb'))
-                            normalized_purity_results[pi, cni, ni, bi, gi, ci] = n_p2
+                                                           gap_l=gap_l, edge_dim=edge_dim, purity_mode=True,
+                                                           normalize=True)
+                            pickle.dump(n_p2, open(result_filename, 'wb'))
+                            # full_p2 = get_full_purity(boundary_filname(dirname, model, param_name, param), ns[0], corner_num=corner_num, gap_l=gap_l)
+                            # classical_p2 = block_division_contribution(boundary_filname(dirname, model, param_name, param), n, corner_num, gap_l)
+                        else:
+                            n_p2 = pickle.load(open(result_filename, 'rb'))
+                        normalized_purity_results[pi, cni, ni, bi, gi, ci] = n_p2
 
 
 
@@ -841,11 +840,11 @@ def plot_tau_eigvals(phase_separator=None):
 
 def plot_full_purity(phase_separator=None):
     plt.plot(params, full_purities_results[:, 0, 0, 0])
-    # plt.plot(params, full_purity_results_small)
-    # plt.plot(params, classical_purity_results, '--')
+    plt.plot(params, full_purity_results_small)
+    plt.plot(params, classical_purity_results, '--')
     plt.plot(params, full_purities_results_0[:, 0, 0, 0])
     plt.plot(params, full_purities_results_1[:, 0, 0, 0], '--')
-    plt.legend([r'full $p_2$', r'full $p_2$ - 2*2 system', r'Classical purity - 2 * 2 system, $\sum_{\vec{q}} p^2(\vec{q})$'])
+    plt.legend([r'full $p_2$', r'full $p_2$ - 2*2 system', r'Classical purity - 2 * 2 system, $\sum_{\vec{q}} p^2(\vec{q})$', r'charge 0 purity', r'charge 1 purity'])
     if phase_separator is not None:
         plt.vlines(phase_separator, '--c')
     plt.xlabel(param_name)
