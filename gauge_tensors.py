@@ -199,11 +199,23 @@ def toric_tensors_lgt_approach(model, param, d=2):
         gamma = param
         delta = 0.8
         tensor = get_zohar_tensor(alpha, beta, gamma, delta)
+    elif model == 'beta_03_gamma_05_delta_1':
+        alpha = param
+        beta = 1/3
+        gamma = 0.5
+        delta = 1
+        tensor = get_zohar_tensor(alpha, beta, gamma, delta)
     elif model == 'alpha_1_beta_05_delta_1':
         alpha = 1
         beta = 0.5
         gamma = param
         delta = 1
+        tensor = get_zohar_tensor(alpha, beta, gamma, delta)
+    elif model == 'alpha_10_beta_1_delta_8':
+        alpha = 10
+        beta = 1
+        gamma = param
+        delta = 8
         tensor = get_zohar_tensor(alpha, beta, gamma, delta)
     elif model == 'alpha_1_beta_1_delta_1':
         alpha = 1
@@ -620,8 +632,14 @@ elif model == 'toric_c':
 elif model == 'alpha_1_beta_05_delta_08':
     params = [np.round(0.1 * i, 4) for i in range(20)]# + [np.round(1 * i, 4) for i in range(2, 6)]
     param_name = 'gamma'
+elif model == 'beta_03_gamma_05_delta_1':
+    params = [np.round(0.2 * a, 8) for a in range(-10, 11)]
+    param_name = 'alpha'
 elif model == 'alpha_1_beta_05_delta_1':
     params = [np.round(0.1 * i, 4) for i in range(20)] + [np.round(1 * i, 4) for i in range(2, 6)]
+    param_name = 'gamma'
+elif model == 'alpha_10_beta_1_delta_8':
+    params = [np.round(0.1 * i, 4) for i in range(20)] + [np.round(1 * i, 4) for i in range(2, 20)]
     param_name = 'gamma'
 else:  # elif model == 'alpha_1_beta_1_delta_1':
     params = [np.round(0.1 * i, 4) for i in range(20)] + [np.round(1 * i, 4) for i in range(2, 6)]
@@ -676,59 +694,51 @@ if False:
                                 n_p2 = pickle.load(open(result_filename, 'rb'))
                             normalized_purity_results[pi, cni, ni, bi, gi, ci] = n_p2
 
-    classical_purity_results = np.zeros(len(params))
-    full_purity_results_small = np.zeros(len(params))
-    for pi in range(len(params)):
-        param = params[pi]
-        print(param)
-        filename = boundary_filname(dir_name, model, param_name, param)
-        n = 2
-        corner_num = 1
-        gap_l = 2
-        res_filename = 'results/gauge/' + model + '/block_division_' + param_name + '_' + str(param) + '_n_' + str(
-            n) + '_cnum_' + str(corner_num) + '_gap_' + str(gap_l)
-        if not os.path.exists(res_filename):
-            print(res_filename)
-            pickle.dump(
-                block_division_contribution(boundary_filname(dir_name, model, param_name, param), n, corner_num, gap_l),
-                open(res_filename, 'wb'))
-        classical_purity_results[pi] = pickle.load(open(res_filename, 'rb'))
-        full_purity_results_small[pi] = get_full_purity(boundary_filname(dir_name, model, param_name, param), n, corner_num=corner_num, gap_l=gap_l)
-    tau_0_eigenvalues_1 = np.zeros(len(params))
-    tau_0_eigenvalues_2 = np.zeros(len(params))
-    tau_0_eigenvalues_3 = np.zeros(len(params))
-    tau_0_eigenvalues_4 = np.zeros(len(params))
-    tau_g_eigenvalues_1 = np.zeros(len(params))
-    tau_g_eigenvalues_2 = np.zeros(len(params))
-    tau_g_eigenvalues_3 = np.zeros(len(params))
-    tau_g_eigenvalues_4 = np.zeros(len(params))
-    if model == 'alpha_1_beta_05_delta_08':
-        alpha = 1
-        beta = 0.5
-        delta = 0.8
-    elif model == 'alpha_1_beta_05_delta_1':
-        alpha = 1
-        beta = 0.5
-        delta = 1
-    elif model == 'zohar_alpha':
-        beta = 1
-        gamma = 1
-        delta = 1
-    for pi in range(len(params)):
-        param = params[pi]
-    if model == 'alpha_1_beta_05_delta_08' or model == 'alpha_1_beta_05_delta_1':
-        gamma = param
-    else:
-        alpha = param
-    # TODO adjust for complex params
-    tau_0_block_0 = np.array([[alpha ** 2, gamma ** 2], [gamma ** 2, delta ** 2]])
-    tau_0_eigvals = np.linalg.eigvalsh(tau_0_block_0)
-    tau_0_eigvals.sort()
-    tau_0_eigenvalues_1[pi], tau_0_eigenvalues_2[pi] = tau_0_eigvals
-    tau_g = np.array([[alpha * gamma, gamma * delta], [gamma * alpha, delta * gamma]])
-    tau_g_eigvals = np.linalg.eigvalsh(tau_g)
-    tau_g_eigvals.sort()
-    tau_g_eigenvalues_1[pi], tau_g_eigenvalues_2[pi] = tau_g_eigvals
+
+
+tau_0_eigenvalues_1 = np.zeros(len(params))
+tau_0_eigenvalues_2 = np.zeros(len(params))
+tau_0_eigenvalues_3 = np.zeros(len(params))
+tau_0_eigenvalues_4 = np.zeros(len(params))
+tau_g_eigenvalues_1 = np.zeros(len(params))
+tau_g_eigenvalues_2 = np.zeros(len(params))
+tau_g_eigenvalues_3 = np.zeros(len(params))
+tau_g_eigenvalues_4 = np.zeros(len(params))
+if model == 'alpha_1_beta_05_delta_08':
+    alpha = 1
+    beta = 0.5
+    delta = 0.8
+elif model == 'alpha_1_beta_05_delta_1':
+    alpha = 1
+    beta = 0.5
+    delta = 1
+elif model == 'alpha_10_beta_1_delta_8':
+    alpha = 10
+    beta = 1
+    delta = 8
+elif model == 'zohar_alpha':
+    beta = 1
+    gamma = 1
+    delta = 1
+elif model == 'beta_03_gamma_05_delta_1':
+    beta = 1/3
+    gamma = 0.5
+    delta = 1
+for pi in range(len(params)):
+    param = params[pi]
+if model == 'alpha_1_beta_05_delta_08' or model == 'alpha_1_beta_05_delta_1' or model == 'alpha_10_beta_1_delta_8':
+    gamma = param
+else:
+    alpha = param
+# TODO adjust for complex params
+tau_0_block_0 = np.array([[alpha ** 2, gamma ** 2], [gamma ** 2, delta ** 2]])
+tau_0_eigvals = np.linalg.eigvalsh(tau_0_block_0)
+tau_0_eigvals.sort()
+tau_0_eigenvalues_1[pi], tau_0_eigenvalues_2[pi] = tau_0_eigvals
+tau_g = np.array([[alpha * gamma, gamma * delta], [gamma * alpha, delta * gamma]])
+tau_g_eigvals = np.linalg.eigvalsh(tau_g)
+tau_g_eigvals.sort()
+tau_g_eigenvalues_1[pi], tau_g_eigenvalues_2[pi] = tau_g_eigvals
 
 
 wilson_areas_results = np.zeros(len(params))
@@ -777,6 +787,25 @@ for pi in range(len(params)):
                     full_purities_results[pi, cni, ni, gi] = pickle.load(open(curr_file_name, 'rb'))
                     full_purities_results_0[pi, cni, ni, gi] = pickle.load(open(curr_file_name + '_0', 'rb'))
                     full_purities_results_1[pi, cni, ni, gi] = pickle.load(open(curr_file_name + '_1', 'rb'))
+
+classical_purity_results = np.zeros(len(params))
+full_purity_results_small = np.zeros(len(params))
+for pi in range(len(params)):
+    param = params[pi]
+    print(param)
+    filename = boundary_filname(dir_name, model, param_name, param)
+    n = 2
+    corner_num = 1
+    gap_l = 2
+    res_filename = 'results/gauge/' + model + '/block_division_' + param_name + '_' + str(param) + '_n_' + str(
+        n) + '_cnum_' + str(corner_num) + '_gap_' + str(gap_l)
+    if not os.path.exists(res_filename):
+        print(res_filename)
+        pickle.dump(
+            block_division_contribution(boundary_filname(dir_name, model, param_name, param), n, corner_num, gap_l),
+            open(res_filename, 'wb'))
+    classical_purity_results[pi] = pickle.load(open(res_filename, 'rb'))
+    full_purity_results_small[pi] = get_full_purity(boundary_filname(dir_name, model, param_name, param), n, corner_num=corner_num, gap_l=gap_l)
 
 
 dbg = 1
