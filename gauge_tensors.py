@@ -193,6 +193,12 @@ def toric_tensors_lgt_approach(model, param, d=2):
         tensor[0, 0, 0, 0, 0, 0] = param
     elif model == 'zohar_alpha':
         tensor[0, 0, 0, 0, 0, 0] = param
+    elif model[:10] == 'vary_alpha':
+        alpha = param
+        global beta
+        global gamma
+        global delta
+        tensor = get_zohar_tensor(alpha, beta, gamma, delta)
     elif model == 'alpha_1_beta_05_delta_08':
         alpha = 1
         beta = 0.5
@@ -607,15 +613,6 @@ if model == 'zohar':
               for gamma in [np.round(0.5 * i, 8) for i in range(-2, 3)] \
               for delta in [np.round(0.5 * i, 8) for i in range(-2, 3)]]
     param_name = 'parmas'
-elif model == 'zohar_deltas':
-    params = [np.round(0.2 * a, 8) for a in range(-10, 11)]
-    param_name = 'delta'
-elif model == 'zohar_deltas_large_alpha':
-    params = [np.round(0.2 * a, 8) for a in range(-10, 11)]
-    param_name = 'delta'
-elif model == 'zeros_diff':
-    params = [np.round(0.1 * a, 8) for a in range(-9, 21)]
-    param_name = 'alpha'
 elif model == 'zohar_alpha':
     params = [np.round(0.2 * a, 8) for a in range(-10, 11)]
     param_name = 'alpha'
@@ -625,10 +622,6 @@ elif model == 'zohar_gamma':
 elif model == 'orus':
     params = [np.round(0.1 * i, 8) for i in range(3, 13)]
     param_name = 'g'
-elif model == 'toric_c':
-    params = [np.round(0.25 * i, 3) for i in range(8)]
-    param_name = 'c'
-    edge_dim = 4
 elif model == 'alpha_1_beta_05_delta_08':
     params = [np.round(0.1 * i, 4) for i in range(20)]# + [np.round(1 * i, 4) for i in range(2, 6)]
     param_name = 'gamma'
@@ -641,12 +634,25 @@ elif model == 'alpha_1_beta_05_delta_1':
 elif model == 'alpha_10_beta_1_delta_8':
     params = [np.round(0.1 * i, 4) for i in range(20)] + [np.round(1 * i, 4) for i in range(2, 20)]
     param_name = 'gamma'
-else:  # elif model == 'alpha_1_beta_1_delta_1':
-    params = [np.round(0.1 * i, 4) for i in range(20)] + [np.round(1 * i, 4) for i in range(2, 6)]
+elif model == 'vary_alpha':
+    param_name = 'alpha'
+    params = [np.round(0.2 * a, 8) for a in range(-10, 11)]
+    beta = float(sys.argv[2])
+    gamma = float(sys.argv[3])
+    delta = float(sys.argv[4])
+    model = model + '_' + str(beta) + '_' + str(gamma) + '_' + str(delta)
+elif model[:10] == 'vary_gamma':
     param_name = 'gamma'
+    params = [np.round(0.2 * a, 8) for a in range(-10, 11)]
+    alpha = float(sys.argv[2])
+    beta = float(sys.argv[3])
+    delta = float(sys.argv[4])
+    model = model + '_' + str(alpha) + '_' + str(beta) + '_' + str(delta)
 dir_name = "results/gauge/" + model
 if not os.path.exists(dir_name):
     os.mkdir(dir_name)
+
+toric_tensors_lgt_approach(model, params[3])
 
 bs = [0, 2 ** 20 - 1, 173524]
 ns = [12]  # , 8] # [12, 24, 48]
@@ -725,7 +731,7 @@ elif model == 'beta_03_gamma_05_delta_1':
     delta = 1
 for pi in range(len(params)):
     param = params[pi]
-if model == 'alpha_1_beta_05_delta_08' or model == 'alpha_1_beta_05_delta_1' or model == 'alpha_10_beta_1_delta_8':
+if model == 'varying_gamma' or model == 'alpha_1_beta_05_delta_08' or model == 'alpha_1_beta_05_delta_1' or model == 'alpha_10_beta_1_delta_8':
     gamma = param
 else:
     alpha = param
