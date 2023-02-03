@@ -11,6 +11,10 @@ import gc
 X = np.array([[0, 1], [1, 0]])
 I = np.eye(2)
 d = 2
+alpha = 0
+beta = 0
+gamma = 0
+delta = 0
 
 
 # |\psi> = \prod_p (1 + cX^p)|0>
@@ -179,6 +183,10 @@ def get_zohar_tensor(alpha, beta, gamma, delta):
 
 
 def toric_tensors_lgt_approach(model, param, d=2):
+    global alpha
+    global beta
+    global gamma
+    global delta
     # u, r, d, l, t, s
     tensor = np.zeros([d] * 6, dtype=complex)
     for i in range(d):
@@ -195,9 +203,16 @@ def toric_tensors_lgt_approach(model, param, d=2):
         tensor[0, 0, 0, 0, 0, 0] = param
     elif model[:10] == 'vary_alpha':
         alpha = param
-        global beta
-        global gamma
-        global delta
+        tensor = get_zohar_tensor(alpha, beta, gamma, delta)
+    elif model[:9] == 'vary_beta':
+        beta = param
+        tensor = get_zohar_tensor(alpha, beta, gamma, delta)
+    elif model[:10] == 'vary_gamma':
+        gamma = param
+        tensor = get_zohar_tensor(alpha, beta, gamma, delta)
+    elif model[:7] == 'vary_ad':
+        alpha = param
+        delta = param
         tensor = get_zohar_tensor(alpha, beta, gamma, delta)
     elif model == 'alpha_1_beta_05_delta_08':
         alpha = 1
@@ -633,16 +648,29 @@ elif model == 'alpha_10_beta_1_delta_8':
 elif model == 'vary_alpha':
     param_name = 'alpha'
     params = [np.round(0.2 * a, 8) for a in range(-10, 11)]
-    beta = float(sys.argv[2])
-    gamma = float(sys.argv[3])
-    delta = float(sys.argv[4])
+    beta = float(sys.argv[4])
+    gamma = float(sys.argv[5])
+    delta = float(sys.argv[6])
     model = model + '_' + str(beta) + '_' + str(gamma) + '_' + str(delta)
-elif model[:10] == 'vary_gamma':
+elif model == 'vary_beta':
+    param_name = 'beta'
+    params = [np.round(0.01 * a, 8) for a in range(11)]
+    alpha = float(sys.argv[4])
+    gamma = float(sys.argv[5])
+    delta = float(sys.argv[6])
+    model = model + '_' + str(alpha) + '_' + str(gamma) + '_' + str(delta)
+elif model == 'vary_ad':
+    param_name = 'alpha'
+    params = [np.round(0.2 * a, 8) for a in range(-10, 11)]
+    beta = float(sys.argv[4])
+    gamma = float(sys.argv[5])
+    model = model + '_' + str(beta) + '_' + str(gamma)
+elif model == 'vary_gamma':
     param_name = 'gamma'
     params = [np.round(0.2 * a, 8) for a in range(-10, 11)]
-    alpha = float(sys.argv[2])
-    beta = float(sys.argv[3])
-    delta = float(sys.argv[4])
+    alpha = float(sys.argv[4])
+    beta = float(sys.argv[5])
+    delta = float(sys.argv[6])
     model = model + '_' + str(alpha) + '_' + str(beta) + '_' + str(delta)
 dir_name = "results/gauge/" + model
 if not os.path.exists(dir_name):
@@ -651,8 +679,8 @@ if not os.path.exists(dir_name):
 toric_tensors_lgt_approach(model, params[3])
 
 bs = [0, 2 ** 20 - 1, 173524]
-ns = [int(sys.argv[5])]
-h = 4
+ns = [int(sys.argv[3])]
+h = int(sys.argv[2])
 corner_nums = [1]
 gap_ls = [2]
 corner_charges = [0, 1]
@@ -687,52 +715,6 @@ for pi in range(len(params)):
                         else:
                             n_p2 = pickle.load(open(result_filename, 'rb'))
                         normalized_purity_results[pi, cni, ni, bi, gi, ci] = n_p2
-
-
-
-tau_0_eigenvalues_1 = np.zeros(len(params))
-tau_0_eigenvalues_2 = np.zeros(len(params))
-tau_0_eigenvalues_3 = np.zeros(len(params))
-tau_0_eigenvalues_4 = np.zeros(len(params))
-tau_g_eigenvalues_1 = np.zeros(len(params))
-tau_g_eigenvalues_2 = np.zeros(len(params))
-tau_g_eigenvalues_3 = np.zeros(len(params))
-tau_g_eigenvalues_4 = np.zeros(len(params))
-if model == 'alpha_1_beta_05_delta_08':
-    alpha = 1
-    beta = 0.5
-    delta = 0.8
-elif model == 'alpha_1_beta_05_delta_1':
-    alpha = 1
-    beta = 0.5
-    delta = 1
-elif model == 'alpha_10_beta_1_delta_8':
-    alpha = 10
-    beta = 1
-    delta = 8
-elif model == 'zohar_alpha':
-    beta = 1
-    gamma = 1
-    delta = 1
-elif model == 'beta_03_gamma_05_delta_1':
-    beta = 1/3
-    gamma = 0.5
-    delta = 1
-for pi in range(len(params)):
-    param = params[pi]
-if model == 'varying_gamma' or model == 'alpha_1_beta_05_delta_08' or model == 'alpha_1_beta_05_delta_1' or model == 'alpha_10_beta_1_delta_8':
-    gamma = param
-else:
-    alpha = param
-# TODO adjust for complex params
-tau_0_block_0 = np.array([[alpha ** 2, gamma ** 2], [gamma ** 2, delta ** 2]])
-tau_0_eigvals = np.linalg.eigvalsh(tau_0_block_0)
-tau_0_eigvals.sort()
-tau_0_eigenvalues_1[pi], tau_0_eigenvalues_2[pi] = tau_0_eigvals
-tau_g = np.array([[alpha * gamma, gamma * delta], [gamma * alpha, delta * gamma]])
-tau_g_eigvals = np.linalg.eigvalsh(tau_g)
-tau_g_eigvals.sort()
-tau_g_eigenvalues_1[pi], tau_g_eigenvalues_2[pi] = tau_g_eigvals
 
 
 wilson_areas_results = np.zeros(len(params))
@@ -888,5 +870,5 @@ plt.show()
 plot_full_purity()
 plot_for_poster()
 plot_normalized_purities()
-plot_tau_eigvals()
+# plot_tau_eigvals()
 dbg = 1
