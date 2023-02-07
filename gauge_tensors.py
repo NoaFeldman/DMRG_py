@@ -709,7 +709,7 @@ for pi in range(len(params)):
                                                        gap_l=gap_l, edge_dim=edge_dim, normalize=True, wall_charges_i=57)
                             p2 = get_block_probability(filename, h, n, b, corner_num=corner_num, corner_charges_i=c,
                                                        gap_l=gap_l, edge_dim=edge_dim, purity_mode=True, normalize=True, wall_charges_i=57)
-                            print(param, corner_num, n, gap_l, b, c, p2, p1, p2 / p1 ** 2)
+                            print(param, corner_num, h, n, gap_l, b, c, p2, p1, p2 / p1 ** 2)
                             n_p2 = p2 / p1 ** 2
                             pickle.dump(n_p2, open(result_filename, 'wb'))
                         else:
@@ -781,7 +781,12 @@ for pi in range(len(params)):
             block_division_contribution(boundary_filname(dir_name, model, param_name, param), h, n, corner_num, gap_l),
             open(res_filename, 'wb'))
     classical_purity_results[pi] = pickle.load(open(res_filename, 'rb'))
-    full_purity_results_small[pi] = get_full_purity(boundary_filname(dir_name, model, param_name, param), h, n, corner_num=corner_num, gap_l=gap_l)
+    purity_filename = 'results/gauge/' + model + '/full_purity_' + param_name + '_' + str(param) + '_n_' + str(
+        n) + '_cnum_' + str(corner_num) + '_gap_' + str(gap_l)
+    if not os.path.exists(purity_filename):
+        pickle.dump(get_full_purity(boundary_filname(dir_name, model, param_name, param), h, n, corner_num=corner_num, gap_l=gap_l),
+                    open(purity_filename, 'wb'))
+    full_purity_results_small[pi] = pickle.load(open(purity_filename, 'rb'))
 
 
 dbg = 1
@@ -868,7 +873,6 @@ plt.title('Confined / deconfined phase')
 plt.show()
 
 plot_full_purity()
-plot_for_poster()
 plot_normalized_purities()
 # plot_tau_eigvals()
 dbg = 1
