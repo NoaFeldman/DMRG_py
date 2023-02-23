@@ -108,8 +108,12 @@ def apply_time_evolver(arnoldi_T: np.array, arnoldi_basis: List[tn.Node], M: tn.
             result += time_evolver[ci, ri] * m_overlap * arnoldi_basis[ci].tensor
     return tn.Node(result)
 
-def apply_time_evolver_np(arnoldi_T: np.array, arnoldi_basis: List[np.array], M: np.array, dt) -> np.array:
-    time_evolver = linalg.expm(dt * arnoldi_T)
+def apply_op_np(arnoldi_T: np.array, arnoldi_basis: List[np.array], M: np.array, dt: object = 1e-2,
+                mode: object = 'imag_time_evolve') -> np.array:
+    if mode == 'imag_time_evolve':
+        time_evolver = linalg.expm(dt * arnoldi_T)
+    elif mode == 'peps':
+        time_evolver = arnoldi_T
     result = np.zeros(M.shape, dtype=complex)
     for ri in range(len(time_evolver)):
         m_overlap = tensor_overlap_np(arnoldi_basis[ri], M)
@@ -130,7 +134,7 @@ def tdvp_step(psi: List[tn.Node], H: List[tn.Node], k: int, HL: List[tn.Node], H
         M = bops.contract(psi[k], psi[k+1], '2', '0')
     else:
         M = psi[k]
-    M = apply_time_evolver(T, basis, M, dt)
+    M = apply_op_np(T, basis, M, dt)
 
     if dir == '>>':
         if num_of_sites == 2:
@@ -168,7 +172,7 @@ def tdvp_step(psi: List[tn.Node], H: List[tn.Node], k: int, HL: List[tn.Node], H
     if num_of_sites == 2:
         psi[M_ind] = bops.copyState([M])[0]
         T, basis = arnoldi(HL, HR, H, psi, M_ind, num_of_sites=1)
-        M = apply_time_evolver_np(T, basis, M, - dt)
+        M = apply_op_np(T, basis, M, - dt)
         psi[M_ind] = M
     elif num_of_sites == 1:
         T, basis = arnoldi(HL, HR, H, psi, M_ind, num_of_sites=0, C=C) # TODO
@@ -179,6 +183,34 @@ def tdvp_step(psi: List[tn.Node], H: List[tn.Node], k: int, HL: List[tn.Node], H
             psi[k - 1] = bops.contract(psi[k - 1], C, '2', '0')
     if is_density_matrix:
         bops.normalize_mps_of_dm(psi)
+    return te
+
+
+def peps_step_np(up_row:List[tn.Node], mid_row: List[tn.Node], k: int, HL: List[tn.Node], HR: List[tn.Node],
+                 dir: str, max_bond_dim: int):
+    T, basis = arnoldi_np(HL, HR, mid_row, up_row, k, 2)
+    M = np.tensordot(up_row[k].tensor, up_row[k + 1].tensor, ([2], [0]))
+    M = apply_op_np(T, basis, M, mode='peps')
+    if dir == '>>':
+        [A, M, te] = bops.svdTruncation_np(M, [0, 1], [2, 3], '>>', maxBondDim=max_bond_dim, normalize=True)
+        up_row[k] = tn.Node(A)
+        M_ind = k + 1
+        if k == len(up_row) - 2:
+            up_row[len(up_row) - 1] = tn.Node(M)
+            return te
+        HL[k + 1] = tn.Node(np.tensordot(np.tensordot(np.tensordot(
+            HL[k].tensor, A, ([0], [0])), mid_row[k].tensor, ([0, 2], [2, 0])), A.conj(), ([0, 2], [0, 1])))
+    elif dir == '<<':
+        [M, B, te] = bops.svdTruncation_np(M, [0, 1], [2, 3], '<<', maxBondDim=max_bond_dim, normalize=True)
+        B_ind = k + 1
+        up_row[B_ind] = tn.Node(B)
+        M_ind = k
+        if k == 0:
+            # TODO maybe I need to lose C, and add B instead of M for num_of_sites = 1?
+            up_row[0] = tn.Node(M)
+        HR[B_ind - 1] = tn.Node(np.tensordot(np.tensordot(np.tensordot(
+            B, HR[B_ind].tensor, ([2], [0])), mid_row[B_ind].tensor, ([1, 2], [0, 3])), B.conj(), ([2, 1], [1, 2])))
+    up_row[M_ind] = tn.Node(M)
     return te
 
 
@@ -193,7 +225,7 @@ def tdvp_step_np(psi: List[tn.Node], H: List[tn.Node], k: int, HL: List[tn.Node]
         M = np.tensordot(psi[k].tensor, psi[k+1].tensor, ([2], [0]))
     else:
         M = psi[k].tensor
-    M = apply_time_evolver_np(T, basis, M, dt)
+    M = apply_op_np(T, basis, M, dt)
 
     if dir == '>>':
         if num_of_sites == 2:
@@ -231,11 +263,11 @@ def tdvp_step_np(psi: List[tn.Node], H: List[tn.Node], k: int, HL: List[tn.Node]
     if num_of_sites == 2:
         psi[M_ind] = tn.Node(M)
         T, basis = arnoldi_np(HL, HR, H, psi, M_ind, num_of_sites=1)
-        M = apply_time_evolver_np(T, basis, M, - dt)
+        M = apply_op_np(T, basis, M, - dt)
         psi[M_ind] = tn.Node(M)
     elif num_of_sites == 1:
         T, basis = arnoldi_np(HL, HR, H, psi, M_ind, num_of_sites=0, C=C) # TODO
-        C = apply_time_evolver_np(T, basis, C, - dt)
+        C = apply_op_np(T, basis, C, - dt)
         if dir == '>>':
             psi[k+1] = tn.Node(np.tensordot(C, psi[k+1].tensor, ([1], [0])))
         elif dir == '<<':
@@ -258,6 +290,22 @@ def tdvp_sweep(psi: List[tn.Node], H: List[tn.Node], HL: List[tn.Node], HR: List
             max_te = te[0]
     gc.collect()
     return max_te
+
+
+def peps_sweep(up_row: List[tn.Node], mid_row: List[tn.Node], HL: List[tn.Node], HR: List[tn.Node],
+               max_bond_dim, max_trunc=6):
+    max_te = 0
+    for k in range(len(up_row) - 2, -1, -1):
+        te = peps_step_np(up_row, mid_row, k, HL, HR, '<<', max_bond_dim)
+        if len(te) > 0 and np.max(te) > max_te:
+            max_te = te[0]
+    for k in range(len(up_row) - 1):
+        te = peps_step_np(up_row, mid_row, k, HL, HR, '>>', max_bond_dim)
+        if len(te) > 0 and np.max(te) > max_te:
+            max_te = te[0]
+    gc.collect()
+    return max_te
+
 
 def get_initial_projectors(psi: List[tn.Node], H: List[tn.Node]):
     res_left = [None for i in range(len(psi))]
