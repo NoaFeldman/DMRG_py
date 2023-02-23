@@ -32,7 +32,7 @@ def applyOpTosite(site, op):
                 [9, 10, 11]), [6, 7, 8]), [3, 4, 5], [0, 1, 2])
 
 
-def applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, h, w, ops, PBC=False):
+def applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, h, w, ops, PBC=False, period_num=None):
     cUps = [cUp for i in range(int(w/2))]
     dUps = [dUp for i in range(int(w/2))]
     cDowns = [cDown for i in range(int(w/2))]
@@ -40,7 +40,7 @@ def applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, h, w, o
     leftRows = [leftRow for i in range(int(h/2))]
     rightRows = [rightRow for i in range(int(h/2))]
     return applyLocalOperators_detailedBoundary(
-        cUps, dUps, cDowns, dDowns, leftRows, rightRows, A, B, h, w, ops, PBC=PBC)
+        cUps, dUps, cDowns, dDowns, leftRows, rightRows, A, B, h, w, ops, PBC=PBC, period_num=period_num)
 
 
 def applyLocalOperators_detailedBoundary(
