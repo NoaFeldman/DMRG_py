@@ -7,6 +7,7 @@ import pickle
 import os
 import sys
 import gc
+import tdvp
 
 X = np.array([[0, 1], [1, 0]])
 I = np.eye(2)
@@ -339,13 +340,13 @@ def block_division_contribution(filename, h, n, corner_num, gap_l, edge_dim=2, r
     return sum
 
 
-def get_full_purity(filename, h, n, corner_num, gap_l, edge_dim=2, d=2, corner_charge=None):
+def get_full_purity(filename, h, n, corner_num, gap_l, edge_dim=2, d=2, corner_charge=None, PBC=False, period_num=None):
     continuous_l = int(n / corner_num)
     w = corner_num * (continuous_l + gap_l)
     [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, A, B] = \
         get_boundaries_from_file(filename, w=2, h=2)
     normalization = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, h, w,
-                                           [tn.Node(np.eye(d ** 2))] * h * w)
+                                           [tn.Node(np.eye(d ** 2))] * h * w, PBC=PBC, period_num=period_num)
     leftRow.tensor /= (normalization**(2/h))
     if corner_charge is not None:
         projectors = [np.array([[1, 0, 0, 1], [0, 0, 0, 0], [0, 0, 0, 0], [1, 0, 0, 1]]),
@@ -367,9 +368,11 @@ def get_full_purity(filename, h, n, corner_num, gap_l, edge_dim=2, d=2, corner_c
     ops = []
     for ci in range(corner_num):
         ops = ops + single_period_ops
-    purity = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openA, h, w, ops)
+    purity = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openA, h, w, ops, PBC=PBC, period_num=period_num)
     if corner_charge is not None:
         purity /= p1**2
+    if PBC:
+        purity /= normalization**2
     return purity
 
 
@@ -578,6 +581,32 @@ def get_boundaries(dirname, model, param_name, param, max_allowed_te=1e-10, sile
     return cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openA
 
 
+def large_system_0_block_entanglement(model, param, param_name, dirname, h, w):
+    cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openA = get_boundaries(dirname, model, param_name, param)
+    AEnv = bops.contract(openA, tn.Node(np.eye(4)), '05', '01')
+    AEnv.tensor /= 4
+    up_row = [tn.Node(AEnv.tensor[0, :, :, 0].transpose().reshape([1, AEnv[0].dimension, AEnv[0].dimension]))] + \
+             [tn.Node(AEnv.tensor[0, :, :, :].transpose([2, 1, 0]))] * (w - 2) + \
+             [tn.Node(AEnv.tensor[0, 0, :, :].transpose().reshape([AEnv[0].dimension, AEnv[0].dimension, 1]))]
+    for k in range(len(up_row) - 1, 0, -1):
+        up_row = bops.shiftWorkingSite(up_row, k, '<<')
+    mid_row = [tn.Node(AEnv.tensor[:, :, :, 0].reshape([AEnv[0].dimension, AEnv[0].dimension, AEnv[0].dimension, 1])\
+                       .transpose([0, 2, 3, 1]))] + \
+              [bops.permute(AEnv, [0, 2, 3, 1])] * (w - 2) + \
+              [tn.Node(AEnv.tensor[:, 0, :, :].reshape([AEnv[0].dimension, 1, AEnv[0].dimension, AEnv[0].dimension])\
+                       .transpose([0, 2, 3, 1]))]
+    HL, HR = tdvp.get_initial_projectors(up_row, mid_row)
+    for hi in range(h - 1):
+        te = tdvp.peps_sweep(up_row, mid_row, HL, HR, max_bond_dim=1024)
+    curr = bops.contract(up_row[w - 1], tn.Node(AEnv.tensor[:, 0, 0, :]), '1', '0')
+    for wi in range(w - 2, 0, -1):
+        curr = bops.contract(bops.contract(up_row[wi], curr, '2', '0'), tn.Node(AEnv.tensor[:, :, 0, :]), '13', '01')
+    vec = bops.contract(bops.contract(up_row[0], curr, '2', '0'), AEnv, '13', '01').tensor.reshape(AEnv[0].dimension**2)
+    vec /= np.sqrt(sum(vec ** 2))
+    print(vec)
+    return sum(vec**4)
+
+
 def wilson_expectations(model, param, param_name, dirname, plot=False, d=2, boundaries=None):
     if boundaries is None:
         cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openA = get_boundaries(dirname, model, param_name, param)
@@ -598,10 +627,10 @@ def wilson_expectations(model, param, param_name, dirname, plot=False, d=2, boun
         wilson_expectations[Li] = wilson_exp
         gc.collect()
     pa, residuals, _, _, _ = np.polyfit(areas, np.log(wilson_expectations), 1, full=True)
-    chisq_dof = residuals / (len(areas) - 3)
+    chisq_dof = np.sum((np.polyval(pa, areas) - np.log(wilson_expectations)) ** 2 / np.log(wilson_expectations)**2)
     wilson_area = chisq_dof
     pp, residuals, _, _, _ = np.polyfit(perimeters, np.log(wilson_expectations), 1, full=True)
-    chisq_dof = residuals / (len(perimeters) - 3)
+    chisq_dof = np.sum((np.polyval(pp, perimeters) - np.log(wilson_expectations)) ** 2 / np.log(wilson_expectations)**2)
     wilson_perimeter = chisq_dof
     print(wilson_expectations, wilson_area, wilson_perimeter)
     if plot:
@@ -612,7 +641,9 @@ def wilson_expectations(model, param, param_name, dirname, plot=False, d=2, boun
         axs[1].scatter(perimeters, np.log(wilson_expectations))
         axs[1].plot(perimeters, perimeters * pp[0] + pp[1])
         axs[0].set_title(param_name + ' = ' + str(param))
+        plt.title(param_name + ' = ' + str(param))
         plt.show()
+    pickle.dump(wilson_expectations, open(dirname + '/wilson_full_' + param_name + '_' + str(param), 'wb'))
     return wilson_area, wilson_perimeter
 
 
@@ -631,6 +662,7 @@ elif model == 'zohar_gamma':
     params = [np.round(0.2 * a, 8) for a in range(-10, 11)]
     param_name = 'gamma'
 elif model == 'orus':
+    # https://journals.aps.org/prl/abstract/10.1103/PhysRevLett.113.257202
     params = [np.round(0.1 * i, 8) for i in range(3, 13)]
     param_name = 'g'
 elif model == 'alpha_1_beta_05_delta_08':
@@ -654,20 +686,20 @@ elif model == 'vary_alpha':
     model = model + '_' + str(beta) + '_' + str(gamma) + '_' + str(delta)
 elif model == 'vary_beta':
     param_name = 'beta'
-    params = [np.round(0.01 * a, 8) for a in range(11)]
+    params = [np.round(0.1 * a, 8) for a in range(11)]
     alpha = float(sys.argv[4])
     gamma = float(sys.argv[5])
     delta = float(sys.argv[6])
     model = model + '_' + str(alpha) + '_' + str(gamma) + '_' + str(delta)
 elif model == 'vary_ad':
     param_name = 'alpha'
-    params = [np.round(0.2 * a, 8) for a in range(-10, 11)]
+    params = [np.round(0.2 * a, 8) for a in range(-10, 8)]
     beta = float(sys.argv[4])
     gamma = float(sys.argv[5])
     model = model + '_' + str(beta) + '_' + str(gamma)
 elif model == 'vary_gamma':
     param_name = 'gamma'
-    params = [np.round(0.2 * a, 8) for a in range(-10, 11)]
+    params = [np.round(0.2 * a, 8) for a in range(-10, 0)] + [np.round(0.02 * a, 8) for a in range(-10, 11)] + [np.round(0.2 * a, 8) for a in range(1, 11)]
     alpha = float(sys.argv[4])
     beta = float(sys.argv[5])
     delta = float(sys.argv[6])
@@ -676,14 +708,28 @@ dir_name = "results/gauge/" + model
 if not os.path.exists(dir_name):
     os.mkdir(dir_name)
 
-toric_tensors_lgt_approach(model, params[3])
-
 bs = [0, 2 ** 20 - 1, 173524]
 ns = [int(sys.argv[3])]
 h = int(sys.argv[2])
 corner_nums = [1]
 gap_ls = [2]
 corner_charges = [0, 1]
+
+
+wilson_areas_results = np.zeros(len(params))
+wilson_perimeter_results = np.zeros(len(params))
+for pi in range(len(params)):
+    param = params[pi]
+    wilson_filename = 'results/gauge/' + model + '/wilson_' + model + '_' + param_name + '_' + str(param)
+    if os.path.exists(wilson_filename):
+        area, perimeter = pickle.load(open(wilson_filename, 'rb'))
+    else:
+        area, perimeter = wilson_expectations(model, params[pi], param_name, dir_name)
+        pickle.dump([area, perimeter], open(wilson_filename, 'wb'))
+    wilson_areas_results[pi] = area
+    wilson_perimeter_results[pi] = perimeter
+
+
 
 normalized_purity_results = np.zeros(
     (len(params), len(corner_nums), len(ns), len(bs), len(gap_ls), len(corner_charges)))
@@ -731,14 +777,35 @@ for pi in range(len(params)):
     wilson_perimeter_results[pi] = perimeter
 
 
+zeros_large_systems = np.zeros(len(params))
+for pi in range(len(params)):
+    param = params[pi]
+    print(param)
+    res_filename = 'results/gauge/' + model + '/zero_large_system_' + model + '_' + param_name + '_' + str(param)
+    if os.path.exists(res_filename):
+        zero_entanglement = pickle.load(open(res_filename, 'rb'))
+    else:
+        zero_entanglement = large_system_0_block_entanglement(model, params[pi], param_name, dir_name, 10, 10)
+        pickle.dump(zero_entanglement, open(res_filename, 'wb'))
+    zeros_large_systems[pi] = zero_entanglement
+
+
+
 purity_filename = 'results/gauge/' + model + '/purities_w_' + str(ns[0]) + '_cnum_' + str(
     corner_nums[0]) + '_gapl_' + str(gap_ls[0]) + '_h_' + str(h)
 full_purities_results = np.zeros((len(params), len(corner_nums), len(ns), len(gap_ls)))
 full_purities_results_0 = np.zeros((len(params), len(corner_nums), len(ns), len(gap_ls)))
 full_purities_results_1 = np.zeros((len(params), len(corner_nums), len(ns), len(gap_ls)))
+full_purities_results_pbc = np.zeros(len(params))
 for pi in range(len(params)):
     param = params[pi]
     filename = boundary_filname(dir_name, model, param_name, param)
+    purity_pbc_filename = purity_filename + '_' + param_name + '_' + str(param) + '_pbc'
+    if not os.path.exists(purity_pbc_filename):
+        print(param)
+        pickle.dump(get_full_purity(boundary_filname(dir_name, model, param_name, param),
+                                    h=2, n=4, corner_num=1, gap_l=4, PBC=True, period_num=1), open(purity_pbc_filename, 'wb'))
+    full_purities_results_pbc[pi] = pickle.load(open(purity_pbc_filename, 'rb'))
     for ni in range(len(ns)):
         n = ns[ni]
         for gi in range(len(gap_ls)):
@@ -753,16 +820,16 @@ for pi in range(len(params)):
                         pickle.dump(get_full_purity(boundary_filname(dir_name, model, param_name, param), h, ns[0],
                                                     corner_num=corner_nums[0], gap_l=gap_ls[0]),
                                     open(curr_file_name, 'wb'))
-                    if not os.path.exists(curr_file_name + '_0'):
-                        pickle.dump(get_full_purity(boundary_filname(dir_name, model, param_name, param), h, ns[0],
-                                                    corner_num=corner_nums[0], gap_l=gap_ls[0], corner_charge=0),
-                                    open(curr_file_name + '_0', 'wb'))
-                        pickle.dump(get_full_purity(boundary_filname(dir_name, model, param_name, param), h, ns[0],
-                                                    corner_num=corner_nums[0], gap_l=gap_ls[0], corner_charge=1),
-                                    open(curr_file_name + '_1', 'wb'))
+                    # if not os.path.exists(curr_file_name + '_0'):
+                    #     pickle.dump(get_full_purity(boundary_filname(dir_name, model, param_name, param), h, ns[0],
+                    #                                 corner_num=corner_nums[0], gap_l=gap_ls[0], corner_charge=0),
+                    #                 open(curr_file_name + '_0', 'wb'))
+                    #     pickle.dump(get_full_purity(boundary_filname(dir_name, model, param_name, param), h, ns[0],
+                    #                                 corner_num=corner_nums[0], gap_l=gap_ls[0], corner_charge=1),
+                    #                 open(curr_file_name + '_1', 'wb'))
                     full_purities_results[pi, cni, ni, gi] = pickle.load(open(curr_file_name, 'rb'))
-                    full_purities_results_0[pi, cni, ni, gi] = pickle.load(open(curr_file_name + '_0', 'rb'))
-                    full_purities_results_1[pi, cni, ni, gi] = pickle.load(open(curr_file_name + '_1', 'rb'))
+                    # full_purities_results_0[pi, cni, ni, gi] = pickle.load(open(curr_file_name + '_0', 'rb'))
+                    # full_purities_results_1[pi, cni, ni, gi] = pickle.load(open(curr_file_name + '_1', 'rb'))
 
 classical_purity_results = np.zeros(len(params))
 full_purity_results_small = np.zeros(len(params))
@@ -789,23 +856,7 @@ for pi in range(len(params)):
     full_purity_results_small[pi] = pickle.load(open(purity_filename, 'rb'))
 
 
-dbg = 1
 import matplotlib.pyplot as plt
-
-def plot_normalized_purities(phase_separator=None):
-    plt.plot(params, [normalized_purity_results[i, 0, 0, 0, 0, 0] if np.abs(normalized_purity_results[i, 0, 0, 0, 0, 0]) <= 1 else 1 for i in range(len(params))], 'b')
-    plt.plot(params, [normalized_purity_results[i, 0, 0, 0, 0, 1] if np.abs(normalized_purity_results[i, 0, 0, 0, 0, 1]) <= 1 else 1 for i in range(len(params))], '--r')
-    plt.plot(params, full_purity_results_small / classical_purity_results, '--k')
-    plt.legend(['corner charge = 0', 'corner charge = 1', r'$p_2/\sum_{\vec{q}} p^2(\vec{q})$'])
-    plt.xlabel(param_name)
-    plt.title('Normalized purities, full purity / classical purity')
-    plt.plot(params, [normalized_purity_results[i, 0, 0, 1, 0, 0] if np.abs(normalized_purity_results[i, 0, 0, 1, 0, 0]) <= 1 else 1 for i in range(len(params))], 'b')
-    plt.plot(params, [normalized_purity_results[i, 0, 0, 2, 0, 0] if np.abs(normalized_purity_results[i, 0, 0, 2, 0, 0]) <= 1 else 1 for i in range(len(params))], 'b')
-    plt.plot(params, [normalized_purity_results[i, 0, 0, 1, 0, 1] if np.abs(normalized_purity_results[i, 0, 0, 1, 0, 1]) <= 1 else 1 for i in range(len(params))], '--r')
-    plt.plot(params, [normalized_purity_results[i, 0, 0, 2, 0, 1] if np.abs(normalized_purity_results[i, 0, 0, 2, 0, 1]) <= 1 else 1 for i in range(len(params))], '--r')
-    if phase_separator is not None:
-        plt.vlines(phase_separator, '--c')
-    plt.show()
 
 def plot_tau_eigvals(phase_separator=None):
     plt.plot(params, tau_0_eigenvalues_1, 'b')
@@ -824,9 +875,10 @@ def plot_full_purity(phase_separator=None):
     plt.plot(params, full_purities_results[:, 0, 0, 0])
     plt.plot(params, full_purity_results_small)
     plt.plot(params, classical_purity_results, '--')
-    plt.plot(params, full_purities_results_0[:, 0, 0, 0])
-    plt.plot(params, full_purities_results_1[:, 0, 0, 0], '--')
-    plt.legend([r'full $p_2$', r'full $p_2$ - 2*2 system', r'Classical purity - 2 * 2 system, $\sum_{\vec{q}} p^2(\vec{q})$', r'charge 0 purity', r'charge 1 purity'])
+    plt.plot(params, full_purities_results_pbc)
+    # plt.plot(params, full_purities_results_0[:, 0, 0, 0])
+    # plt.plot(params, full_purities_results_1[:, 0, 0, 0], '--')
+    plt.legend([r'full $p_2$', r'full $p_2$ - 2*2 system', r'Classical purity - 2 * 2 system, $\sum_{\vec{q}} p^2(\vec{q})$', r'PBC $p_2$'])
     if phase_separator is not None:
         plt.vlines(phase_separator, '--c')
     plt.xlabel(param_name)
@@ -863,6 +915,27 @@ def plot_for_poster():
     plt.plot(params, [normalized_purity_results[i, 0, 0, 2, 0, 1]
                       if (params[i] >= 0.7 and params[i] <= 1.2 and np.abs(normalized_purity_results[i, 0, 0, 2, 0, 1]) <= 1) else 1
                       for i in range(len(params))], color=viz_pallette[6])
+    plt.show()
+
+def plot_normalized_purities(phase_separator=None):
+    plt.plot(params, [normalized_purity_results[i, 0, 0, 0, 0, 0] if np.abs(normalized_purity_results[i, 0, 0, 0, 0, 0]) <= 1 else 1 for i in range(len(params))], 'b')
+    plt.plot(params, [normalized_purity_results[i, 0, 0, 0, 0, 1] if np.abs(normalized_purity_results[i, 0, 0, 0, 0, 1]) <= 1 else 1 for i in range(len(params))], '--r')
+    plt.plot(params, full_purity_results_small / classical_purity_results, '--k')
+    plt.plot(params, zeros_large_systems, color='#008000')
+    # b = 1
+    # d = 1
+    # plt.plot(params,
+    #          ((np.array(params) ** 2 + b ** 2) ** 2 + 2 * (np.array(params) * b + b * d) ** 2 + (b ** 2 + d ** 2) ** 2) / (np.array(params)**2 + 2 * b**2 + d**2)**2, color='#008000')
+    # plt.plot(params, np.ones(len(params)) * 0.941421557587496, '--', color='#008000')
+    plt.legend(['corner charge = 0', 'corner charge = 1', r'$p_2/\sum_{\vec{q}} p^2(\vec{q})$', r'entanglement, all 0s, 10*10 system']) #, r'0 corner-based estimation', r'1 corner-based estimation'])
+    plt.xlabel(param_name)
+    plt.title('Normalized purities, full purity / classical purity')
+    plt.plot(params, [normalized_purity_results[i, 0, 0, 1, 0, 0] if np.abs(normalized_purity_results[i, 0, 0, 1, 0, 0]) <= 1 else 1 for i in range(len(params))], color='#00008B')
+    plt.plot(params, [normalized_purity_results[i, 0, 0, 2, 0, 0] if np.abs(normalized_purity_results[i, 0, 0, 2, 0, 0]) <= 1 else 1 for i in range(len(params))], color='#069AF3')
+    plt.plot(params, [normalized_purity_results[i, 0, 0, 1, 0, 1] if np.abs(normalized_purity_results[i, 0, 0, 1, 0, 1]) <= 1 else 1 for i in range(len(params))], '--', color='#8C000F')
+    plt.plot(params, [normalized_purity_results[i, 0, 0, 2, 0, 1] if np.abs(normalized_purity_results[i, 0, 0, 2, 0, 1]) <= 1 else 1 for i in range(len(params))], '--', color='#FF796C')
+    if phase_separator is not None:
+        plt.vlines(phase_separator, '--c')
     plt.show()
 
 plt.plot(params, wilson_areas_results)
