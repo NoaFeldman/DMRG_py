@@ -378,6 +378,11 @@ JdJ_1_exp = np.zeros(timesteps)
 
 sigmaz_1_exp = np.zeros(timesteps)
 
+if len(sys.argv) == 10:
+    filename = sys.argv[9]
+    data = pickle.load(open(filename, 'rb'))
+    [ti, psi_1_exp, hl_1_exp, hr_1_exp] = data[:4]
+
 initial_ti = 0
 for file in os.listdir(newdir):
     if file[-7:] == '_1s_exp':
