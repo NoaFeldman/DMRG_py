@@ -143,13 +143,13 @@ def fit_exponential(y):
     return a_b_c[0], a_b_c[1], a_b_c[2], p, q
 
 
-def get_single_L_term(Omega, Gamma, sigma, is_single):
+def get_single_L_term(Omega, Gamma, sigma, is_single, gamma_1d=0):
     result = -1j * (np.kron(np.eye(d), np.conj(Omega) * sigma + Omega * sigma.T) -
                       np.kron(Omega * sigma + np.conj(Omega) * sigma.T, np.eye(d)))
-    if is_single:
-        result += Gamma * np.kron(sigma, sigma) \
-            - (Gamma / 2) * (np.kron(np.eye(d), np.matmul(sigma.T, sigma).T) +
-                             np.kron(np.matmul(sigma.T, sigma), np.eye(d)))
+    single_dissipation = Gamma if is_single else gamma_1d
+    result += single_dissipation * np.kron(sigma, sigma) \
+        - (single_dissipation / 2) * (np.kron(np.eye(d), np.matmul(sigma.T, sigma).T) +
+                         np.kron(np.matmul(sigma.T, sigma), np.eye(d)))
     return result
 
 def get_photon_green_L_exp(n, Omega, Gamma, k, theta, sigma, is_Delta=True, is_chiral=False, is_single=True, is_same_site=False, with_a=False):
@@ -160,15 +160,26 @@ def get_photon_green_L_exp(n, Omega, Gamma, k, theta, sigma, is_Delta=True, is_c
         phase = 1
     else:
         phase = np.exp(1j * k)
-    Ss = [get_single_L_term(Omega * phase**i, Gamma, sigma, is_single) for i in range(n)]
+    Ss = [get_single_L_term(Omega * phase**i, Gamma, sigma, is_single, gamma_1d) for i in range(n)]
     interacting_terms = [
         [gamma_1d / 2 * np.kron(sigma, I), phase**(-1) * np.kron(I, I), phase**(-1) * np.kron(I, sigma)],
-        [gamma_1d / 2 * np.kron(I, sigma), phase**(-1) * np.kron(I, I), phase**(-1) * np.kron(sigma, I)],
+        [gamma_1d / 2 * np.kron(I, sigma), phase**(1) * np.kron(I, I), phase**(1) * np.kron(sigma, I)],
+        [-gamma_1d / 2 * np.kron(I, sigma), phase ** (-1) * np.kron(I, I), phase ** (-1) * np.kron(I, sigma.T)],
+        [-gamma_1d / 2 * np.kron(sigma.T, I), phase ** (-1) * np.kron(I, I), phase ** (-1) * np.kron(sigma, I)],
+        [-gamma_1d / 2 * np.kron(I, sigma.T), phase ** (1) * np.kron(I, I), phase ** (1) * np.kron(I, sigma)],
+        [-gamma_1d / 2 * np.kron(sigma, I), phase ** (1) * np.kron(I, I), phase ** (1) * np.kron(sigma.T, I)],
     ]
     if not is_chiral:
         interacting_terms += [
             [gamma_1d / 2 * np.kron(sigma, I), phase * np.kron(I, I), phase * np.kron(I, sigma)],
             [gamma_1d / 2 * np.kron(I, sigma), phase * np.kron(I, I), phase * np.kron(sigma, I)],
+        ]
+        # TODO verify the terms below!
+        interacting_terms += [
+            [-gamma_1d / 2 * np.kron(I, sigma), phase ** (-1) * np.kron(I, I), phase ** (-1) * np.kron(I, sigma.T)],
+            [-gamma_1d / 2 * np.kron(sigma.T, I), phase ** (-1) * np.kron(I, I), phase ** (-1) * np.kron(sigma, I)],
+            [-gamma_1d / 2 * np.kron(I, sigma.T), phase ** (1) * np.kron(I, I), phase ** (1) * np.kron(I, sigma)],
+            [-gamma_1d / 2 * np.kron(sigma, I), phase ** (1) * np.kron(I, I), phase ** (1) * np.kron(sigma.T, I)],
         ]
     if is_Delta:
         if is_chiral:
@@ -237,20 +248,19 @@ def get_j_expect(rho, N, sigma):
         res += bops.getOverlap(rho,
                     [tn.Node(I) for i in range(si)] + [tn.Node(np.matmul(sigma.T, sigma).reshape([1, d ** 2, 1]))]
                     + [tn.Node(I) for i in range(si + 1, N)])
-        for sj in range(N):
-            if si < sj:
-                res += bops.getOverlap(rho,
-                                    [tn.Node(I) for i in range(si)] + [tn.Node(np.exp(1j * k * si) * sigma.T.reshape([1, d ** 2, 1]))]
-                                    + [tn.Node(I) for i in range(si + 1, sj)] + [
-                                        tn.Node(np.exp(-1j * k * sj) * sigma.reshape([1, d ** 2, 1]))]
-                                    + [tn.Node(I) for i in range(sj + 1, N)])
-            elif sj < si:
-                res += bops.getOverlap(rho,
-                                    [tn.Node(I) for i in range(sj)] + [
-                                        tn.Node(np.exp(1j * k * sj) * sigma.T.reshape([1, d ** 2, 1]))]
-                                    + [tn.Node(I) for i in range(sj + 1, si)] + [
-                                        tn.Node(np.exp(-1j * k * si) * sigma.reshape([1, d ** 2, 1]))]
-                                    + [tn.Node(I) for i in range(si + 1, N)])
+        for sj in range(si + 1, N):
+            res += bops.getOverlap(rho,
+                                   [tn.Node(I) for i in range(si)] + [
+                                       tn.Node(np.exp(-1j * k * si) * sigma.T.reshape([1, d ** 2, 1]))]
+                                   + [tn.Node(I) for i in range(si + 1, sj)] + [
+                                       tn.Node(np.exp(1j * k * sj) * sigma.reshape([1, d ** 2, 1]))]
+                                   + [tn.Node(I) for i in range(sj + 1, N)])
+            res += bops.getOverlap(rho,
+                                   [tn.Node(I) for i in range(si)] + [
+                                       tn.Node(np.exp(1j * k * si) * sigma.reshape([1, d ** 2, 1]))]
+                                   + [tn.Node(I) for i in range(si + 1, sj)] + [
+                                       tn.Node(np.exp(-1j * k * sj) * sigma.T.reshape([1, d ** 2, 1]))]
+                                   + [tn.Node(I) for i in range(sj + 1, N)])
     return res
 
 
@@ -337,23 +347,26 @@ if N <= 6:
                          np.kron(np.matmul(sigmas[i].conj().T, sigmas[j]).T, np.eye(2 ** N))
             elif case == 'kernel':
                 L_mat += gammas[np.abs(i - j)] * (np.kron(sigmas[i], sigmas[j]))
-    U = linalg.expm(dt * L_mat)
+    U = linalg.expm(dt * L_exp_mat)
     where = np.where(np.round(L_mat - L_exp_mat, 14))
     diffs = [[bin(where[0][i]).split('b')[1].zfill(2 * N), bin(where[1][i]).split('b')[1].zfill(2 * N), np.round(L_exp_mat[where[0][i], where[1][i]], 14), np.round(L_mat[where[0][i], where[1][i]], 14)] for i in range(len(where[0]))]
     psi_exact = np.array([1] + [0] * (4**N - 1), dtype=complex)
     rho = psi_exact.reshape([2 ** N] * 2)
     J = np.zeros([2**N, 2**N], dtype=complex)
     for i in range(N):
-        J += sigmas[i] * np.exp(-1j * k * i)
+        J += sigmas[i] * np.exp(1j * k * i)
     JdJ = np.matmul(J.conj().T, J)
-    Js = np.zeros(timesteps)
+    Js = np.zeros(timesteps, dtype=complex)
     for ti in range(timesteps):
         print(ti)
         psi_exact = np.matmul(U, psi_exact)
         rho = psi_exact.reshape([2**N] * 2)
-        print(np.round(rho.trace(), 14))
-        Js[ti] = np.real(np.matmul(rho / rho.trace(), JdJ).trace())
-    plt.plot(dt * np.array(range(timesteps)), Js)
+        print(np.amax(np.abs(rho - rho.T.conj())))
+        psi_exact /= rho.trace()
+        Js[ti] = np.matmul(rho / rho.trace(), JdJ).trace()
+    import matplotlib.pyplot as plt
+    plt.plot(dt * np.array(range(timesteps)), np.real(Js))
+    plt.plot(dt * np.array(range(timesteps)), np.imag(Js))
     # plt.show()
 
 I = np.eye(2).reshape([1, d**2, 1])
@@ -374,7 +387,7 @@ runtimes_1_exp = np.zeros(timesteps)
 tes_2_exp = np.zeros(timesteps)
 tes_1_exp = np.zeros(timesteps)
 
-JdJ_1_exp = np.zeros(timesteps)
+JdJ_1_exp = np.zeros(timesteps, dtype=complex)
 
 sigmaz_1_exp = np.zeros(timesteps)
 
@@ -397,7 +410,7 @@ for file in os.listdir(newdir):
                 JdJ_1_exp[:ti] = data[6][:ti]
                 sigmaz_1_exp[:ti] = data[7][:ti]
 
-curr_bond_dim = 4
+curr_bond_dim = 4 * 2**(int(initial_ti / 400))
 for ti in range(initial_ti, timesteps):
     print('---')
     print(ti)
@@ -411,12 +424,17 @@ for ti in range(initial_ti, timesteps):
         old_state_filename, old_data_filename = filenames(newdir, case, N, Omega, nn_num, ti - 1, bond_dim)
         os.remove(old_state_filename + '_1s_exp')
     tstart = time.time()
-    tes_1_exp[ti] = tdvp.tdvp_sweep(psi_1_exp, L_exp, hl_1_exp, hr_1_exp, dt / 2, max_bond_dim=curr_bond_dim, num_of_sites=1)
+    tes_1_exp[ti] = tdvp.tdvp_sweep(psi_1_exp, L_exp, hl_1_exp, hr_1_exp, dt / 2, max_bond_dim=curr_bond_dim, num_of_sites=2)
     JdJ_1_exp[ti] = get_j_expect(psi_1_exp, N, sigma)
     sigmaz_1_exp[ti] = get_sigma_z_expect(psi_1_exp, N)
     tf = time.time()
     runtimes_1_exp[ti] = tf - tstart
-    print('times = ' + str([runtimes_2_exp[ti], runtimes_1_exp[ti]]))
+    print('times = ' + str([runtimes_2_exp[ti], runtimes_1_exp[ti]]) + ', te = ' + str(tes_1_exp[ti]))
     state_filename, data_filename = filenames(newdir, case, N, Omega, nn_num, ti, bond_dim)
     with open(state_filename + '_1s_exp', 'wb') as f:
         pickle.dump([ti, psi_1_exp, hl_1_exp, hr_1_exp, runtimes_1_exp, tes_1_exp, JdJ_1_exp, sigmaz_1_exp], f)
+
+plt.plot(dt * np.array(range(timesteps)), np.real(JdJ_1_exp), '--')
+# plt.plot(dt * np.array(range(timesteps)), np.imag(JdJ_1_exp), '--')
+# plt.plot(dt * np.array(range(timesteps)), -np.log(tes_1_exp) / np.log(10))
+plt.show()
