@@ -151,7 +151,7 @@ Z = np.diag([1, -1])
 X = np.array([[0, 1], [1, 0]], dtype=complex)
 Y = np.array([[0, -1j], [1j, 0]])
 
-angle_step = 30
+angle_step = 50
 thetas = [np.round(i/angle_step, 3) for i in range(angle_step)]
 phis = [np.round(i/angle_step, 3) for i in range(angle_step)]
 sigmas = [np.round(i/angle_step, 3) for i in range(angle_step)]
