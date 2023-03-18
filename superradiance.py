@@ -278,7 +278,7 @@ nn_num = int(sys.argv[2])
 case = sys.argv[4]
 mu = 3 / (2 * k * N)
 gamma_1d = Gamma * mu
-Omega = float(sys.argv[3]) * gamma_1d
+Omega = float(sys.argv[3])
 outdir = sys.argv[5]
 timesteps = int(sys.argv[6])
 dt = 1e-2
@@ -287,6 +287,7 @@ results_to = sys.argv[7]
 bond_dim = int(sys.argv[8])
 
 newdir = outdir + '/' + case + '_N_' + str(N) + '_Omega_' + str(Omega) + '_nn_' + str(nn_num) + '_bd_' + str(bond_dim)
+Omega *= gamma_1d
 try:
     os.mkdir(newdir)
 except FileExistsError:
@@ -302,55 +303,21 @@ elif case == 'Dicke_phase':
     L_exp = get_photon_green_L_exp(N, Omega, Gamma, k, theta, sigma, is_Delta=False, is_single=False, is_chiral=True, is_same_site=False)
 elif case == 'Dicke_single':
     L_exp = get_photon_green_L_exp(N, Omega, Gamma, k, theta, sigma, is_Delta=False, is_single=True, is_chiral=True, is_same_site=False)
-psi = [tn.Node(np.array([1, 0, 0, 0]).reshape([1, d**2, 1])) for n in range(N)]
+psi = [tn.Node(np.array([np.sin(Omega * np.pi / 2), 0, 0, np.cos(Omega * np.pi / 2)]).reshape([1, d**2, 1])) for n in range(N)]
+
+
 if N <= 6:
     print('starting exact tests')
     sigmas = [np.kron(np.eye(d**i), np.kron(sigma, np.eye(d**(N - i - 1)))) for i in range(N)]
-    mu = 3 / (2 * k * N)
-    gamma_1d = Gamma * mu
     mpo = bops.contract(L_exp[0], L_exp[1], '3', '2')
-    gammas, deltas = get_gnm(Gamma, k, theta, nn_num, case)
-    gammas = [Gamma] + list(gammas)
-    deltas = [0] + list(deltas)
     for i in range(2, N):
         mpo = bops.contract(mpo, L_exp[i], [1 + 2 * i], '2')
     L_exp_mat = mpo.tensor.reshape([d] * 4 * N).transpose([0 + i * 4 for i in range(N)] +
                                                           [1 + i * 4 for i in range(N)] +
                                                           [2 + i * 4 for i in range(N)] +
                                                           [3 + i * 4 for i in range(N)]).reshape([d**(2 * N)] * 2).T
-    H = np.zeros([2**N, 2**N], dtype=complex)
-    for i in range(N):
-        if case == 'kernel_1d':
-            H += Omega * (np.exp(-1j * k * i) * sigmas[i] + np.exp(1j * k * i) * sigmas[i].conj().T)
-        elif case == 'kernel':
-            H += Omega * (sigmas[i] + sigmas[i].T)
-        for j in range(N):
-            if case == 'kernel_1d':
-                H += gamma_1d / 2 * np.sin(k * np.abs(i - j)) * np.matmul(sigmas[i].conj().T, sigmas[j])
-            elif case == 'kernel':
-                H += (deltas[np.abs(i - j)] - 1j * gammas[np.abs(i - j)] / 2) * np.matmul(sigmas[i].T, sigmas[j])
-    L_mat = -1j * (np.kron(np.eye(2**N), H) - np.kron(H.conj(), np.eye(2**N)))
-    c_plus = np.zeros((2**N, 2**N), dtype=complex)
-    c_minus = np.zeros((2**N, 2**N), dtype=complex)
-    for i in range(N):
-        c_plus += sigmas[i] * np.exp(1j * k * i)
-        c_minus += sigmas[i] * np.exp(-1j * k * i)
-        for j in range(N):
-            if case == 'kernel_1d':
-                L_mat += gamma_1d / 2 * np.exp(1j * k * np.abs(j - i)) * \
-                     (np.kron(sigmas[i], sigmas[j])) \
-                       + gamma_1d / 2 * np.exp(- 1j * k * np.abs(j - i)) * \
-                     (np.kron(sigmas[i], sigmas[j]))
-                L_mat += - gamma_1d / 2 * np.cos(k * np.abs(i - j)) * \
-                         np.kron(np.eye(2**N), np.matmul(sigmas[i].conj().T, sigmas[j]))
-                L_mat += - gamma_1d / 2 * np.cos(k * np.abs(i - j)) * \
-                         np.kron(np.matmul(sigmas[i].conj().T, sigmas[j]).T, np.eye(2 ** N))
-            elif case == 'kernel':
-                L_mat += gammas[np.abs(i - j)] * (np.kron(sigmas[i], sigmas[j]))
-    U = linalg.expm(dt * L_exp_mat)
-    where = np.where(np.round(L_mat - L_exp_mat, 14))
-    diffs = [[bin(where[0][i]).split('b')[1].zfill(2 * N), bin(where[1][i]).split('b')[1].zfill(2 * N), np.round(L_exp_mat[where[0][i], where[1][i]], 14), np.round(L_mat[where[0][i], where[1][i]], 14)] for i in range(len(where[0]))]
-    psi_exact = np.array([1] + [0] * (4**N - 1), dtype=complex)
+    U = np.expm(L_exp_mat * dt)
+    psi_exact = np.array([0] * (4**N - 1) + [1], dtype=complex)
     rho = psi_exact.reshape([2 ** N] * 2)
     J = np.zeros([2**N, 2**N], dtype=complex)
     for i in range(N):
@@ -364,10 +331,11 @@ if N <= 6:
         print(np.amax(np.abs(rho - rho.T.conj())))
         psi_exact /= rho.trace()
         Js[ti] = np.matmul(rho / rho.trace(), JdJ).trace()
+    print(Js[0])
     import matplotlib.pyplot as plt
     plt.plot(dt * np.array(range(timesteps)), np.real(Js))
     plt.plot(dt * np.array(range(timesteps)), np.imag(Js))
-    # plt.show()
+    plt.show()
 
 I = np.eye(2).reshape([1, d**2, 1])
 J_expect = np.zeros(timesteps, dtype=complex)
@@ -434,7 +402,4 @@ for ti in range(initial_ti, timesteps):
     with open(state_filename + '_1s_exp', 'wb') as f:
         pickle.dump([ti, psi_1_exp, hl_1_exp, hr_1_exp, runtimes_1_exp, tes_1_exp, JdJ_1_exp, sigmaz_1_exp], f)
 
-plt.plot(dt * np.array(range(timesteps)), np.real(JdJ_1_exp), '--')
-# plt.plot(dt * np.array(range(timesteps)), np.imag(JdJ_1_exp), '--')
-# plt.plot(dt * np.array(range(timesteps)), -np.log(tes_1_exp) / np.log(10))
-plt.show()
+
