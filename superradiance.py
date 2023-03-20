@@ -164,6 +164,10 @@ def get_photon_green_L_exp(n, Omega, Gamma, k, theta, sigma, is_Delta=True, is_c
     interacting_terms = [
         [gamma_1d / 2 * np.kron(sigma, I), phase**(-1) * np.kron(I, I), phase**(-1) * np.kron(I, sigma)],
         [gamma_1d / 2 * np.kron(I, sigma), phase**(1) * np.kron(I, I), phase**(1) * np.kron(sigma, I)],
+        [-gamma_1d / 2 * np.kron(I, sigma), phase ** (-1) * np.kron(I, I), phase ** (-1) * np.kron(I, sigma.T)],
+        [-gamma_1d / 2 * np.kron(sigma.T, I), phase ** (-1) * np.kron(I, I), phase ** (-1) * np.kron(sigma, I)],
+        [-gamma_1d / 2 * np.kron(I, sigma.T), phase ** (1) * np.kron(I, I), phase ** (1) * np.kron(I, sigma)],
+        [-gamma_1d / 2 * np.kron(sigma, I), phase ** (1) * np.kron(I, I), phase ** (1) * np.kron(sigma.T, I)],
     ]
     if not is_chiral:
         interacting_terms += [
