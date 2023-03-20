@@ -164,10 +164,6 @@ def get_photon_green_L_exp(n, Omega, Gamma, k, theta, sigma, is_Delta=True, is_c
     interacting_terms = [
         [gamma_1d / 2 * np.kron(sigma, I), phase**(-1) * np.kron(I, I), phase**(-1) * np.kron(I, sigma)],
         [gamma_1d / 2 * np.kron(I, sigma), phase**(1) * np.kron(I, I), phase**(1) * np.kron(sigma, I)],
-        [-gamma_1d / 2 * np.kron(I, sigma), phase ** (-1) * np.kron(I, I), phase ** (-1) * np.kron(I, sigma.T)],
-        [-gamma_1d / 2 * np.kron(sigma.T, I), phase ** (-1) * np.kron(I, I), phase ** (-1) * np.kron(sigma, I)],
-        [-gamma_1d / 2 * np.kron(I, sigma.T), phase ** (1) * np.kron(I, I), phase ** (1) * np.kron(I, sigma)],
-        [-gamma_1d / 2 * np.kron(sigma, I), phase ** (1) * np.kron(I, I), phase ** (1) * np.kron(sigma.T, I)],
     ]
     if not is_chiral:
         interacting_terms += [
@@ -316,8 +312,8 @@ if N <= 6:
                                                           [1 + i * 4 for i in range(N)] +
                                                           [2 + i * 4 for i in range(N)] +
                                                           [3 + i * 4 for i in range(N)]).reshape([d**(2 * N)] * 2).T
-    U = np.expm(L_exp_mat * dt)
-    psi_exact = np.array([0] * (4**N - 1) + [1], dtype=complex)
+    U = linalg.expm(L_exp_mat * dt)
+    psi_exact = np.array([1] + [0] * (4**N - 1), dtype=complex)
     rho = psi_exact.reshape([2 ** N] * 2)
     J = np.zeros([2**N, 2**N], dtype=complex)
     for i in range(N):
