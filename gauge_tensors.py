@@ -652,35 +652,19 @@ def wilson_expectations(model, param, param_name, dirname, plot=False, d=2, boun
         get_boundaries(dir_name, model, param_name, param, silent=True)
 
     Ls = 2 * np.array(range(3, 8))
-    perimeters = np.zeros(len(Ls))
-    areas = np.zeros(len(Ls))
     wilson_expectations = np.zeros(len(Ls), dtype=complex)
     for Li in range(len(Ls)):
         L = Ls[Li]
         wilson_exp = square_wilson_loop_expectation_value(cUp, dUp, cDown, dDown, leftRow, rightRow, openA, L)
-        perimeters[Li] = (L - 1) * 4
-        areas[Li] = (L - 1)**2 + 2 * (L - 1)
         wilson_expectations[Li] = wilson_exp
         gc.collect()
-    pa, residuals, _, _, _ = np.polyfit(areas, np.log(wilson_expectations), 1, full=True)
-    chisq_dof = np.sum((np.polyval(pa, areas) - np.log(wilson_expectations)) ** 2 / np.log(wilson_expectations)**2)
-    wilson_area = chisq_dof
-    pp, residuals, _, _, _ = np.polyfit(perimeters, np.log(wilson_expectations), 1, full=True)
-    chisq_dof = np.sum((np.polyval(pp, perimeters) - np.log(wilson_expectations)) ** 2 / np.log(wilson_expectations)**2)
-    wilson_perimeter = chisq_dof
-    print(wilson_expectations, wilson_area, wilson_perimeter)
+    p, residuals, _, _, _ = np.polyfit(Ls, np.log(wilson_expectations), 2, full=True)
     if plot:
         import matplotlib.pyplot as plt
-        ff, axs = plt.subplots(2)
-        axs[0].scatter(areas, np.log(wilson_expectations))
-        axs[0].plot(areas, areas * pa[0] + pa[1])
-        axs[1].scatter(perimeters, np.log(wilson_expectations))
-        axs[1].plot(perimeters, perimeters * pp[0] + pp[1])
-        axs[0].set_title(param_name + ' = ' + str(param))
+        plt.plot(Ls, np.log(wilson_expectations))
         plt.title(param_name + ' = ' + str(param))
         plt.show()
-    pickle.dump(wilson_expectations, open(dirname + '/wilson_full_' + param_name + '_' + str(param), 'wb'))
-    return wilson_area, wilson_perimeter
+    return p[0]
 
 
 model = sys.argv[1]
@@ -735,7 +719,9 @@ elif model == 'vary_ad':
     model = model + '_' + str(beta) + '_' + str(gamma)
 elif model == 'vary_gamma':
     param_name = 'gamma'
-    params = [np.round(0.2 * a, 8) for a in range(5)] # + [np.round(1 + 0.01 * a, 8) for a in range(-10, 10)]
+    params = [np.round(0.01 * a, 3) for a in range(10)] \
+             + [np.round(0.2 * a, 8) for a in range(5)] \
+             + [np.round(1 + 0.01 * a, 8) for a in range(-10, 10)]
     params.sort()
     alpha = float(sys.argv[4])
     beta = float(sys.argv[5])
@@ -753,24 +739,21 @@ gap_ls = [2]
 corner_charges = [0, 1]
 
 
-wilson_areas_results = np.zeros(len(params))
-wilson_perimeter_results = np.zeros(len(params))
+wilson_results = np.zeros(len(params))
 for pi in range(len(params)):
     param = params[pi]
     print(param)
     wilson_filename = 'results/gauge/' + model + '/wilson_' + model + '_' + param_name + '_' + str(param)
     if os.path.exists(wilson_filename):
-        area, perimeter = pickle.load(open(wilson_filename, 'rb'))
+        bulk_coeff = pickle.load(open(wilson_filename, 'rb'))
     else:
-        area, perimeter = wilson_expectations(model, param, param_name, dir_name)
-        pickle.dump([area, perimeter], open(wilson_filename, 'wb'))
-    wilson_areas_results[pi] = area
-    wilson_perimeter_results[pi] = perimeter
+        bulk_coeff = wilson_expectations(model, param, param_name, dir_name)
+        pickle.dump(bulk_coeff, open(wilson_filename, 'wb'))
+    wilson_results[pi] = bulk_coeff
 
-import matplotlib.pyplot as plt
-plt.plot(wilson_areas_results)
-plt.plot(wilson_perimeter_results)
-plt.show()
+# import matplotlib.pyplot as plt
+# plt.plot(wilson_results)
+# plt.show()
 
 zeros_large_systems = np.zeros(len(params))
 for pi in range(len(params)):
@@ -784,6 +767,7 @@ for pi in range(len(params)):
         pickle.dump(zero_entanglement, open(res_filename, 'wb'))
     zeros_large_systems[pi] = zero_entanglement
 import matplotlib.pyplot as plt
+plt.plot(wilson_results)
 plt.plot(params, zeros_large_systems)
 plt.show()
 
@@ -860,8 +844,7 @@ def plot_full_purity(phase_separator=None):
     plt.show()
 
 viz_pallette = [ "#0000ff", "#9d02d7", "#cd34b5", "#ea5f94", "#fa8775", "#ffb14e", "#ffd700"]
-plt.plot(params, wilson_areas_results)
-plt.plot(params, wilson_perimeter_results)
+plt.plot(params, wilson_results)
 plt.xlabel(param_name)
 plt.legend([r'$\chi^2$ area', r'$\chi^2$ perimeter'])
 plt.title('Confined / deconfined phase')
