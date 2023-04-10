@@ -52,6 +52,7 @@ def square_wilson_loop_expectation_value(cUp: tn.Node, dUp: tn.Node, cDown: tn.N
             [[tn.Node(np.kron(X, X))] + [tn.Node(np.kron(I, X))] * (L - 2) + [tn.Node(np.kron(X, I))]])
     norm = large_system_expectation_value(L, L, cUp, dUp, cDown, dDown, leftRow, rightRow, openA, tau_projector,
                                           [[tn.Node(np.eye(openA[0].dimension))] * L] * L)
+    print(L, wilson, norm, wilson / norm)
     return wilson / norm
 
 
@@ -538,13 +539,14 @@ def large_system_expectation_value(w, h, cUp, dUp, cDown, dDown, leftRow, rightR
     p_d_up = bops.permute(bops.contract(dUp, tau_projector, '1', '1'), [0, 2, 1])
     p_c_down = bops.permute(bops.contract(cDown, tau_projector, '1', '1'), [1, 2, 0])
     p_d_down = bops.permute(bops.contract(dDown, tau_projector, '1', '1'), [1, 2, 0])
-    up_row = [p_c_up, p_d_up] * int(6 * w / 2)
+    cylinder_mult = 5
+    up_row = [p_c_up, p_d_up] * int((1 + cylinder_mult) * w / 2)
     down_row = [p_d_down, p_c_down] * int(6 * w / 2)
     for hi in range(h):
-        mid_row = [tn.Node(bops.permute(bops.contract(open_tau, ops[hi][wi], '01', '01'), [0, 2, 1, 3]))
+        mid_row = [tn.Node(bops.permute(bops.contract(open_tau, ops[hi][wi], '01', '01'), [0, 2, 3, 1]))
                    for wi in range(w)] + \
             [tn.Node(bops.permute(bops.contract(open_tau, tn.Node(np.eye(openA[0].dimension)), '01', '01'),
-                                  [0, 2, 1, 3]))] * w * 5
+                                  [0, 2, 1, 3]))] * w * cylinder_mult
         for wi in range(len(up_row)):
             up_row[wi] = tn.Node(bops.contract(up_row[wi], mid_row[wi], '1', '0').tensor.\
                 transpose([0, 3, 2, 1, 4]).reshape(
@@ -553,14 +555,11 @@ def large_system_expectation_value(w, h, cUp, dUp, cDown, dDown, leftRow, rightR
                  up_row[wi][2].dimension * mid_row[wi][3].dimension]))
         for k in range(len(up_row)):
             M = bops.contract(up_row[k], up_row[(k+1) % len(up_row)], '2', '0')
-            up_row[k], up_row[(k+1) % len(up_row)], te = bops.svdTruncation(M, [0, 1], [2, 3], '>>', maxBondDim=512)
-    curr = bops.permute(bops.contract(bops.contract(up_row[0], mid_row[0], '1', '0'), down_row[0], '2', '1'),
-                        [0, 2, 4, 1, 3, 5])
+            up_row[k], up_row[(k+1) % len(up_row)], te = bops.svdTruncation(M, [0, 1], [2, 3], '>>', maxBondDim=128)
+    curr = bops.permute(bops.contract(up_row[0], down_row[0], '1', '1'), [0, 2, 1, 3])
     for wi in range(1, len(up_row) - 1):
-        curr = bops.contract(bops.contract(bops.contract(curr, up_row[wi], '3', '0'),
-                                           mid_row[wi], '35', '20'), down_row[wi], '35', '01')
-    return bops.contract(bops.contract(bops.contract(
-        curr, up_row[-1], '03', '20'), mid_row[-1], '024', '320'), down_row[-1], '012', '201').tensor * 1
+        curr = bops.contract(bops.contract(curr, up_row[wi], '2', '0'), down_row[wi], '23', '01')
+    return bops.contract(bops.contract(curr, up_row[-1], '02', '20'), down_row[-1], '012', '201').tensor * 1
 
 
 def large_system_block_entanglement(model, param, param_name, dirname, h, w, b_inds, corner_charge):
@@ -652,15 +651,15 @@ def wilson_expectations(model, param, param_name, dirname, plot=False, d=2, boun
     [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB] = \
         get_boundaries(dir_name, model, param_name, param, silent=True)
 
-    Ls = 2 * np.array(range(6, 12))
+    Ls = 2 * np.array(range(3, 8))
     perimeters = np.zeros(len(Ls))
     areas = np.zeros(len(Ls))
     wilson_expectations = np.zeros(len(Ls), dtype=complex)
     for Li in range(len(Ls)):
         L = Ls[Li]
         wilson_exp = square_wilson_loop_expectation_value(cUp, dUp, cDown, dDown, leftRow, rightRow, openA, L)
-        perimeters[Li] = L * 4
-        areas[Li] = L**2
+        perimeters[Li] = (L - 1) * 4
+        areas[Li] = (L - 1)**2 + 2 * (L - 1)
         wilson_expectations[Li] = wilson_exp
         gc.collect()
     pa, residuals, _, _, _ = np.polyfit(areas, np.log(wilson_expectations), 1, full=True)
@@ -736,7 +735,7 @@ elif model == 'vary_ad':
     model = model + '_' + str(beta) + '_' + str(gamma)
 elif model == 'vary_gamma':
     param_name = 'gamma'
-    params = [np.round(0.2 * a, 8) for a in range(6)] + [np.round(1 + 0.01 * a, 8) for a in range(-19, 0)]
+    params = [np.round(0.2 * a, 8) for a in range(5)] # + [np.round(1 + 0.01 * a, 8) for a in range(-10, 10)]
     params.sort()
     alpha = float(sys.argv[4])
     beta = float(sys.argv[5])
@@ -758,11 +757,12 @@ wilson_areas_results = np.zeros(len(params))
 wilson_perimeter_results = np.zeros(len(params))
 for pi in range(len(params)):
     param = params[pi]
+    print(param)
     wilson_filename = 'results/gauge/' + model + '/wilson_' + model + '_' + param_name + '_' + str(param)
     if os.path.exists(wilson_filename):
         area, perimeter = pickle.load(open(wilson_filename, 'rb'))
     else:
-        area, perimeter = wilson_expectations(model, params[pi], param_name, dir_name)
+        area, perimeter = wilson_expectations(model, param, param_name, dir_name)
         pickle.dump([area, perimeter], open(wilson_filename, 'wb'))
     wilson_areas_results[pi] = area
     wilson_perimeter_results[pi] = perimeter
