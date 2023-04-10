@@ -14,11 +14,11 @@ import functools as ft
 
 # https://journals.aps.org/prb/pdf/10.1103/PhysRevB.91.115137
 
-def prepare_g_tensor(ising_lambda, J, delta, model='transverse'):
+def prepare_g_tensor(ising_lambda, J, delta, model='transverse', theta=1/4):
     if model == 'transverse':
-        single_op = tn.Node(linalg.expm(-Z * ising_lambda * delta / 2).T)
+        single_op = tn.Node(linalg.expm(-Z * ising_lambda / 2).T)
     elif model == 't_gate':
-        single_op = tn.Node(linalg.expm(-np.diag([1, np.exp(1j * np.pi / 4)]) * ising_lambda * delta / 2).T)
+        single_op = tn.Node(linalg.expm(-np.diag([1, np.exp(1j * np.pi * theta)]) * ising_lambda / 2).T)
     pair_op = tn.Node(linalg.expm(-delta * np.kron(J * X, X)).reshape([2] * 4).transpose([2, 0, 3, 1]))
     l, s, r, te = bops.svdTruncation(pair_op, [0, 1], [2, 3], '>*<')
     l = bops.contract(l, tn.Node(np.sqrt(s.tensor)), '2', '0')
@@ -179,14 +179,15 @@ lambda_0_tensor[0, 0, 1] = -epsilon
 lambda_0_tensor[0, 1, 1] = epsilon
 lambda_r, Gamma = tn.Node(np.diag([1, 1]) / np.sqrt(2)), tn.Node(lambda_0_tensor)
 
-model = 'transverse'
+model = 't_gate'
 for li in range(len(ising_lambdas)):
     non_normalized_m2s = np.zeros((len(thetas), len(phis), len(sigmas)))
     ising_lambda = ising_lambdas[li]
     print(ising_lambda)
     results_filename = 'results/magic/bmps_ising_lambda_' + str(ising_lambda) + '_J_' + str(J)
     if model != 'transverse':
-        results_filename += '_' + model
+        gate_phase = float(sys.argv[1]) if len(sys.argv) > 1 else 0.0
+        results_filename += '_' + model + '_phase_' + str(gate_phase)
     if os.path.exists(results_filename):
         data = pickle.load(open(results_filename, 'rb'))
         [lambda_r, Gamma, non_normalized_m2s] = data
@@ -195,7 +196,7 @@ for li in range(len(ising_lambdas)):
         accuracy = 1e-3
         delta = 1e-2
         for i in range(steps):
-            g = prepare_g_tensor(ising_lambda, J, delta=delta, model=model)
+            g = prepare_g_tensor(ising_lambda, J, delta=delta, model=model, theta=gate_phase)
             lambda_r_new, Gamma_new = iTEBD_step(lambda_r, Gamma, g, chi=128)
             if converged(lambda_r, Gamma, lambda_r_new, Gamma_new, accuracy=delta**3):
                 print(bops.contract(bops.contract(bops.contract(lambda_r, Gamma, '1', '0'), lambda_r, '2', '0'),
@@ -206,39 +207,43 @@ for li in range(len(ising_lambdas)):
                     break
                 delta /= 10
             lambda_r, Gamma = lambda_r_new, Gamma_new
-    non_normalized_m2s = np.zeros((len(thetas), len(phis), len(sigmas)))
-    lambda_shrinked = tn.Node(lambda_r.tensor[:2, :2] / np.sqrt(sum(np.diag(lambda_r.tensor)[:2]**2)))
-    Gamma_shrinked = tn.Node(Gamma.tensor[:2, :, :2])
-    node = bops.contract(lambda_shrinked, Gamma_shrinked, '1', '0')
-    node_4 = tn.Node(
-        np.kron(node.tensor, np.kron(node.tensor.conj(), np.kron(node.tensor, node.tensor.conj()))))
-    for ti in range(len(thetas)):
-        theta = thetas[ti] * np.pi / 4
-        for pi in range(len(phis)):
-            phi = phis[pi] * np.pi / 4
-            for si in range(len(sigmas)):
-                sigma = sigmas[si] * np.pi / 4
-                paulis = [ft.reduce(np.matmul,
-                    [linalg.expm(1j * sigma * Y), linalg.expm(1j * theta * Z), linalg.expm(1j * phi * X), op,
-                     linalg.expm(-1j * phi * X), linalg.expm(-1j * theta * Z), linalg.expm(-1j * sigma * Y)])
-                    for op in [X, Y, Z]]
-                op_tensor = np.kron(I, np.kron(I, np.kron(I, I)))
-                op_4 = tn.Node(op_tensor)
-                for pauli in paulis: op_tensor += np.kron(pauli, np.kron(pauli, np.kron(pauli, pauli)))
-                magic_T = bops.contract(bops.contract(node_4, op_4, '1', '0'), node_4, '2', '1*').tensor.transpose([0, 2, 1, 3]) \
-                    .reshape([node_4[0].dimension ** 2, node_4[2].dimension ** 2])
-                vals = np.linalg.eigvals(magic_T)
-                non_normalized_m2s[ti, pi, si] = np.log(np.amax(np.abs(vals)))
-        pickle.dump([lambda_r, Gamma, non_normalized_m2s], open(results_filename, 'wb'))
+        non_normalized_m2s = np.zeros((len(thetas), len(phis), len(sigmas)))
+        lambda_shrinked = tn.Node(lambda_r.tensor[:2, :2] / np.sqrt(sum(np.diag(lambda_r.tensor)[:2]**2)))
+        Gamma_shrinked = tn.Node(Gamma.tensor[:2, :, :2])
+        node = bops.contract(lambda_shrinked, Gamma_shrinked, '1', '0')
+        node_4 = tn.Node(
+            np.kron(node.tensor, np.kron(node.tensor.conj(), np.kron(node.tensor, node.tensor.conj()))))
+        for ti in range(len(thetas)):
+            theta = thetas[ti] * np.pi / 4
+            for pi in range(len(phis)):
+                phi = phis[pi] * np.pi / 4
+                for si in range(len(sigmas)):
+                    sigma = sigmas[si] * np.pi / 4
+                    paulis = [ft.reduce(np.matmul,
+                        [linalg.expm(1j * sigma * Y), linalg.expm(1j * theta * Z), linalg.expm(1j * phi * X), op,
+                         linalg.expm(-1j * phi * X), linalg.expm(-1j * theta * Z), linalg.expm(-1j * sigma * Y)])
+                        for op in [X, Y, Z]]
+                    op_tensor = np.kron(I, np.kron(I, np.kron(I, I)))
+                    op_4 = tn.Node(op_tensor)
+                    for pauli in paulis: op_tensor += np.kron(pauli, np.kron(pauli, np.kron(pauli, pauli)))
+                    magic_T = bops.contract(bops.contract(node_4, op_4, '1', '0'), node_4, '2', '1*').tensor.transpose([0, 2, 1, 3]) \
+                        .reshape([node_4[0].dimension ** 2, node_4[2].dimension ** 2])
+                    vals = np.linalg.eigvals(magic_T)
+                    non_normalized_m2s[ti, pi, si] = np.log(np.amax(np.abs(vals)))
+            pickle.dump([lambda_r, Gamma, non_normalized_m2s], open(results_filename, 'wb'))
     # for i in range(len(non_normalized_m2s)):
     #     plt.pcolormesh(non_normalized_m2s[i])
     #     plt.colorbar()
     #     plt.title(str(i) + ' ' + str(ising_lambda))
     #     plt.show()
-    print(len(lambda_r.tensor), np.diag(lambda_r.tensor), np.sum(lambda_r.tensor[:2, :2] ** 2) / np.sum(lambda_r.tensor ** 2))
-    print(bops.contract(bops.contract(bops.contract(lambda_r, Gamma, '1', '0'), lambda_r, '2', '0'),
-                          bops.contract(bops.contract(lambda_r, Gamma, '1', '0'), lambda_r, '2', '0'), '02', '02*')\
-        .tensor)
+    lambda_shrinked = tn.Node(lambda_r.tensor[:2, :2] / np.sqrt(sum(np.diag(lambda_r.tensor)[:2] ** 2)))
+    Gamma_shrinked = tn.Node(Gamma.tensor[:2, :, :2])
+    print(np.sum(lambda_shrinked.tensor) / np.sum(lambda_r.tensor))
+    node = bops.contract(lambda_shrinked, Gamma_shrinked, '1', '0')
+    print(node.tensor[0, :, 0])
+    print(node.tensor[0, :, 1])
+    print(node.tensor[1, :, 0])
+    print(node.tensor[1, :, 1])
     m2s[li] = non_normalized_m2s[0, 0, 0]
     m2s_mins[li] = np.amax(non_normalized_m2s)
     min_thetas[li], min_phis[li], min_sigmas[li] = [np.where(non_normalized_m2s - m2s_mins[li] == 0)[i][0] for i in range(3)]
@@ -263,13 +268,10 @@ plt.plot(ising_lambdas, p2s)
 # plt.plot(ising_lambdas, np.real(nearest_neighbors))
 plt.plot(ising_lambdas, m2s / np.log(2))
 plt.plot(ising_lambdas, m2s_mins / np.log(2), '--')
-# plt.plot(ising_lambdas, min_thetas * 0.1)
-# plt.plot(ising_lambdas, min_phis * 0.1, '--')
-# plt.plot(ising_lambdas, min_sigmas * 0.1, ':')
 plt.plot(ising_lambdas, alpha_x**2)
-plt.plot(ising_lambdas, alpha_y**2)
+plt.plot(ising_lambdas, alpha_y**2, '--k')
 plt.plot(ising_lambdas, alpha_z**2)
-plt.plot(ising_lambdas, alpha_abs)
+plt.plot(ising_lambdas, alpha_abs, '--b')
 plt.legend([r'$p_2$', # r'$\langle \sigma^z\rangle$', r'$\langle \sigma^z\otimes\sigma^z\rangle$',
             r'$M_2$', r'$M_2 min$',
             r'$\alpha_x$', r'$\alpha_y$', r'$\alpha_z$', r'$\alpha^2$'])
