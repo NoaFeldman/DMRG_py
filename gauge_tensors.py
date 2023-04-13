@@ -539,9 +539,9 @@ def large_system_expectation_value(w, h, cUp, dUp, cDown, dDown, leftRow, rightR
     p_d_up = bops.permute(bops.contract(dUp, tau_projector, '1', '1'), [0, 2, 1])
     p_c_down = bops.permute(bops.contract(cDown, tau_projector, '1', '1'), [1, 2, 0])
     p_d_down = bops.permute(bops.contract(dDown, tau_projector, '1', '1'), [1, 2, 0])
-    cylinder_mult = 5
+    cylinder_mult = 1
     up_row = [p_c_up, p_d_up] * int((1 + cylinder_mult) * w / 2)
-    down_row = [p_d_down, p_c_down] * int(6 * w / 2)
+    down_row = [p_d_down, p_c_down] * int((1 + cylinder_mult) * w / 2)
     for hi in range(h):
         mid_row = [tn.Node(bops.permute(bops.contract(open_tau, ops[hi][wi], '01', '01'), [0, 2, 3, 1]))
                    for wi in range(w)] + \
@@ -556,6 +556,8 @@ def large_system_expectation_value(w, h, cUp, dUp, cDown, dDown, leftRow, rightR
         for k in range(len(up_row)):
             M = bops.contract(up_row[k], up_row[(k+1) % len(up_row)], '2', '0')
             up_row[k], up_row[(k+1) % len(up_row)], te = bops.svdTruncation(M, [0, 1], [2, 3], '>>', maxBondDim=128)
+            if len(te) > 0 and np.max(te) > 1e-8:
+                print(np.max(te))
     curr = bops.permute(bops.contract(up_row[0], down_row[0], '1', '1'), [0, 2, 1, 3])
     for wi in range(1, len(up_row) - 1):
         curr = bops.contract(bops.contract(curr, up_row[wi], '2', '0'), down_row[wi], '23', '01')
@@ -563,88 +565,38 @@ def large_system_expectation_value(w, h, cUp, dUp, cDown, dDown, leftRow, rightR
 
 
 def large_system_block_entanglement(model, param, param_name, dirname, h, w, b_inds, corner_charge):
-    c_up_left, c_up_right, c_down_left, c_down_right, t_left, t_up, t_right, t_down, A, AEnv, openA = \
-        get_boundaries_corner_tm(dirname, model, param_name, param, h, w, chi=8)
+    [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB] = \
+        get_boundaries(dir_name, model, param_name, param, silent=True)
     D = int(np.sqrt(openA[1].dimension))
     tau_projector = tn.Node(np.zeros((D, D**2)))
     for Di in range(D):
         tau_projector.tensor[Di, Di * (D + 1)] = 1
 
-    vert_projs = [tn.Node(np.diag([1, 0, 1, 0])), tn.Node(np.diag([0, 1, 0, 1]))]
     horiz_projs = [tn.Node(np.diag([1, 1, 0, 0])), tn.Node(np.diag([0, 0, 1, 1]))]
+    vert_projs = [tn.Node(np.diag([1, 0, 1, 0])), tn.Node(np.diag([0, 1, 0, 1]))]
     corner_projs = [tn.Node(np.diag([1, 0, 0, 1])), tn.Node(np.diag([0, 1, 1, 0]))]
     I = tn.Node(np.eye(openA[0].dimension))
-    ops = [[vert_projs[b_inds[0]]] + [horiz_projs[b_inds[wi]] for wi in range(1, w)] + \
-                        [bops.contract(vert_projs[b_inds[w]], horiz_projs[b_inds[w+1]], '1', '0')] + [I]]
-    for hi in range(h - 2):
-        ops.append([vert_projs[b_inds[w + 2 + hi * 2]]] + [I] * (w - 1) + [vert_projs[b_inds[w + 3 + hi * 2]]] + [I])
-    ops.append([I] + [bops.contract(vert_projs[b_inds[w + 2 * h - 2]], horiz_projs[b_inds[w + 2 * h - 1]])] + \
-        [I] * w)
-    ops.append([I, I] + [horiz_projs[b_inds[w + 2 * h + wi]] for wi in range(w - 1)] + [I])
-    norm = large_system_expectation_value(w + 2, h + 1, c_up_left, c_up_right, c_down_left, c_down_right,
-                    t_left, t_up, t_right, t_down, openA, tau_projector, ops)
 
-    tau_projector = np.kron(tau_projector, tau_projector)
-    ops = [[tn.Node(np.kron(ops[hi][wi], ops[hi][wi])) for wi in range(w + 2)] for hi in range(h + 1)]
-    for wi in range(1, w + 1):
-        for hi in range(h):
+    ops = [[vert_projs[b_inds[0]]] +
+           [horiz_projs[b_inds[wi]] for wi in range(1, w - 1)] +
+           [bops.contract(vert_projs[b_inds[w - 1]], horiz_projs[b_inds[w]], '0', '1')]]
+    for hi in range(h - 3):
+        ops += [[vert_projs[b_inds[w + 1 + hi * 2]]] + [I] * (w - 2) + [vert_projs[b_inds[w + 2 + hi * 2]]]]
+    ops += [[I] + [corner_projs[corner_charge]] + [I] * (w - 2)]
+    ops += [[I] * 2 + [horiz_projs[b_inds[wi]] for wi in range(w + 2 * h - 5, 2 * w + 2 * h - 7)]]
+    norm = large_system_expectation_value(
+        w, h, cUp, dUp, cDown, dDown, leftRow, rightRow, openA, tau_projector, ops)
+
+    tau_projector = tn.Node(np.kron(tau_projector.tensor, tau_projector.tensor))
+    ops = [[tn.Node(np.kron(ops[hi][wi].tensor, ops[hi][wi].tensor)) for wi in range(w)] for hi in range(h)]
+    cUp, dUp, cDown, dDown, leftRow, rightRow, openA = \
+        [tn.Node(np.kron(node.tensor, node.tensor)) for node in [cUp, dUp, cDown, dDown, leftRow, rightRow, openA]]
+    for wi in range(1, w):
+        for hi in range(h - 1):
             ops[hi][wi] = bops.contract(ops[hi][wi], swap_op, '1', '0')
-    p2 = large_system_expectation_value(w + 2, h + 1,
-        tn.Node(np.kron(c_up_left.tensor, c_up_left.tensor)), tn.Node(np.kron(c_up_right.tensor, c_up_right.tensor)),
-        tn.Node(np.kron(c_down_left.tensor, c_down_left.tensor)), tn.Node(np.kron(c_down_right.tensor, c_down_right.tensor)),
-        tn.Node(np.kron(t_left.tensor, t_left.tensor)), tn.Node(np.kron(t_up.tensor, t_up.tensor)),
-        tn.Node(np.kron(t_right.tensor, t_right.tensor)), tn.Node(np.kron(t_down.tensor, t_down.tensor)),
-        tn.Node(np.kron(openA.tensor, openA.tensor)), tau_projector, ops)
+    p2 = large_system_expectation_value(
+        w, h, cUp, dUp, cDown, dDown, leftRow, rightRow, openA, tau_projector, ops)
     return p2 / norm**2
-
-    # tau = bops.contract(bops.contract(bops.contract(bops.contract(
-    #     AEnv, tau_projector, '0', '1'), tau_projector, '0', '1'), tau_projector, '0', '1'), tau_projector, '0', '1')
-    # tau.tensor /= 1
-    # up_row = [tn.Node(tau.tensor[b_inds[0], :, :, b_inds[1]].transpose().reshape([1, tau[0].dimension, tau[0].dimension]))] + \
-    #          [tn.Node(tau.tensor[b_inds[wi], :, :, :].transpose([2, 1, 0])) for wi in range(2, w)] + \
-    #          [tn.Node(tau.tensor[b_inds[w], b_inds[w+1], :, :].transpose().reshape([tau[0].dimension, tau[0].dimension, 1]))]
-    # for k in range(len(up_row) - 1, 0, -1):
-    #     up_row = bops.shiftWorkingSite(up_row, k, '<<')
-    # mid_row = [tn.Node(tau.tensor[:, :, :, b_inds[w+2]].reshape([tau[0].dimension, tau[0].dimension, tau[0].dimension, 1])\
-    #                    .transpose([0, 2, 3, 1]))] + \
-    #           [bops.permute(tau, [0, 2, 3, 1])] * (w - 2) + \
-    #           [tn.Node(tau.tensor[:, b_inds[w+3], :, :].reshape([tau[0].dimension, 1, tau[0].dimension, tau[0].dimension])\
-    #                    .transpose([0, 2, 3, 1]))]
-    # HL, HR = tdvp.get_initial_projectors(up_row, mid_row)
-    # for hi in range(h - 3):
-    #     te = tdvp.peps_sweep(up_row, mid_row, HL, HR, max_bond_dim=1024)
-    #     mid_row = [tn.Node(tau.tensor[:, :, :, b_inds[w+4 + hi*2]].reshape([tau[0].dimension, tau[0].dimension, tau[0].dimension, 1])\
-    #                    .transpose([0, 2, 3, 1]))] + \
-    #           [bops.permute(tau, [0, 2, 3, 1])] * (w - 2) + \
-    #           [tn.Node(tau.tensor[:, b_inds[w+5 + hi*2], :, :].reshape([tau[0].dimension, 1, tau[0].dimension, tau[0].dimension])\
-    #                    .transpose([0, 2, 3, 1]))]
-    # full_charge = int((np.prod([2 * (b - 0.5) for b in b_inds] + [corner_charge]) + 1) / 2)
-    # curr = bops.contract(up_row[w - 1],
-    #         tn.Node(tau.tensor[:, full_charge, b_inds[w + h*2 - 2], :]), '1', '0')
-    # for wi in range(w - 2, 0, -1):
-    #     curr = bops.contract(bops.contract(up_row[wi], curr, '2', '0'), tn.Node(tau.tensor[:, :, b_inds[w + 2*h + wi - 2], :]), '13', '01')
-    # inner = bops.contract(bops.contract(bops.contract(bops.contract(
-    #     curr, up_row[0], '0', '2'), tau_projector, '3', '0'), tau_projector, '1', '0'), AEnv, '23', '01')\
-    #     .tensor.reshape([int(np.sqrt(AEnv[0].dimension))] * 4).transpose([0, 2, 1, 3]).reshape([AEnv[0].dimension] * 2)
-    # # TODO outer turns to |0><0|
-    # outer = AEnv.tensor[0, 0, :, :].T
-    # for wi in list(range(w, 1, -1)) + [0]:
-    #     outer = np.matmul(AEnv.tensor[0, :, b_inds[wi] * 3, :].T, outer)
-    # outer = np.matmul(np.matmul(AEnv.tensor[0, :, :, b_inds[1] * 3].T, outer), AEnv.tensor[:, 0, :, b_inds[w+1] * 3])
-    # for hi in range(h - 2):
-    #     outer = np.matmul(np.matmul(AEnv.tensor[:, b_inds[w + 2 + 2 * hi] * 3, :, 0].T, outer),
-    #                       AEnv.tensor[:, 0, :, b_inds[w + 2 + 2 * hi + 1] * 3])
-    # outer = np.matmul(np.matmul(np.matmul(outer, AEnv.tensor[:, 0, :, full_charge * 3]),
-    #                             AEnv.tensor[:, 0, 0, :]),
-    #                             AEnv.tensor[b_inds[w + 2 * h - 2] * 3, :, 0, :])
-    # for wi in range(2 * w + 2 * h - 4, w + 2 * h - 2, -1):
-    #     outer = np.matmul(outer, AEnv.tensor[b_inds[wi] * 3, :, 0, :])
-    # outer = np.tensordot(outer, AEnv.tensor[:, :, 0, :], ([1], [1]))
-    # outer = np.tensordot(outer, AEnv.tensor[:, :, :, 0], ([0], [0]))
-    # outer = np.tensordot(outer, AEnv.tensor[:, :, 0, 0], ([1, 3], [1, 0]))
-    # outer = outer.reshape([int(np.sqrt(AEnv[0].dimension))] * 4).transpose([0, 2, 1, 3]).reshape([AEnv[0].dimension] * 2)
-    # return np.matmul(np.matmul(np.matmul(inner, outer), inner), outer).trace() / \
-    #        np.tensordot(inner, outer, ([0, 1], [0, 1]))**2
 
 
 def wilson_expectations(model, param, param_name, dirname, plot=False, d=2, boundaries=None):
@@ -719,9 +671,9 @@ elif model == 'vary_ad':
     model = model + '_' + str(beta) + '_' + str(gamma)
 elif model == 'vary_gamma':
     param_name = 'gamma'
-    params = [np.round(0.01 * a, 3) for a in range(10)] \
+    params = [np.round(0.001 * a, 3) for a in range(100)] \
              + [np.round(0.2 * a, 8) for a in range(5)] \
-             + [np.round(1 + 0.01 * a, 8) for a in range(-10, 10)]
+             + [np.round(1 + 0.001 * a, 8) for a in range(-100, 100)]
     params.sort()
     alpha = float(sys.argv[4])
     beta = float(sys.argv[5])
@@ -751,9 +703,9 @@ for pi in range(len(params)):
         pickle.dump(bulk_coeff, open(wilson_filename, 'wb'))
     wilson_results[pi] = bulk_coeff
 
-# import matplotlib.pyplot as plt
-# plt.plot(wilson_results)
-# plt.show()
+import matplotlib.pyplot as plt
+plt.plot(params, wilson_results)
+plt.show()
 
 zeros_large_systems = np.zeros(len(params))
 for pi in range(len(params)):
