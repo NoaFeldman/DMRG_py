@@ -37,19 +37,19 @@ def get_j_expect(rho, N, sigma, phase):
     res = 0
     for si in range(N):
         res += bops.getOverlap(rho,
-                    [tn.Node(I) for i in range(si)] + [tn.Node(np.matmul(sigma.T, sigma).reshape([1, d ** 2, 1]))]
+                    [tn.Node(I) for i in range(si)] + [tn.Node(np.matmul(sigma.conj().T, sigma).reshape([1, d ** 2, 1]))]
                     + [tn.Node(I) for i in range(si + 1, N)])
         for sj in range(N):
             if si < sj:
                 res += bops.getOverlap(rho,
-                                    [tn.Node(I) for i in range(si)] + [tn.Node(np.exp(1j * phase * si) * sigma.T.reshape([1, d ** 2, 1]))]
+                                    [tn.Node(I) for i in range(si)] + [tn.Node(np.exp(1j * phase * si) * sigma.conj().T.reshape([1, d ** 2, 1]))]
                                     + [tn.Node(I) for i in range(si + 1, sj)] + [
                                         tn.Node(np.exp(-1j * phase * sj) * sigma.reshape([1, d ** 2, 1]))]
                                     + [tn.Node(I) for i in range(sj + 1, N)])
             elif sj < si:
                 res += bops.getOverlap(rho,
                                     [tn.Node(I) for i in range(sj)] + [
-                                        tn.Node(np.exp(1j * phase * sj) * sigma.T.reshape([1, d ** 2, 1]))]
+                                        tn.Node(np.exp(1j * phase * sj) * sigma.conj().T.reshape([1, d ** 2, 1]))]
                                     + [tn.Node(I) for i in range(sj + 1, si)] + [
                                         tn.Node(np.exp(-1j * phase * si) * sigma.reshape([1, d ** 2, 1]))]
                                     + [tn.Node(I) for i in range(si + 1, N)])
@@ -103,17 +103,17 @@ def get_single_L_term(Omega, Gamma, sigma):
                np.conj(G) * np.kron(np.matmul(sigma.T, sigma), np.eye(d)))
 
 
-Omega = float(sys.argv[1])
-normalized_omegas = [0.0, 0.8, 1.6, 4.0, 7.0, 10.0]
+normalized_omegas = [0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6] #[np.round(0.01 * i,  3) for i in range(1, 10)] + [0.1, 0.2, 0.3, 0.4]
+tis = [5999] * len(normalized_omegas)
 Omegas = [gamma_1d * o for o in normalized_omegas]
-jdjs = np.zeros(len(Omegas))
-jdjs_tst = np.zeros(len(Omegas))
-sigmas = np.zeros(len(Omegas))
-jxs = np.zeros(len(Omegas))
-jys = np.zeros(len(Omegas))
-jxs_no_phase = np.zeros(len(Omegas))
-jys_no_phase = np.zeros(len(Omegas))
-jdjs_no_phase = np.zeros(len(Omegas))
+jdjs = np.zeros(len(Omegas), dtype=complex)
+jdjs_tst = np.zeros(len(Omegas), dtype=complex)
+jxs = np.zeros(len(Omegas), dtype=complex)
+jys = np.zeros(len(Omegas), dtype=complex)
+jzs = np.zeros(len(Omegas), dtype=complex)
+jxs_no_phase = np.zeros(len(Omegas), dtype=complex)
+jys_no_phase = np.zeros(len(Omegas), dtype=complex)
+jdjs_no_phase = np.zeros(len(Omegas), dtype=complex)
 purities = np.zeros(len(Omegas), dtype=complex)
 squeezings = np.zeros(len(Omegas), dtype=complex)
 squeezings_no_phase = np.zeros(len(Omegas), dtype=complex)
@@ -123,79 +123,74 @@ Y = np.array([[0, 1j], [-1j, 0]])
 Z = np.array([[1, 0], [0, -1]])
 
 bond = 128
-model = 'Dicke_phase'
-tis = [2250] #[2220, 2250, 2280, 2310, 2340, 2370, 2400, 2430, 2460, 2490]
+model = 'Dicke_single'
 for oi in range(len(Omegas)):
-    for ti in tis:
-        Omega = Omegas[oi]
-        [ti, psi_1_exp, hl_1_exp, hr_1_exp, runtimes_1_exp, tes_1_exp, JdJ_1_exp, sigmaz_1_exp] = \
-            pickle.load(open('results/tdvp/tst_1d/mid_state_' + model + '_N_30_Omega_' + str(Omega) + '_nn_1_ti_' + str(ti) + '_bond_' + str(bond) + '_1s_exp', 'rb'))
-        dt = 1e-2
-        plt.plot(np.array(range(ti)) * dt, JdJ_1_exp[:ti])
-        plt.title(r'$\Omega = $' + str(normalized_omegas[oi]))
-        plt.ylabel(r'$\langle J^\dagger J \rangle$')
-        plt.xlabel('t')
-        plt.show()
-        rho = hermitian_matrix(psi_1_exp)
-        jdjs_tst[oi] += get_j_expect(rho, N, np.array([[0, 0], [1, 0]]), phase=k) / N**2
-        jdjs[oi] += JdJ_1_exp[ti] / N**2
-        jdjs_no_phase[oi] += get_j_expect(rho, N, np.array([[0, 0], [1, 0]]), phase=0) / N**2
-        sigmas[oi] += get_sum_local_op_expectation_value(rho, tn.Node(np.array([[1, 0], [0, -1]]).reshape([1, 4, 1])), 1, 5, N - 5) / (N - 10)
-        j_minus = get_sum_local_op_expectation_value(rho, tn.Node(np.array([[0, 1], [0, 0]]).reshape([1, 4, 1])), np.exp(-1j * k), 5, N - 5)
-        j_plus = get_sum_local_op_expectation_value(rho, tn.Node(np.array([[0, 0], [1, 0]]).reshape([1, 4, 1])), np.exp(1j * k), 5, N - 5)
-        jxs[oi] += (j_minus + j_plus) / 2 / (N - 10)
-        jys[oi] += (j_plus - j_minus) / 2j / (N - 10)
-        j_minus_no_phase = get_sum_local_op_expectation_value(rho, tn.Node(np.array([[0, 1], [0, 0]]).reshape([1, 4, 1])), 1, 5, N - 5)
-        j_plus_no_phase = get_sum_local_op_expectation_value(rho, tn.Node(np.array([[0, 0], [1, 0]]).reshape([1, 4, 1])), 1, 5, N - 5)
-        print(oi, ti, j_minus_no_phase, j_plus_no_phase)
-        jxs_no_phase[oi] += (j_minus_no_phase + j_plus_no_phase) / 2 / (N - 10)
-        jys_no_phase[oi] += (j_plus_no_phase - j_minus_no_phase) / 2j / (N - 10)
-        swap = tn.Node(np.array([[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1]]))
-        purities[oi] += bops.getExpectationValue(psi_1_exp, [swap] * N)
-    # norm = np.sqrt(jxs[oi]**2 + jys[oi]**2 + sigmas[oi]**2)
-    # J_x, J_y, J_z = jxs[oi] / norm, jys[oi] / norm, sigmas[oi] / norm
-    # spin_squeezing = 1
-    # for jx in np.array(range(-10, 11)) * 0.1:
-    #     for jy in np.array(range(-10, 11)) * 0.1:
-    #         print(jx, jy)
-    #         jz = (J_x * jx + J_y * jy) / J_z
-    #         norm = np.sqrt(jx**2 + jy**2 + jz**2)
-    #         jx_n, jy_n, jz_n = jx / norm, jy / norm, jz / norm
-    #         u = linalg.expm(1j * jx_n * X + jy_n * Y + jz_n * Z)
-    #         rotated_rho = [bops.permute(bops.contract(node, tn.Node(np.kron(u.T.conj(), u)), '1', '0'), [0, 2, 1])
-    #                        for node in rho]
-    #         curr_squeezing = get_j_expect(rotated_rho, N, np.array([[0, 0], [1, 0]]), phase=k) / N**2 - \
-    #                          get_sum_local_op_expectation_value(rotated_rho, tn.Node(np.array([[1, 0], [0, -1]]).reshape([1, 4, 1])), 1, 0, N)**2 / N**2
-    #         if curr_squeezing < spin_squeezing:
-    #             spin_squeezing = curr_squeezing
-    #         print(curr_squeezing, get_sum_local_op_expectation_value(rotated_rho, tn.Node(np.array([[1, 0], [0, -1]]).reshape([1, 4, 1])), 1, 0, N))
-    # squeezings[oi] = spin_squeezing
-    # J_x, J_y, J_z = jxs_no_phase[oi] / norm, jys_no_phase[oi] / norm, sigmas[oi] / norm
-    # spin_squeezing = 1
-    # for jx in np.array(range(-10, 11)) * 0.1:
-    #     for jy in np.array(range(-10, 11)) * 0.1:
-    #         print(jx, jy)
-    #         jz = (J_x * jx + J_y * jy) / J_z
-    #         norm = np.sqrt(jx**2 + jy**2 + jz**2)
-    #         jx, jy, jz = jx / norm, jy / norm, jz / norm
-    #         u = linalg.expm(1j * jx * X + jy * Y + jz * Z)
-    #         rotated_rho = [bops.permute(bops.contract(node, tn.Node(np.kron(u, u.T.conj())), '1', '0'), [0, 2, 1])
-    #                        for node in rho]
-    #         curr_squeezing = get_j_expect(rotated_rho, N, np.array([[0, 0], [1, 0]]), phase=0) - \
-    #                          get_sum_local_op_expectation_value(rotated_rho, tn.Node(np.array([[1, 0], [0, -1]]).reshape([1, 4, 1])), 1, 0, N)
-    #         if curr_squeezing < spin_squeezing:
-    #             spin_squeezing = curr_squeezing
-    # squeezings_no_phase[oi] = spin_squeezing
+    ti = tis[oi]
+    Omega = Omegas[oi]
+    print('--', normalized_omegas[oi])
+    [ti, psi_1_exp, hl_1_exp, hr_1_exp, runtimes_1_exp, tes_1_exp, JdJ_1_exp, sigmaz_1_exp] = \
+        pickle.load(open('results/tdvp/tst_1d/mid_state_' + model + '_N_30_Omega_' + str(normalized_omegas[oi]) + '_nn_1_ti_' + str(ti) + '_bond_' + str(bond) + '_1s_exp', 'rb'))
+    dt = 1e-2
+    # plt.plot(np.array(range(ti)) * dt, JdJ_1_exp[:ti])
+    # plt.plot(JdJ_1_exp[:ti])
+    # plt.title(r'$\Omega = $' + str(normalized_omegas[oi]))
+    # plt.ylabel(r'$\langle J^\dagger J \rangle$')
+    # plt.xlabel('t')
+    # plt.show()
+    jdjs[oi] += JdJ_1_exp[ti] / N**2
+
+    rho = hermitian_matrix(psi_1_exp)
+    jzs[oi] += get_sum_local_op_expectation_value(rho, tn.Node(Z.reshape([1, 4, 1])), 1, 5, N - 5)
+    jxs[oi] = get_sum_local_op_expectation_value(rho, tn.Node(X.reshape([1, 4, 1])), np.exp(-1j * k), 5, N - 5)
+    jxs_no_phase[oi] = get_sum_local_op_expectation_value(rho, tn.Node(X.reshape([1, 4, 1])), 1, 5, N - 5)
+    jys[oi] = get_sum_local_op_expectation_value(rho, tn.Node(Y.reshape([1, 4, 1])), np.exp(-1j * k), 5, N - 5)
+    jys_no_phase[oi] = get_sum_local_op_expectation_value(rho, tn.Node(Y.reshape([1, 4, 1])), 1, 5, N - 5)
+    swap = tn.Node(np.array([[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1]]))
+    purities[oi] += bops.getExpectationValue(psi_1_exp, [swap] * N)
+
+    # J = np.array([get_sum_local_op_expectation_value(rho, tn.Node(X.reshape([1, 4, 1])), 1, 5, N - 5),
+    #               get_sum_local_op_expectation_value(rho, tn.Node(Y.reshape([1, 4, 1])), 1, 5, N - 5),
+    #               jzs[oi]])
+    # n = J / np.sqrt(sum(J**2))
+    # theta = np.arccos(n[2])
+    # phi = np.arccos(n[0] / np.sin(theta))
+    # rotate = np.array([[np.cos(theta / 2), np.sin(theta / 2) * np.exp(-1j * phi)],
+    #                    [- np.sin(theta / 2) * np.exp(1j * phi), np.cos(theta / 2)]])
+    #
+    # sqr = get_j_expect(rho, N, np.matmul(rotate.conj().T, np.matmul(Z, rotate)), 0)
+    # sing = get_sum_local_op_expectation_value(rho,
+    #                                           tn.Node(np.matmul(rotate.conj().T, np.matmul(Z, rotate)).reshape(
+    #                                               [1, 4, 1])), 1, 0, N)
+    # xi = sqr - np.abs(sing) ** 2
+    # print(xi, sqr, sing)
+    #
+    # squeeze_min = 100
+    # n_perp_steps = 10
+    # for x in [si / n_perp_steps for si in range(n_perp_steps)]:
+    #     J_op = np.array([[0, x - 1j * np.sqrt(1 - x**2)], [x + 1j * np.sqrt(1 - x**2), 0]])
+    #     sqr = get_j_expect(rho, N, np.matmul(rotate.conj().T, np.matmul(J_op, rotate)), 0)
+    #     sing = get_sum_local_op_expectation_value(rho,
+    #             tn.Node(np.matmul(rotate.conj().T, np.matmul(J_op, rotate)).reshape([1, 4, 1])), 1, 0, N)
+    #     xi = (sqr - np.abs(sing)**2) / N
+    #     print(xi, sqr, sing)
+    #     if xi < squeeze_min:
+    #         squeeze_min = xi
+    # squeezings_no_phase[oi] = squeeze_min
+
 
 
 fig, ax = plt.subplots()
-ax.plot(normalized_omegas, sigmas / len(tis))
-ax.plot(normalized_omegas, jxs / len(tis))
-ax.plot(normalized_omegas, jys / len(tis))
-ax.plot(normalized_omegas, jxs_no_phase / len(tis))
-ax.plot(normalized_omegas, jys_no_phase / len(tis))
-ax.legend([r'$\sum_{n=5}^{N-5} \langle \sigma^z_i \rangle / (N-10)$', r'$\langle J_x \rangle$', r'$\langle J_y \rangle$',
-            r'$\langle J^\prime_x \rangle$ (no phase)', r'$\langle J^\prime_y \rangle$ (no phase)'], fontsize=16)
+ax.plot(normalized_omegas, jzs / len(tis) - jzs[0] / len(tis))
+ax.plot(normalized_omegas, jxs / len(tis) - jxs[0] / len(tis))
+ax.plot(normalized_omegas, jys / len(tis) - jys[0] / len(tis))
+ax.plot(normalized_omegas, jxs_no_phase / len(tis) - jxs_no_phase[0] / len(tis), '--')
+ax.plot(normalized_omegas, jys_no_phase / len(tis) - jys_no_phase[0] / len(tis), '--')
+ax.legend([r'$\sum_{n=5}^{N-5} \langle \sigma^z_i \rangle / (N-10) - $' + str(np.real(np.round(jzs[0] / len(tis), 2))),
+           r'$\langle J_x \rangle - $' + str(np.real(np.round(jxs[0] / len(tis), 2))),
+           r'$\langle J_y \rangle - $' + str(np.real(np.round(jys[0] / len(tis), 2))),
+           r'$\langle J^\prime_x \rangle$ (no phase) - ' + str(np.real(np.round(jxs_no_phase[0] / len(tis), 2))),
+           r'$\langle J^\prime_y \rangle$ (no phase) - ' + str(np.real(np.round(jys_no_phase[0] / len(tis), 2)))],
+          fontsize=16)
 ax.set_xlabel(r'$\Omega/\gamma_1d$', fontsize=16)
 ax.tick_params(axis="x", labelsize=16)
 ax.tick_params(axis="y", labelsize=16)
@@ -204,9 +199,7 @@ plt.show()
 
 fig, ax = plt.subplots()
 ax.plot(normalized_omegas, jdjs / len(tis))
-ax.plot(normalized_omegas, jdjs_tst / len(tis), '--')
-ax.plot(normalized_omegas, jdjs_no_phase / len(tis))
-plt.legend([r'$\langle J^\dagger J \rangle / N^2$', r'$\langle J^{\prime\dagger} J^\prime \rangle / N^2$'], fontsize=16)
+plt.legend([r'$\langle J^\dagger J \rangle / N^2$'], fontsize=16)
 ax.set_xlabel(r'$\Omega/\gamma_1d$', fontsize=16)
 ax.tick_params(axis="x", labelsize=16)
 ax.tick_params(axis="y", labelsize=16)
