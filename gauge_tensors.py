@@ -529,6 +529,10 @@ def get_boundaries(dirname, model, param_name, param, max_allowed_te=1e-10, sile
     if not silent: print('truncation error: ' + str(max_te) + ', bond dim: ' + str(bond_dim))
     [cUp, dUp, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>', maxBondDim=upRow.tensor.shape[0])
     [cDown, dDown, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>', maxBondDim=downRow.tensor.shape[0])
+    cUp.tensor = 0.5 * (cUp.tensor + cUp.tensor.transpose([2, 1, 0]))
+    dUp.tensor = 0.5 * (dUp.tensor + dUp.tensor.transpose([2, 1, 0]))
+    cDown.tensor = 0.5 * (cDown.tensor + cDown.tensor.transpose([2, 1, 0]))
+    dDown.tensor = 0.5 * (dDown.tensor + dDown.tensor.transpose([2, 1, 0]))
     return cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openA
 
 
@@ -557,7 +561,9 @@ def large_system_expectation_value(w, h, cUp, dUp, cDown, dDown, leftRow, rightR
             M = bops.contract(up_row[k], up_row[(k+1) % len(up_row)], '2', '0')
             l, s, r, te = bops.svdTruncation(M, [0, 1], [2, 3], '>*<', maxBondDim=chi)
             up_row[k], up_row[(k+1) % len(up_row)] = l, bops.contract(s, r, '1', '0')
-            if len(te) > 0 and np.max(te / np.max(s.tensor)) > 1e-8:
+            if len(te) > 0:
+                dbg = 1
+            if len(te) > 0 and np.max(te / np.max(s.tensor)) > 1e-3:
                 print(np.max(te) / np.max(s.tensor))
         dbg = 1
     curr = bops.permute(bops.contract(up_row[0], down_row[0], '1', '1'), [0, 2, 1, 3])
@@ -581,13 +587,21 @@ def large_system_block_entanglement(model, param, param_name, dirname, h, w, b_i
 
     ops = [[vert_projs[b_inds[0]]] +
            [horiz_projs[b_inds[wi]] for wi in range(1, w - 1)] +
-           [bops.contract(vert_projs[b_inds[w - 1]], horiz_projs[b_inds[w]], '0', '1')]]
+           [bops.contract(vert_projs[b_inds[w]], horiz_projs[b_inds[w - 1]], '0', '1')]]
     for hi in range(h - 3):
         ops += [[vert_projs[b_inds[w + 1 + hi * 2]]] + [I] * (w - 2) + [vert_projs[b_inds[w + 2 + hi * 2]]]]
     ops += [[I] + [corner_projs[corner_charge]] + [I] * (w - 2)]
     ops += [[I] * 2 + [horiz_projs[b_inds[wi]] for wi in range(w + 2 * h - 5, 2 * w + 2 * h - 7)]]
+
+    # ops = [ops[0][:]] + [[I] * w] * (h - 1)
+
     norm = large_system_expectation_value(
         w, h, cUp, dUp, cDown, dDown, leftRow, rightRow, openA, tau_projector, ops, chi=chi)
+
+    # single_node_norm = norm**(1 / (2 * w * h))
+    # openA.tensor /= single_node_norm
+    # new_norm = large_system_expectation_value(
+    #     w, h, cUp, dUp, cDown, dDown, leftRow, rightRow, openA, tau_projector, ops, chi=chi)
 
     tau_projector = tn.Node(np.kron(tau_projector.tensor, tau_projector.tensor))
     ops = [[tn.Node(np.kron(ops[hi][wi].tensor, ops[hi][wi].tensor)) for wi in range(w)] for hi in range(h)]
@@ -598,6 +612,7 @@ def large_system_block_entanglement(model, param, param_name, dirname, h, w, b_i
             ops[hi][wi] = bops.contract(ops[hi][wi], swap_op, '1', '0')
     p2 = large_system_expectation_value(
         w, h, cUp, dUp, cDown, dDown, leftRow, rightRow, openA, tau_projector, ops, chi=chi)
+    print(param, p2 / norm**2)
     return p2 / norm**2
 
 
@@ -720,14 +735,14 @@ for pi in range(len(params)):
 
 
 arbitrary_block_large_systems = np.zeros(len(params))
-for pi in range(10, len(params)):
+for pi in range(len(params)):
     param = params[pi]
     print(param)
     res_filename = 'results/gauge/' + model + '/arbtry_blk_large_system_' + model + '_' + param_name + '_' + str(param)
     if os.path.exists(res_filename):
         arbitrary_block_entanglement = pickle.load(open(res_filename, 'rb'))
     else:
-        arbitrary_block_entanglement = large_system_block_entanglement(model, params[pi], param_name, dir_name, 6, 6, [0, 0, 0, 0, 1, 0, 0] * 100, 0, chi=256)
+        arbitrary_block_entanglement = large_system_block_entanglement(model, params[pi], param_name, dir_name, 6, 6, [0, 1, 1] + [0] * 100, 0, chi=1024)
         pickle.dump(arbitrary_block_entanglement, open(res_filename, 'wb'))
     arbitrary_block_large_systems[pi] = arbitrary_block_entanglement
 
@@ -735,7 +750,7 @@ for pi in range(10, len(params)):
 import matplotlib.pyplot as plt
 plt.plot(params, wilson_results)
 plt.plot(params, zeros_large_systems - 1)
-# plt.plot(params[100:], arbitrary_block_large_systems[100:] - 1, '--')
+plt.plot(params, arbitrary_block_large_systems - 1, '--')
 plt.show()
 
 
