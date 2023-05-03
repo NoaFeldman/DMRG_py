@@ -547,6 +547,7 @@ def large_system_expectation_value(w, h, cUp, dUp, cDown, dDown, leftRow, rightR
     up_row = [p_c_up, p_d_up] * int((1 + cylinder_mult) * w / 2)
     down_row = [p_d_down, p_c_down] * int((1 + cylinder_mult) * w / 2)
     for hi in range(h):
+        dbg = 1
         mid_row = [tn.Node(bops.permute(bops.contract(open_tau, ops[hi][wi], '01', '01'), [0, 2, 3, 1]))
                    for wi in range(w)] + \
             [tn.Node(bops.permute(bops.contract(open_tau, tn.Node(np.eye(openA[0].dimension)), '01', '01'),
@@ -557,11 +558,14 @@ def large_system_expectation_value(w, h, cUp, dUp, cDown, dDown, leftRow, rightR
                 [up_row[wi][0].dimension * mid_row[wi][2].dimension,
                  mid_row[wi][1].dimension,
                  up_row[wi][2].dimension * mid_row[wi][3].dimension]))
+        up_max_te = 0
         for k in range(len(up_row)):
             M = bops.contract(up_row[k], up_row[(k+1) % len(up_row)], '2', '0')
             l, s, r, te = bops.svdTruncation(M, [0, 1], [2, 3], '>*<', maxBondDim=chi)
             up_row[k], up_row[(k+1) % len(up_row)] = l, bops.contract(s, r, '1', '0')
             if len(te) > 0:
+                curr_te = np.abs(np.sum(te) / np.sum(np.diag(s.tensor)))
+                if curr_te > up_max_te: up_max_te = curr_te
                 dbg = 1
             if len(te) > 0 and np.max(te / np.max(s.tensor)) > 1e-3:
                 print(np.max(te) / np.max(s.tensor))
@@ -580,9 +584,9 @@ def large_system_block_entanglement(model, param, param_name, dirname, h, w, b_i
     for Di in range(D):
         tau_projector.tensor[Di, Di * (D + 1)] = 1
 
-    horiz_projs = [tn.Node(np.diag([1, 1, 0, 0])), tn.Node(np.diag([0, 0, 1, 1]))]
-    vert_projs = [tn.Node(np.diag([1, 0, 1, 0])), tn.Node(np.diag([0, 1, 0, 1]))]
-    corner_projs = [tn.Node(np.diag([1, 0, 0, 1])), tn.Node(np.diag([0, 1, 1, 0]))]
+    horiz_projs = [tn.Node(np.diag([1, 1, 0, 0])), tn.Node(np.diag([0, 0, 1, 1])), tn.Node(np.eye(4))]
+    vert_projs = [tn.Node(np.diag([1, 0, 1, 0])), tn.Node(np.diag([0, 1, 0, 1])),  tn.Node(np.eye(4))]
+    corner_projs = [tn.Node(np.diag([1, 0, 0, 1])), tn.Node(np.diag([0, 1, 1, 0])),  tn.Node(np.eye(4))]
     I = tn.Node(np.eye(openA[0].dimension))
 
     ops = [[vert_projs[b_inds[0]]] +
@@ -688,10 +692,10 @@ elif model == 'vary_ad':
     model = model + '_' + str(beta) + '_' + str(gamma)
 elif model == 'vary_gamma':
     param_name = 'gamma'
-    params = [np.round(0.001 * a, 3) for a in range(100)] \
+    params = [np.round(0.001 * a, 3) for a in range(30)] \
              + [np.round(0.2 * a, 8) for a in range(5)] \
-             + [np.round(1 + 0.001 * a, 8) for a in range(-100, -30)] \
-             + [np.round(1 + 0.001 * a, 8) for a in range(31, 100)]
+             + [np.round(1 + 0.001 * a, 8) for a in range(-100, -80)] \
+             + [np.round(1 + 0.001 * a, 8) for a in range(40, 50)]
     params.sort()
     alpha = float(sys.argv[4])
     beta = float(sys.argv[5])
@@ -710,7 +714,7 @@ corner_charges = [0, 1]
 
 
 wilson_results = np.zeros(len(params))
-for pi in range(len(params)):
+for pi in range(1): #len(params)):
     param = params[pi]
     print(param)
     wilson_filename = 'results/gauge/' + model + '/wilson_' + model + '_' + param_name + '_' + str(param)
@@ -724,114 +728,45 @@ for pi in range(len(params)):
 zeros_large_systems = np.zeros(len(params))
 for pi in range(len(params)):
     param = params[pi]
-    print(param)
     res_filename = 'results/gauge/' + model + '/zero_large_system_' + model + '_' + param_name + '_' + str(param)
     if os.path.exists(res_filename):
         zero_entanglement = pickle.load(open(res_filename, 'rb'))
     else:
-        zero_entanglement = large_system_block_entanglement(model, params[pi], param_name, dir_name, 6, 6, [0] * 100, 0, chi=256)
+        zero_entanglement = large_system_block_entanglement(model, params[pi], param_name, dir_name, 4, 4, [0] * 100, 0, chi=2048)
         pickle.dump(zero_entanglement, open(res_filename, 'wb'))
     zeros_large_systems[pi] = zero_entanglement
-
+    print(param, zero_entanglement, '0 block')
 
 arbitrary_block_large_systems = np.zeros(len(params))
 for pi in range(len(params)):
     param = params[pi]
-    print(param)
     res_filename = 'results/gauge/' + model + '/arbtry_blk_large_system_' + model + '_' + param_name + '_' + str(param)
     if os.path.exists(res_filename):
         arbitrary_block_entanglement = pickle.load(open(res_filename, 'rb'))
     else:
-        arbitrary_block_entanglement = large_system_block_entanglement(model, params[pi], param_name, dir_name, 6, 6, [0, 1, 1] + [0] * 100, 0, chi=1024)
+        arbitrary_block_entanglement = large_system_block_entanglement(model, params[pi], param_name, dir_name, 4, 4, [0, 1, 1] + [0] * 100, 0, chi=2048)
         pickle.dump(arbitrary_block_entanglement, open(res_filename, 'wb'))
     arbitrary_block_large_systems[pi] = arbitrary_block_entanglement
+#    print(param, arbitrary_block_entanglement)
+
+
+
+full_purity_large_systems = np.zeros(len(params))
+for pi in range(len(params)):
+    param = params[pi]
+    res_filename = 'results/gauge/' + model + '/full_p2_large_system_' + model + '_' + param_name + '_' + str(param)
+    if os.path.exists(res_filename):
+        full_p2 = pickle.load(open(res_filename, 'rb'))
+    else:
+        full_p2 = large_system_block_entanglement(model, params[pi], param_name, dir_name, 4, 4, [-1] * 100, 0, chi=1024)
+        pickle.dump(full_p2, open(res_filename, 'wb'))
+    full_purity_large_systems[pi] = full_p2
+    print(param, full_p2, 'full p2')
 
 
 import matplotlib.pyplot as plt
 plt.plot(params, wilson_results)
 plt.plot(params, zeros_large_systems - 1)
-plt.plot(params, arbitrary_block_large_systems - 1, '--')
+plt.plot(params, full_p2 - 1, '--')
+# plt.plot(params, arbitrary_block_large_systems - 1, '--')
 plt.show()
-
-
-purity_filename = 'results/gauge/' + model + '/purities_w_' + str(ns[0]) + '_cnum_' + str(
-    corner_nums[0]) + '_gapl_' + str(gap_ls[0]) + '_h_' + str(h)
-full_purities_results = np.zeros((len(params), len(corner_nums), len(ns), len(gap_ls)))
-full_purities_results_0 = np.zeros((len(params), len(corner_nums), len(ns), len(gap_ls)))
-full_purities_results_1 = np.zeros((len(params), len(corner_nums), len(ns), len(gap_ls)))
-full_purities_results_pbc = np.zeros(len(params))
-for pi in range(len(params)):
-    param = params[pi]
-    filename = boundary_filname(dir_name, model, param_name, param)
-    purity_pbc_filename = purity_filename + '_' + param_name + '_' + str(param) + '_pbc'
-    if not os.path.exists(purity_pbc_filename):
-        print(param)
-        pickle.dump(get_full_purity(boundary_filname(dir_name, model, param_name, param),
-                                    h=2, n=4, corner_num=1, gap_l=4, PBC=True, period_num=1), open(purity_pbc_filename, 'wb'))
-    full_purities_results_pbc[pi] = pickle.load(open(purity_pbc_filename, 'rb'))
-    for ni in range(len(ns)):
-        n = ns[ni]
-        for gi in range(len(gap_ls)):
-            gap_l = gap_ls[gi]
-            for ci in range(len(corner_charges)):
-                c = corner_charges[ci]
-                for cni in range(len(corner_nums)):
-                    corner_num = corner_nums[cni]
-                    curr_file_name = purity_filename + '_' + param_name + '_' + str(param) + '_n_' + str(
-                        n) + '_cnum_' + str(corner_num) + '_gap_l_' + str(gap_l)
-                    if not os.path.exists(curr_file_name):
-                        pickle.dump(get_full_purity(boundary_filname(dir_name, model, param_name, param), h, ns[0],
-                                                    corner_num=corner_nums[0], gap_l=gap_ls[0]),
-                                    open(curr_file_name, 'wb'))
-                    full_purities_results[pi, cni, ni, gi] = pickle.load(open(curr_file_name, 'rb'))
-
-classical_purity_results = np.zeros(len(params))
-full_purity_results_small = np.zeros(len(params))
-for pi in range(len(params)):
-    param = params[pi]
-    print(param)
-    filename = boundary_filname(dir_name, model, param_name, param)
-    n = 2
-    corner_num = 1
-    gap_l = 2
-    res_filename = 'results/gauge/' + model + '/block_division_' + param_name + '_' + str(param) + '_n_' + str(
-        n) + '_cnum_' + str(corner_num) + '_gap_' + str(gap_l)
-    if not os.path.exists(res_filename):
-        print(res_filename)
-        pickle.dump(
-            block_division_contribution(boundary_filname(dir_name, model, param_name, param), h, n, corner_num, gap_l),
-            open(res_filename, 'wb'))
-    classical_purity_results[pi] = pickle.load(open(res_filename, 'rb'))
-    purity_filename = 'results/gauge/' + model + '/full_purity_' + param_name + '_' + str(param) + '_n_' + str(
-        n) + '_cnum_' + str(corner_num) + '_gap_' + str(gap_l)
-    if not os.path.exists(purity_filename):
-        pickle.dump(get_full_purity(boundary_filname(dir_name, model, param_name, param), h, n, corner_num=corner_num, gap_l=gap_l),
-                    open(purity_filename, 'wb'))
-    full_purity_results_small[pi] = pickle.load(open(purity_filename, 'rb'))
-
-
-import matplotlib.pyplot as plt
-
-def plot_full_purity(phase_separator=None):
-    plt.plot(params, full_purities_results[:, 0, 0, 0])
-    plt.plot(params, full_purity_results_small)
-    plt.plot(params, classical_purity_results, '--')
-    plt.plot(params, full_purities_results_pbc)
-    # plt.plot(params, full_purities_results_0[:, 0, 0, 0])
-    # plt.plot(params, full_purities_results_1[:, 0, 0, 0], '--')
-    plt.legend([r'full $p_2$', r'full $p_2$ - 2*2 system', r'Classical purity - 2 * 2 system, $\sum_{\vec{q}} p^2(\vec{q})$', r'PBC $p_2$'])
-    if phase_separator is not None:
-        plt.vlines(phase_separator, '--c')
-    plt.xlabel(param_name)
-    plt.show()
-
-viz_pallette = [ "#0000ff", "#9d02d7", "#cd34b5", "#ea5f94", "#fa8775", "#ffb14e", "#ffd700"]
-plt.plot(params, wilson_results)
-plt.xlabel(param_name)
-plt.legend([r'$\chi^2$ area', r'$\chi^2$ perimeter'])
-plt.title('Confined / deconfined phase')
-plt.show()
-
-plot_full_purity()
-# plot_tau_eigvals()
-dbg = 1
