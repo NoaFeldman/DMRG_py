@@ -109,53 +109,17 @@ def tn_dm_to_matrix(rho):
         transpose([i * 2 for i in range(len(rho))] + [i * 2 + 1 for i in range(len(rho))]).reshape([d**N, d**N])
 
 
-# https://math.stackexchange.com/questions/1428566/fit-sum-of-exponentials
-def fit_exponential(y):
-    y = np.array(y)
-    S = np.zeros(len(y), dtype=complex)
-    SS = np.zeros(len(y), dtype=complex)
-    for k in range(1, len(y)):
-        S[k] = S[k - 1] + 0.5 * (y[k] + y[k - 1])
-        SS[k] = SS[k - 1] + 0.5 * (S[k] + S[k - 1])
-    x = np.array(range(len(y))) + 1
-    rhs_vec = np.array([np.sum(SS * y),
-                        np.sum(S * y),
-                        np.sum(x**2 * y),
-                        np.sum(x * y),
-                        np.sum(y)])
-    rhs_mat = np.linalg.inv(
-        np.array([[np.sum(SS**2), np.sum(SS*S), np.sum(SS * x**2), np.sum(SS*x), np.sum(SS)],
-                        [np.sum(SS*S), np.sum(S**2), np.sum(S * x**2), np.sum(S * x), np.sum(S)],
-                        [np.sum(SS * x**2), np.sum(S * x**2), np.sum(x**4), np.sum(x**3), np.sum(x**2)],
-                        [np.sum(SS * x), np.sum(S * x), np.sum(x**3), np.sum(x**2), np.sum(x)],
-                        [np.sum(SS), np.sum(S), np.sum(x**2), np.sum(x), len(y)]]))
-    A_to_E = np.matmul(rhs_mat, rhs_vec)
-    p = 0.5 * (A_to_E[1] + np.sqrt(A_to_E[1]**2 + 4 * A_to_E[0]))
-    q = 0.5 * (A_to_E[1] - np.sqrt(A_to_E[1]**2 + 4 * A_to_E[0]))
-    betas = np.exp(x * p)
-    etas = np.exp(x * q)
-    rhs_vec = np.array([np.sum(y), np.sum(betas * y), np.sum(etas * y)])
-    rhs_mat = np.linalg.inv(
-        np.array([[len(y), np.sum(betas), np.sum(etas)],
-                  [np.sum(betas), np.sum(betas**2), np.sum(betas * etas)],
-                  [np.sum(etas), np.sum(betas * etas), np.sum(etas**2)]]))
-    a_b_c = np.matmul(rhs_mat, rhs_vec)
-    return a_b_c[0], a_b_c[1], a_b_c[2], p, q
-
-
 def get_single_L_term(Omega, Gamma, sigma, is_single, gamma_1d=0):
     result = -1j * (np.kron(np.eye(d), np.conj(Omega) * sigma + Omega * sigma.T) -
                       np.kron(Omega * sigma + np.conj(Omega) * sigma.T, np.eye(d)))
     single_dissipation = Gamma if is_single else gamma_1d
     result += single_dissipation * np.kron(sigma, sigma) \
-        - (single_dissipation / 2) * (np.kron(np.eye(d), np.matmul(sigma.T, sigma).T) +
-                         np.kron(np.matmul(sigma.T, sigma), np.eye(d)))
+        - (single_dissipation / 2) * (np.kron(np.eye(d), np.matmul(sigma.T, sigma)) +
+                         np.kron(np.matmul(sigma.T, sigma).T, np.eye(d)))
     return result
 
-def get_photon_green_L_exp(n, Omega, Gamma, k, theta, sigma, is_Delta=True, is_chiral=False, is_single=True, is_same_site=False, with_a=False):
+def get_photon_green_L_exp(n, Omega, Gamma, gamma_1d, k, theta, sigma, is_Delta=True, is_chiral=False, is_single=True, is_same_site=False, with_a=False):
     d = 2
-    mu = 3 / (2 * k * n)
-    gamma_1d = mu * Gamma
     if is_same_site:
         phase = 1
     else:
@@ -219,16 +183,11 @@ def get_photon_green_L_exp(n, Omega, Gamma, k, theta, sigma, is_Delta=True, is_c
 
 
 
-def get_density_matrix_from_mps(psi, N):
-    return bops.getExplicitVec(psi, d=4).reshape([2] * 2 * N).\
-        transpose([2 * i for i in range(N)] + [2 * i + 1 for i in range(N)]).reshape([2**N, 2**N])
-
-
-def filenames(newdir, case, N, Omega, nn_num, ti, bond_dim):
+def filenames(newdir, case, N, Omega, ti, bond_dim):
     state_filename = newdir + '/mid_state_' + case + '_N_' + str(N) \
-        + '_Omega_' + str(Omega) + '_nn_' + str(nn_num) + '_ti_' + str(ti) + '_bond_' + str(bond_dim)
+        + '_Omega_' + str(Omega) + '_ti_' + str(ti) + '_bond_' + str(bond_dim)
     data_filename = newdir + '/tdvp_N_' + str(N) \
-                      + '_Omega_' + str(Omega) + '_nn_' + str(nn_num) + '_bond_' + str(bond_dim)
+                      + '_Omega_' + str(Omega) + '_bond_' + str(bond_dim)
     return state_filename, data_filename
 
 
@@ -274,20 +233,19 @@ Z = np.diag([1, -1])
 N = int(sys.argv[1])
 k = 2 * np.pi / 10
 theta = 0
-nn_num = int(sys.argv[2])
-case = sys.argv[4]
+case = sys.argv[3]
 mu = 3 / (2 * k * N)
-gamma_1d = Gamma * mu
-Omega = float(sys.argv[3])
-outdir = sys.argv[5]
-timesteps = int(sys.argv[6])
+gamma_1d = 10 # Gamma * mu
+Omega = float(sys.argv[2])
+outdir = sys.argv[4]
+timesteps = int(sys.argv[5])
 dt = 1e-2
 save_each = 30
-results_to = sys.argv[7]
-bond_dim = int(sys.argv[8])
+results_to = sys.argv[6]
+bond_dim = int(sys.argv[7])
 
-newdir = outdir + '/' + case + '_N_' + str(N) + '_Omega_' + str(Omega) + '_nn_' + str(nn_num) + '_bd_' + str(bond_dim)
-Omega *= gamma_1d
+newdir = outdir + '/' + case + '_N_' + str(N) + '_Omega_' + str(Omega) + '_nn_' + '_bd_' + str(bond_dim)
+Omega *= Gamma
 try:
     os.mkdir(newdir)
 except FileExistsError:
@@ -298,12 +256,15 @@ if results_to == 'plot':
 
 
 if case == 'kernel_1d':
-    L_exp = get_photon_green_L_exp(N, Omega, Gamma, k, theta, sigma, is_Delta=True, is_single=True, is_chiral=False, is_same_site=False)
+    L_exp = get_photon_green_L_exp(N, Omega, Gamma, gamma_1d, k, theta, sigma, is_Delta=True, is_single=True, is_chiral=False, is_same_site=False)
 elif case == 'Dicke_phase':
-    L_exp = get_photon_green_L_exp(N, Omega, Gamma, k, theta, sigma, is_Delta=False, is_single=False, is_chiral=True, is_same_site=False)
+    L_exp = get_photon_green_L_exp(N, Omega, Gamma, gamma_1d, k, theta, sigma, is_Delta=False, is_single=False, is_chiral=True, is_same_site=False)
 elif case == 'Dicke_single':
-    L_exp = get_photon_green_L_exp(N, Omega, Gamma, k, theta, sigma, is_Delta=False, is_single=True, is_chiral=True, is_same_site=False)
-psi = [tn.Node(np.array([np.sin(Omega * np.pi / 2), 0, 0, np.cos(Omega * np.pi / 2)]).reshape([1, d**2, 1])) for n in range(N)]
+    L_exp = get_photon_green_L_exp(N, Omega, Gamma, gamma_1d, k, theta, sigma, is_Delta=False, is_single=True, is_chiral=True, is_same_site=False)
+elif case == 'Dicke_single_tst':
+    L_exp = get_photon_green_L_exp(N, Omega, Gamma, gamma_1d, k, theta, sigma, is_Delta=False, is_single=True, is_chiral=False, is_same_site=True)
+
+psi = [tn.Node(np.array([0, 0, 0, 1]).reshape([1, d**2, 1])) for n in range(N)]
 
 
 if N <= 6:
@@ -359,8 +320,8 @@ JdJ_1_exp = np.zeros(timesteps, dtype=complex)
 
 sigmaz_1_exp = np.zeros(timesteps)
 
-if len(sys.argv) == 10:
-    filename = sys.argv[9]
+if len(sys.argv) == 9:
+    filename = sys.argv[8]
     data = pickle.load(open(filename, 'rb'))
     [ti, psi_1_exp, hl_1_exp, hr_1_exp] = data[:4]
 
@@ -369,36 +330,39 @@ for file in os.listdir(newdir):
     if file[-7:] == '_1s_exp':
         ti = int(file.split('_')[file.split('_').index('ti') + 1])
         if ti + 1 > initial_ti:
-            initial_ti = ti + 1
-            data = pickle.load(open(newdir + '/' + file, 'rb'))
-            [ti, psi_1_exp, hl_1_exp, hr_1_exp] = data[:4]
-            runtimes_1_exp[:len(data[4])] = data[4]
-            if len(data) > 5: tes_1_exp[:len(data[5])] = data[5]
-            if len(data) >= 8:
-                JdJ_1_exp[:ti] = data[6][:ti]
-                sigmaz_1_exp[:ti] = data[7][:ti]
+            try:
+                data = pickle.load(open(newdir + '/' + file, 'rb'))
+                initial_ti = ti + 1
+                [ti, psi_1_exp, hl_1_exp, hr_1_exp] = data[:4]
+                runtimes_1_exp[:len(data[4])] = data[4]
+                if len(data) > 5: tes_1_exp[:len(data[5])] = data[5]
+                if len(data) >= 8:
+                    JdJ_1_exp[:ti] = data[6][:ti]
+                    sigmaz_1_exp[:ti] = data[7][:ti]
+            except Exception:
+                continue
 
-curr_bond_dim = 4 * 2**(int(initial_ti / 400))
+curr_bond_dim = 8 * 2**(int(initial_ti / 100))
 for ti in range(initial_ti, timesteps):
     print('---')
     print(ti)
-    if ti % 400 == 0 and curr_bond_dim < bond_dim:
+    if ti % 100 == 0 and curr_bond_dim < bond_dim:
         curr_bond_dim *= 2
     if ti > 0 and ti % save_each != 1:
         tstart = time.time()
         tf = time.time()
         runtimes_2_exp[ti] = tf - tstart
 
-        old_state_filename, old_data_filename = filenames(newdir, case, N, Omega, nn_num, ti - 1, bond_dim)
+        old_state_filename, old_data_filename = filenames(newdir, case, N, Omega, ti - 1, bond_dim)
         os.remove(old_state_filename + '_1s_exp')
     tstart = time.time()
-    tes_1_exp[ti] = tdvp.tdvp_sweep(psi_1_exp, L_exp, hl_1_exp, hr_1_exp, dt / 2, max_bond_dim=curr_bond_dim, num_of_sites=2)
-    JdJ_1_exp[ti] = get_j_expect(psi_1_exp, N, sigma)
+    tes_1_exp[ti] = tdvp.tdvp_sweep(psi_1_exp, L_exp, hl_1_exp, hr_1_exp, dt / 2, max_bond_dim=curr_bond_dim, num_of_sites=1)
+    # JdJ_1_exp[ti] = get_j_expect(psi_1_exp, N, sigma)
     sigmaz_1_exp[ti] = get_sigma_z_expect(psi_1_exp, N)
     tf = time.time()
     runtimes_1_exp[ti] = tf - tstart
     print('times = ' + str([runtimes_2_exp[ti], runtimes_1_exp[ti]]) + ', te = ' + str(tes_1_exp[ti]))
-    state_filename, data_filename = filenames(newdir, case, N, Omega, nn_num, ti, bond_dim)
+    state_filename, data_filename = filenames(newdir, case, N, Omega, ti, bond_dim)
     with open(state_filename + '_1s_exp', 'wb') as f:
         pickle.dump([ti, psi_1_exp, hl_1_exp, hr_1_exp, runtimes_1_exp, tes_1_exp, JdJ_1_exp, sigmaz_1_exp], f)
 
