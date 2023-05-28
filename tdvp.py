@@ -48,7 +48,7 @@ def arnoldi(HL, HR, H, psi, k, num_of_sites=2, max_h_size=50, C=None):
 
 
 def arnoldi_np(HL, HR, H, psi, k, num_of_sites=2, max_h_size=50, C=None):
-    accuracy = 1e-12
+    accuracy = 1e-6
     result = np.zeros((max_h_size, max_h_size), dtype=complex)
     if num_of_sites == 2:
         v = np.tensordot(psi[k].tensor, psi[k+1].tensor, ([2], [0]))
@@ -66,13 +66,17 @@ def arnoldi_np(HL, HR, H, psi, k, num_of_sites=2, max_h_size=50, C=None):
             result[ri, j] = tensor_overlap_np(basis[ri], v)
             v = v - result[ri, j] * basis[ri]
         result[j + 1, j] = np.sqrt(tensor_overlap_np(v, v))
-        if result[j + 1, j] < accuracy or \
-                np.any([int(np.abs(tensor_overlap_np(basis[bi], v) /
-                                   tensor_overlap_np(v, v)) > accuracy)
-                        for bi in range(len(basis))]):
+        v /= np.sqrt(tensor_overlap_np(v, v))
+        if result[j + 1, j] < accuracy:
             size = j + 1
             break
-        basis.append(np.copy(v) / result[j + 1, j])
+        if np.any([int(np.abs(tensor_overlap_np(basis[bi], v) / tensor_overlap_np(v, v)) > accuracy)
+                   for bi in range(len(basis))]):
+            for ri in range(j + 1):
+                result[ri, j] = tensor_overlap_np(basis[ri], v)
+                v = v - result[ri, j] * basis[ri]
+            dbg = 1
+        basis.append(np.copy(v) / np.sqrt(tensor_overlap_np(v, v)))
     return result[:size, :size], basis
 
 
@@ -227,6 +231,12 @@ def tdvp_step_np(psi: List[tn.Node], H: List[tn.Node], k: int, HL: List[tn.Node]
         M = psi[k].tensor
     M = apply_op_np(T, basis, M, dt)
 
+    # mat = bops.contract(bops.contract(bops.contract(HL[k], H[k], '1', '2'), H[k+1], '4', '2'), HR[k+1], '6', '1').tensor\
+    #     .transpose([0, 2, 4, 6, 1, 3, 5, 7]).reshape([HL[k][0].dimension * 4**2 * HR[k+1][0].dimension] * 2)
+    # exp_mat = linalg.expm(dt * mat).reshape(list(M.shape) + list(M.shape))
+    # M = np.tensordot(M, exp_mat, ([0, 1, 2, 3], [0, 1, 2, 3]))
+
+
     if dir == '>>':
         if num_of_sites == 2:
             [A, M, te] = bops.svdTruncation_np(M, [0, 1], [2, 3], '>>', maxBondDim=max_bond_dim)
@@ -274,6 +284,8 @@ def tdvp_step_np(psi: List[tn.Node], H: List[tn.Node], k: int, HL: List[tn.Node]
             psi[k - 1] = tn.Node(np.tensordot(psi[k - 1].tensor, C, ([2], [0])))
     if is_density_matrix:
         bops.normalize_mps_of_dm(psi)
+    if len(te) > 0:
+        dbg = 1
     return te
 
 
