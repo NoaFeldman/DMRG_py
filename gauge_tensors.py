@@ -52,6 +52,9 @@ def square_wilson_loop_expectation_value(cUp: tn.Node, dUp: tn.Node, cDown: tn.N
             [[tn.Node(np.kron(X, X))] + [tn.Node(np.kron(I, X))] * (L - 2) + [tn.Node(np.kron(X, I))]], chi=chi)
     norm = large_system_expectation_value(L, L, cUp, dUp, cDown, dDown, leftRow, rightRow, openA, tau_projector,
                                           [[tn.Node(np.eye(openA[0].dimension))] * L] * L, chi=chi)
+    if norm == 0:
+        large_system_expectation_value(L, L, cUp, dUp, cDown, dDown, leftRow, rightRow, openA, tau_projector,
+                                       [[tn.Node(np.eye(openA[0].dimension))] * L] * L, chi=chi)
     print(L, wilson, norm, wilson / norm)
     return wilson / norm
 
@@ -217,15 +220,18 @@ def toric_tensors_lgt_approach(model, param, d=2):
         tensor[0, 1, 0, 1, 0, 1] = gamma
         tensor[1, 0, 1, 0, 1, 0] = gamma
         tensor[1, 1, 1, 1, 1, 1] = delta
-    elif model == 'toric_c_mockup':
-        tensor[0, 1, 0, 1, :, :] *= param ** 0.5
-        tensor[1, 0, 1, 0, :, :] *= param ** 0.5
-        tensor[1, 1, 0, 0, :, :] *= param ** 0.5
-        tensor[0, 0, 1, 1, :, :] *= param ** 0.5
-        tensor[1, 0, 0, 1, :, :] *= param ** 0.5
-        tensor[0, 1, 1, 0, :, :] *= param ** 0.5
-        tensor[1, 1, 1, 1, :, :] *= param
     elif model == 'toric_c':
+        tensor = np.zeros([2] * 6, dtype=complex)
+        tensor[0, 0, 0, 0, 0, 0] = 1
+        tensor[0, 0, 0, 1, 1, 0] = param**0.25
+        tensor[0, 0, 1, 0, 0, 1] = param**0.25
+        tensor[0, 0, 1, 1, 1, 1] = param**0.5
+        tensor[1, 1, 0, 0, 1, 1] = param**0.5
+        tensor[1, 1, 0, 1, 0, 1] = param**0.75
+        tensor[1, 1, 1, 0, 1, 0] = param**0.75
+        tensor[1, 1, 1, 1, 0, 0] = param
+        tensor /= param
+    elif model == 'toric_c_constructed':
         tensor = np.zeros([2] * 10, dtype=complex)
         tensor[0, 0, 0, 0, 0, 0, 0, 0, 0, 0] = 1
         A = tn.Node(tensor)
@@ -536,6 +542,31 @@ def get_boundaries(dirname, model, param_name, param, max_allowed_te=1e-10, sile
     return cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openA
 
 
+def to_cannonical(psi, PBC=True):
+    if PBC:
+        N = len(psi)
+        working_psi = [tn.Node(bops.contract(psi[0], psi[-1], '0', '2').tensor.transpose([0, 3, 1, 2])
+                       .reshape([1, psi[0][1].dimension**2, psi[0][2].dimension * psi[-1][0].dimension]))] + \
+                      [tn.Node(np.kron(psi[i].tensor, psi[-1-i].tensor.transpose([2, 1, 0]))) for i in range(1, N//2 - 1)] + \
+                      [tn.Node(bops.contract(psi[N//2 - 1], psi[N//2], '2', '0').tensor.transpose([0, 3, 1, 2])
+                       .reshape([psi[N//2 - 1][0].dimension * psi[N//2][2].dimension, psi[0][1].dimension**2, 1]))]
+    else:
+        working_psi = psi
+    # for i in range(len(working_psi) - 1):
+    #     working_psi[i], working_psi[i+1], te = \
+    #         bops.svdTruncation(bops.contract(working_psi[i], working_psi[i+1], '2', '0'), [0, 1], [2, 3], '>>')
+    return working_psi
+
+
+def fold_mpo(mpo):
+    N = len(mpo)
+    return [tn.Node(bops.contract(mpo[0], mpo[-1], '2', '3').tensor.transpose([0, 3, 1, 4, 2, 5])
+                    .reshape([mpo[0][0].dimension**2] * 2 + [1, mpo[0][3].dimension * mpo[-1][2].dimension]))] + \
+           [tn.Node(np.kron(mpo[i].tensor, mpo[-1-i].tensor.transpose([0, 1, 3, 2]))) for i in range(1, N//2 - 1)] + \
+           [tn.Node(bops.contract(mpo[N//2 - 1], mpo[N//2], '3', '2').tensor.transpose([0, 3, 1, 4, 2, 5])
+                    .reshape([mpo[0][0].dimension**2] * 2 + [mpo[N//2 - 1][2].dimension * mpo[N//2][3].dimension, 1]))]
+
+
 def large_system_expectation_value(w, h, cUp, dUp, cDown, dDown, leftRow, rightRow, openA, tau_projector, ops, chi=128):
     open_tau = bops.contract(bops.contract(bops.contract(bops.contract(
         openA, tau_projector, '1', '1'), tau_projector, '1', '1'), tau_projector, '1', '1'), tau_projector, '1', '1')
@@ -545,13 +576,16 @@ def large_system_expectation_value(w, h, cUp, dUp, cDown, dDown, leftRow, rightR
     p_d_down = bops.permute(bops.contract(dDown, tau_projector, '1', '1'), [1, 2, 0])
     cylinder_mult = 1
     up_row = [p_c_up, p_d_up] * int((1 + cylinder_mult) * w / 2)
+    up_row = to_cannonical(up_row, PBC=True)
     down_row = [p_d_down, p_c_down] * int((1 + cylinder_mult) * w / 2)
+    down_row = to_cannonical(down_row, PBC=True)
     for hi in range(h):
         dbg = 1
         mid_row = [tn.Node(bops.permute(bops.contract(open_tau, ops[hi][wi], '01', '01'), [0, 2, 3, 1]))
                    for wi in range(w)] + \
             [tn.Node(bops.permute(bops.contract(open_tau, tn.Node(np.eye(openA[0].dimension)), '01', '01'),
-                                  [0, 2, 1, 3]))] * w * cylinder_mult
+                                  [0, 2, 3, 1]))] * w * cylinder_mult
+        mid_row = fold_mpo(mid_row)
         for wi in range(len(up_row)):
             up_row[wi] = tn.Node(bops.contract(up_row[wi], mid_row[wi], '1', '0').tensor.\
                 transpose([0, 3, 2, 1, 4]).reshape(
@@ -559,30 +593,36 @@ def large_system_expectation_value(w, h, cUp, dUp, cDown, dDown, leftRow, rightR
                  mid_row[wi][1].dimension,
                  up_row[wi][2].dimension * mid_row[wi][3].dimension]))
         up_max_te = 0
-        for k in range(len(up_row)):
+        for k in range(len(up_row) - 2, -1, -1):
             M = bops.contract(up_row[k], up_row[(k+1) % len(up_row)], '2', '0')
             l, s, r, te = bops.svdTruncation(M, [0, 1], [2, 3], '>*<', maxBondDim=chi)
-            up_row[k], up_row[(k+1) % len(up_row)] = l, bops.contract(s, r, '1', '0')
-            if len(te) > 0:
-                curr_te = np.abs(np.sum(te) / np.sum(np.diag(s.tensor)))
-                if curr_te > up_max_te: up_max_te = curr_te
-                dbg = 1
+            up_row[k], up_row[(k+1) % len(up_row)] = bops.contract(l, s, '2', '0'), r
             if len(te) > 0 and np.max(te / np.max(s.tensor)) > 1e-3:
                 print(np.max(te) / np.max(s.tensor))
+            if sum(np.diag(s.tensor)) < 1e-8:
+                dbg = 1
+                bops.svdTruncation(M, [0, 1], [2, 3], '>*<', maxBondDim=chi)
+        for k in range(len(up_row) - 1):
+            up_row = bops.shiftWorkingSite(up_row, k, '>>')
         dbg = 1
-    curr = bops.permute(bops.contract(up_row[0], down_row[0], '1', '1'), [0, 2, 1, 3])
-    for wi in range(1, len(up_row) - 1):
-        curr = bops.contract(bops.contract(curr, up_row[wi], '2', '0'), down_row[wi], '23', '01')
-    return bops.contract(bops.contract(curr, up_row[-1], '02', '20'), down_row[-1], '012', '201').tensor * 1
+    curr = bops.contract(up_row[0], down_row[0], '01', '01')
+    for i in range(1, len(up_row)):
+        curr = bops.contract(bops.contract(curr, up_row[i], '0', '0'), down_row[i], '01', '01')
+    return curr.tensor[0, 0]
+    # curr = bops.permute(bops.contract(up_row[0], down_row[0], '1', '1'), [0, 2, 1, 3])
+    # for wi in range(1, len(up_row) - 1):
+    #     curr = bops.contract(bops.contract(curr, up_row[wi], '2', '0'), down_row[wi], '23', '01')
+    # return bops.contract(bops.contract(curr, up_row[-1], '02', '20'), down_row[-1], '012', '201').tensor * 1
 
 
-def large_system_block_entanglement(model, param, param_name, dirname, h, w, b_inds, corner_charge, chi=128):
+def large_system_block_entanglement(model, param, param_name, dirname, h, w, b_inds, corner_charge, tau_projector=None, chi=128):
     [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB] = \
         get_boundaries(dir_name, model, param_name, param, silent=True)
     D = int(np.sqrt(openA[1].dimension))
-    tau_projector = tn.Node(np.zeros((D, D**2)))
-    for Di in range(D):
-        tau_projector.tensor[Di, Di * (D + 1)] = 1
+    if tau_projector is None:
+        tau_projector = tn.Node(np.zeros((D, D**2)))
+        for Di in range(D):
+            tau_projector.tensor[Di, Di * (D + 1)] = 1
 
     horiz_projs = [tn.Node(np.diag([1, 1, 0, 0])), tn.Node(np.diag([0, 0, 1, 1])), tn.Node(np.eye(4))]
     vert_projs = [tn.Node(np.diag([1, 0, 1, 0])), tn.Node(np.diag([0, 1, 0, 1])),  tn.Node(np.eye(4))]
@@ -624,6 +664,13 @@ def wilson_expectations(model, param, param_name, dirname, plot=False, chi=128):
     [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB] = \
         get_boundaries(dir_name, model, param_name, param, silent=True)
 
+    pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, 6, 6,
+                               [tn.Node(np.kron(I, X))] * 5 + [tn.Node(np.eye(4))] + \
+                               [tn.Node(np.kron(X, I))] + [tn.Node(np.eye(4))] * 4 + [tn.Node(np.kron(X, I))] + \
+                               [tn.Node(np.kron(X, I))] + [tn.Node(np.eye(4))] * 4 + [tn.Node(np.kron(X, I))] + \
+                               [tn.Node(np.kron(X, I))] + [tn.Node(np.eye(4))] * 4 + [tn.Node(np.kron(X, I))] + \
+                               [tn.Node(np.kron(X, I))] + [tn.Node(np.eye(4))] * 4 + [tn.Node(np.kron(X, I))] + \
+                               [tn.Node(np.kron(X, X))] + [tn.Node(np.kron(I, X))] * 4 + [tn.Node(np.kron(X, I))])
     Ls = 2 * np.array(range(3, 7))
     wilson_expectations = np.zeros(len(Ls), dtype=complex)
     for Li in range(len(Ls)):
@@ -647,7 +694,11 @@ if model == 'zohar':
               for beta in [np.round(0.5 * i, 8) for i in range(-2, 3)] \
               for gamma in [np.round(0.5 * i, 8) for i in range(-2, 3)] \
               for delta in [np.round(0.5 * i, 8) for i in range(-2, 3)]]
-    param_name = 'parmas'
+    param_name = 'params'
+elif model == 'toric_c':
+    params = [np.round(0.1 * i, 8) for i in range(1, 40)] + [np.round(1 + 0.01 * i, 8) for i in range(-9, 10)]
+    params.sort()
+    param_name = 'c'
 elif model == 'zohar_alpha':
     params = [np.round(0.2 * a, 8) for a in range(-10, 11)]
     param_name = 'alpha'
@@ -673,22 +724,22 @@ elif model == 'alpha_10_beta_1_delta_8':
 elif model == 'vary_alpha':
     param_name = 'alpha'
     params = [np.round(0.2 * a, 8) for a in range(-10, 11)]
-    beta = float(sys.argv[4])
-    gamma = float(sys.argv[5])
-    delta = float(sys.argv[6])
+    beta = float(sys.argv[1])
+    gamma = float(sys.argv[2])
+    delta = float(sys.argv[3])
     model = model + '_' + str(beta) + '_' + str(gamma) + '_' + str(delta)
 elif model == 'vary_beta':
     param_name = 'beta'
     params = [np.round(0.1 * a, 8) for a in range(11)]
-    alpha = float(sys.argv[4])
-    gamma = float(sys.argv[5])
-    delta = float(sys.argv[6])
+    alpha = float(sys.argv[1])
+    gamma = float(sys.argv[2])
+    delta = float(sys.argv[3])
     model = model + '_' + str(alpha) + '_' + str(gamma) + '_' + str(delta)
 elif model == 'vary_ad':
     param_name = 'alpha'
     params = [np.round(0.2 * a, 8) for a in range(-10, 8)]
-    beta = float(sys.argv[4])
-    gamma = float(sys.argv[5])
+    beta = float(sys.argv[1])
+    gamma = float(sys.argv[2])
     model = model + '_' + str(beta) + '_' + str(gamma)
 elif model == 'vary_gamma':
     param_name = 'gamma'
@@ -697,24 +748,20 @@ elif model == 'vary_gamma':
              + [np.round(1 + 0.001 * a, 8) for a in range(-100, -80)] \
              + [np.round(1 + 0.001 * a, 8) for a in range(40, 50)]
     params.sort()
-    alpha = float(sys.argv[4])
-    beta = float(sys.argv[5])
-    delta = float(sys.argv[6])
+    alpha = float(sys.argv[1])
+    beta = float(sys.argv[2])
+    delta = float(sys.argv[3])
     model = model + '_' + str(alpha) + '_' + str(beta) + '_' + str(delta)
 dir_name = "results/gauge/" + model
 if not os.path.exists(dir_name):
     os.mkdir(dir_name)
 
 bs = [0, 2 ** 20 - 1, 173524]
-ns = [int(sys.argv[3])]
-h = int(sys.argv[2])
-corner_nums = [1]
-gap_ls = [2]
 corner_charges = [0, 1]
 
 
 wilson_results = np.zeros(len(params))
-for pi in range(1): #len(params)):
+for pi in range(len(params)):
     param = params[pi]
     print(param)
     wilson_filename = 'results/gauge/' + model + '/wilson_' + model + '_' + param_name + '_' + str(param)
@@ -744,8 +791,9 @@ for pi in range(len(params)):
     if os.path.exists(res_filename):
         arbitrary_block_entanglement = pickle.load(open(res_filename, 'rb'))
     else:
-        arbitrary_block_entanglement = large_system_block_entanglement(model, params[pi], param_name, dir_name, 4, 4, [0, 1, 1] + [0] * 100, 0, chi=2048)
-        pickle.dump(arbitrary_block_entanglement, open(res_filename, 'wb'))
+        continue
+        # arbitrary_block_entanglement = large_system_block_entanglement(model, params[pi], param_name, dir_name, 4, 4, [0, 1, 1] + [0] * 100, 0, chi=2048)
+        # pickle.dump(arbitrary_block_entanglement, open(res_filename, 'wb'))
     arbitrary_block_large_systems[pi] = arbitrary_block_entanglement
 #    print(param, arbitrary_block_entanglement)
 
@@ -767,6 +815,7 @@ for pi in range(len(params)):
 import matplotlib.pyplot as plt
 plt.plot(params, wilson_results)
 plt.plot(params, zeros_large_systems - 1)
-plt.plot(params, full_p2 - 1, '--')
+plt.plot(params, full_purity_large_systems - 0.999, '--')
 # plt.plot(params, arbitrary_block_large_systems - 1, '--')
+plt.legend(['Wilson', r'$p_2(q=0)$', r'$p_2$ full'])
 plt.show()

@@ -417,7 +417,7 @@ def svdTruncation_np(T: np.array, leftEdges: List[int], rightEdges: List[int],
     if maxTrunc > 0:
         meaningful = max(minBondDim, sum(np.round(s / norm, maxTrunc) > 0))
         if len(s) > meaningful:
-            truncErr += list(s[meaningful:])
+            truncErr = np.array(list(truncErr) + list(s[meaningful:]))
             s = s[:meaningful]
             u = u.transpose([-1 * i for i in range(1, len(u.shape) + 1)])[:meaningful, :]. \
                 transpose([-1 * i for i in range(1, len(u.shape) + 1)])
