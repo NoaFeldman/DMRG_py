@@ -615,7 +615,7 @@ def large_system_expectation_value(w, h, cUp, dUp, cDown, dDown, leftRow, rightR
     # return bops.contract(bops.contract(curr, up_row[-1], '02', '20'), down_row[-1], '012', '201').tensor * 1
 
 
-def large_system_block_entanglement(model, param, param_name, dirname, h, w, b_inds, corner_charge, tau_projector=None, chi=128, subsystem_corners=1):
+def large_system_block_entanglement(model, param, param_name, dirname, h, w, b_inds, corner_charges, tau_projector=None, chi=128, corner_num=1):
     [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB] = \
         get_boundaries(dir_name, model, param_name, param, silent=True)
     D = int(np.sqrt(openA[1].dimension))
@@ -629,15 +629,25 @@ def large_system_block_entanglement(model, param, param_name, dirname, h, w, b_i
     corner_projs = [tn.Node(np.diag([1, 0, 0, 1])), tn.Node(np.diag([0, 1, 1, 0])),  tn.Node(np.eye(4))]
     I = tn.Node(np.eye(openA[0].dimension))
 
-    subsystem_sites = [[wi, hi] for wi in range(1 + int(hi > (h - 1 - subsystem_corners) * (hi - (h - 1 - subsystem_corners))), w) for hi in range(h - 1)]
+    subsystem_sites = [[[hi, wi] for wi in \
+                       range(1 + int(hi > (h - 1 - corner_num)) * (hi - (h - 1 - corner_num)), w)] \
+                       for hi in range(h - 1)]
+    subsystem_sites = [item for sublist in subsystem_sites for item in sublist]
 
-    ops = [[vert_projs[b_inds[0]]] +
-           [horiz_projs[b_inds[wi]] for wi in range(1, w - 1)] +
-           [bops.contract(vert_projs[b_inds[w]], horiz_projs[b_inds[w - 1]], '0', '1')]]
-    for hi in range(h - 3):
-        ops += [[vert_projs[b_inds[w + 1 + hi * 2]]] + [I] * (w - 2) + [vert_projs[b_inds[w + 2 + hi * 2]]]]
-    ops += [[I] + [corner_projs[corner_charge]] + [I] * (w - 2)]
-    ops += [[I] * 2 + [horiz_projs[b_inds[wi]] for wi in range(w + 2 * h - 5, 2 * w + 2 * h - 7)]]
+    if corner_num == h - 1:
+        ops = [[I, corner_projs[corner_charges[0]] + [horiz_projs[b_inds[wi]] for wi in range(2, w - 1)] +
+                [bops.contract(vert_projs[b_inds[w]], horiz_projs[b_inds[w - 1]], '0', '1')]]]
+    else:
+        ops = [[vert_projs[b_inds[0]]] +
+               [horiz_projs[b_inds[wi]] for wi in range(1, w - 1)] +
+               [bops.contract(vert_projs[b_inds[w]], horiz_projs[b_inds[w - 1]], '0', '1')]]
+    for hi in range(1, h - 1 - corner_num):
+        ops.append([vert_projs[b_inds[w + 1 + hi * 2]]] + [I] * (w - 2) + [vert_projs[b_inds[w + 2 + hi * 2]]])
+    for hi in range(h - 1 - corner_num, h - 1):
+        ops.append([I] * (hi - (h - 1 - corner_num) + 1) + [corner_projs[corner_charges[hi]]]
+                   + [I] * (w + h - 4 - hi - corner_num) + [vert_projs[b_inds[w + h - 2 - corner_num + hi]]])
+    ops.append([I] * (1 + corner_num) + [horiz_projs[b_inds[wi]]
+                                      for wi in range(w + 2 * h - 3 - 2 * corner_num, w + 2 * h - 5 - 3 * corner_num + w)] + [I])
 
     norm = large_system_expectation_value(
         w, h, cUp, dUp, cDown, dDown, leftRow, rightRow, openA, tau_projector, ops, chi=chi)
@@ -648,7 +658,7 @@ def large_system_block_entanglement(model, param, param_name, dirname, h, w, b_i
         [tn.Node(np.kron(node.tensor, node.tensor)) for node in [cUp, dUp, cDown, dDown, leftRow, rightRow, openA]]
     for wi in range(1, w):
         for hi in range(h - 1):
-            if True: #[wi, hi] in subsystem_sites:
+            if [hi, wi] in subsystem_sites:
                 ops[hi][wi] = bops.contract(ops[hi][wi], swap_op, '1', '0')
     p2 = large_system_expectation_value(
         w, h, cUp, dUp, cDown, dDown, leftRow, rightRow, openA, tau_projector, ops, chi=chi)
@@ -774,6 +784,8 @@ dir_name = "results/gauge/" + model
 if not os.path.exists(dir_name):
     os.mkdir(dir_name)
 
+large_system_block_entanglement(model, params[2], param_name, dir_name, 6, 6, [0, 1, 1, 0, 1, 0, 0, 1] * 100, [0] * 8,
+                                chi=2048, corner_num=3)
 
 wilson_results = np.zeros(len(params))
 for pi in range(len(params)):
