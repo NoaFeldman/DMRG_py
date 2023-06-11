@@ -615,7 +615,7 @@ def large_system_expectation_value(w, h, cUp, dUp, cDown, dDown, leftRow, rightR
     # return bops.contract(bops.contract(curr, up_row[-1], '02', '20'), down_row[-1], '012', '201').tensor * 1
 
 
-def large_system_block_entanglement(model, param, param_name, dirname, h, w, b_inds, corner_charge, tau_projector=None, chi=128):
+def large_system_block_entanglement(model, param, param_name, dirname, h, w, b_inds, corner_charge, tau_projector=None, chi=128, subsystem_corners=1):
     [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB] = \
         get_boundaries(dir_name, model, param_name, param, silent=True)
     D = int(np.sqrt(openA[1].dimension))
@@ -629,6 +629,8 @@ def large_system_block_entanglement(model, param, param_name, dirname, h, w, b_i
     corner_projs = [tn.Node(np.diag([1, 0, 0, 1])), tn.Node(np.diag([0, 1, 1, 0])),  tn.Node(np.eye(4))]
     I = tn.Node(np.eye(openA[0].dimension))
 
+    subsystem_sites = [[wi, hi] for wi in range(1 + int(hi > (h - 1 - subsystem_corners) * (hi - (h - 1 - subsystem_corners))), w) for hi in range(h - 1)]
+
     ops = [[vert_projs[b_inds[0]]] +
            [horiz_projs[b_inds[wi]] for wi in range(1, w - 1)] +
            [bops.contract(vert_projs[b_inds[w]], horiz_projs[b_inds[w - 1]], '0', '1')]]
@@ -637,15 +639,8 @@ def large_system_block_entanglement(model, param, param_name, dirname, h, w, b_i
     ops += [[I] + [corner_projs[corner_charge]] + [I] * (w - 2)]
     ops += [[I] * 2 + [horiz_projs[b_inds[wi]] for wi in range(w + 2 * h - 5, 2 * w + 2 * h - 7)]]
 
-    # ops = [ops[0][:]] + [[I] * w] * (h - 1)
-
     norm = large_system_expectation_value(
         w, h, cUp, dUp, cDown, dDown, leftRow, rightRow, openA, tau_projector, ops, chi=chi)
-
-    # single_node_norm = norm**(1 / (2 * w * h))
-    # openA.tensor /= single_node_norm
-    # new_norm = large_system_expectation_value(
-    #     w, h, cUp, dUp, cDown, dDown, leftRow, rightRow, openA, tau_projector, ops, chi=chi)
 
     tau_projector = tn.Node(np.kron(tau_projector.tensor, tau_projector.tensor))
     ops = [[tn.Node(np.kron(ops[hi][wi].tensor, ops[hi][wi].tensor)) for wi in range(w)] for hi in range(h)]
@@ -653,7 +648,8 @@ def large_system_block_entanglement(model, param, param_name, dirname, h, w, b_i
         [tn.Node(np.kron(node.tensor, node.tensor)) for node in [cUp, dUp, cDown, dDown, leftRow, rightRow, openA]]
     for wi in range(1, w):
         for hi in range(h - 1):
-            ops[hi][wi] = bops.contract(ops[hi][wi], swap_op, '1', '0')
+            if True: #[wi, hi] in subsystem_sites:
+                ops[hi][wi] = bops.contract(ops[hi][wi], swap_op, '1', '0')
     p2 = large_system_expectation_value(
         w, h, cUp, dUp, cDown, dDown, leftRow, rightRow, openA, tau_projector, ops, chi=chi)
     print(param, p2 / norm**2)
@@ -664,13 +660,6 @@ def wilson_expectations(model, param, param_name, dirname, plot=False, chi=128):
     [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB] = \
         get_boundaries(dir_name, model, param_name, param, silent=True)
 
-    pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, 6, 6,
-                               [tn.Node(np.kron(I, X))] * 5 + [tn.Node(np.eye(4))] + \
-                               [tn.Node(np.kron(X, I))] + [tn.Node(np.eye(4))] * 4 + [tn.Node(np.kron(X, I))] + \
-                               [tn.Node(np.kron(X, I))] + [tn.Node(np.eye(4))] * 4 + [tn.Node(np.kron(X, I))] + \
-                               [tn.Node(np.kron(X, I))] + [tn.Node(np.eye(4))] * 4 + [tn.Node(np.kron(X, I))] + \
-                               [tn.Node(np.kron(X, I))] + [tn.Node(np.eye(4))] * 4 + [tn.Node(np.kron(X, I))] + \
-                               [tn.Node(np.kron(X, X))] + [tn.Node(np.kron(I, X))] * 4 + [tn.Node(np.kron(X, I))])
     Ls = 2 * np.array(range(3, 7))
     wilson_expectations = np.zeros(len(Ls), dtype=complex)
     for Li in range(len(Ls)):
@@ -685,6 +674,35 @@ def wilson_expectations(model, param, param_name, dirname, plot=False, chi=128):
         plt.title(param_name + ' = ' + str(param))
         plt.show()
     return p[0]
+
+
+def purity_law(model, param, param_name, dirname, plot=False, chi=128, tau_projector=None):
+    [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB] = \
+        get_boundaries(dir_name, model, param_name, param, silent=True)
+
+    Ls = 2 * np.array(range(3, 7))
+    p2s = np.zeros(len(Ls), dtype=complex)
+    for Li in range(len(Ls)):
+        L = Ls[Li]
+        p2 = large_system_block_entanglement(model, param, param_name, dirname,
+                            L, L, [0] * L**2 * 100, corner_charge=0, tau_projector=tau_projector, chi=chi)
+        p2s[Li] = p2
+        gc.collect()
+    p, residuals, _, _, _ = np.polyfit(Ls, np.log(p2s), 2, full=True)
+    if plot:
+        import matplotlib.pyplot as plt
+        plt.plot(Ls, np.log(p2s))
+        plt.title(param_name + ' = ' + str(param))
+        plt.show()
+    return p[0], p2s
+
+
+def purity_stairs_law():
+    model = 'orus'
+    params = [np.round(0.1 * i, 8) for i in range(3, 15)]
+    for pi in range(len(params)):
+        param = params[pi]
+
 
 
 model = sys.argv[1]
@@ -756,9 +774,6 @@ dir_name = "results/gauge/" + model
 if not os.path.exists(dir_name):
     os.mkdir(dir_name)
 
-bs = [0, 2 ** 20 - 1, 173524]
-corner_charges = [0, 1]
-
 
 wilson_results = np.zeros(len(params))
 for pi in range(len(params)):
@@ -779,7 +794,7 @@ for pi in range(len(params)):
     if os.path.exists(res_filename):
         zero_entanglement = pickle.load(open(res_filename, 'rb'))
     else:
-        zero_entanglement = large_system_block_entanglement(model, params[pi], param_name, dir_name, 4, 4, [0] * 100, 0, chi=2048)
+        zero_entanglement = large_system_block_entanglement(model, params[pi], param_name, dir_name, 6, 6, [0] * 100, 0, chi=2048)
         pickle.dump(zero_entanglement, open(res_filename, 'wb'))
     zeros_large_systems[pi] = zero_entanglement
     print(param, zero_entanglement, '0 block')
@@ -791,11 +806,22 @@ for pi in range(len(params)):
     if os.path.exists(res_filename):
         arbitrary_block_entanglement = pickle.load(open(res_filename, 'rb'))
     else:
-        continue
-        # arbitrary_block_entanglement = large_system_block_entanglement(model, params[pi], param_name, dir_name, 4, 4, [0, 1, 1] + [0] * 100, 0, chi=2048)
-        # pickle.dump(arbitrary_block_entanglement, open(res_filename, 'wb'))
+        arbitrary_block_entanglement = large_system_block_entanglement(model, params[pi], param_name, dir_name, 6, 6, [0, 1, 1, 0, 1, 0, 0, 1] * 100, 0, chi=2048)
+        pickle.dump(arbitrary_block_entanglement, open(res_filename, 'wb'))
     arbitrary_block_large_systems[pi] = arbitrary_block_entanglement
-#    print(param, arbitrary_block_entanglement)
+    print(param, arbitrary_block_entanglement)
+
+ones_block_large_systems = np.zeros(len(params))
+for pi in range(len(params)):
+    param = params[pi]
+    res_filename = 'results/gauge/' + model + '/ones_large_system_' + model + '_' + param_name + '_' + str(param)
+    if os.path.exists(res_filename):
+        ones_block_entanglement = pickle.load(open(res_filename, 'rb'))
+    else:
+        ones_block_entanglement = large_system_block_entanglement(model, params[pi], param_name, dir_name, 6, 6, [1] * 100, 0, chi=2048)
+        pickle.dump(ones_block_entanglement, open(res_filename, 'wb'))
+    ones_block_large_systems[pi] = ones_block_entanglement
+    print(param, ones_block_entanglement)
 
 
 
@@ -806,16 +832,17 @@ for pi in range(len(params)):
     if os.path.exists(res_filename):
         full_p2 = pickle.load(open(res_filename, 'rb'))
     else:
-        full_p2 = large_system_block_entanglement(model, params[pi], param_name, dir_name, 4, 4, [-1] * 100, 0, chi=1024)
+        full_p2 = large_system_block_entanglement(model, params[pi], param_name, dir_name, 6, 6, [-1] * 100, 0, chi=2048)
         pickle.dump(full_p2, open(res_filename, 'wb'))
     full_purity_large_systems[pi] = full_p2
     print(param, full_p2, 'full p2')
 
 
 import matplotlib.pyplot as plt
-plt.plot(params, wilson_results)
-plt.plot(params, zeros_large_systems - 1)
-plt.plot(params, full_purity_large_systems - 0.999, '--')
-# plt.plot(params, arbitrary_block_large_systems - 1, '--')
-plt.legend(['Wilson', r'$p_2(q=0)$', r'$p_2$ full'])
+plt.plot(params, np.abs(wilson_results))
+plt.plot(params, -np.log(zeros_large_systems))
+plt.plot(params, -np.log(arbitrary_block_large_systems), '--')
+plt.plot(params, -np.log(ones_block_large_systems), ':')
+plt.plot(params, -np.log(full_purity_large_systems), '--')
+plt.legend(['Wilson', r'$p_2(q=0)$', r'$p_2(q arbitrary)$', r'$p_2$ full'])
 plt.show()
