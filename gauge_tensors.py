@@ -154,36 +154,6 @@ def toric_tensors_lgt_approach(model, param, d=2):
         alpha = param
         delta = param
         tensor = get_zohar_tensor(alpha, beta, gamma, delta)
-    elif model == 'alpha_1_beta_05_delta_08':
-        alpha = 1
-        beta = 0.5
-        gamma = param
-        delta = 0.8
-        tensor = get_zohar_tensor(alpha, beta, gamma, delta)
-    elif model == 'beta_03_gamma_05_delta_1':
-        alpha = param
-        beta = 1/3
-        gamma = 0.5
-        delta = 1
-        tensor = get_zohar_tensor(alpha, beta, gamma, delta)
-    elif model == 'alpha_1_beta_05_delta_1':
-        alpha = 1
-        beta = 0.5
-        gamma = param
-        delta = 1
-        tensor = get_zohar_tensor(alpha, beta, gamma, delta)
-    elif model == 'alpha_10_beta_1_delta_8':
-        alpha = 10
-        beta = 1
-        gamma = param
-        delta = 8
-        tensor = get_zohar_tensor(alpha, beta, gamma, delta)
-    elif model == 'alpha_1_beta_1_delta_1':
-        alpha = 1
-        beta = 1
-        gamma = param
-        delta = 1
-        tensor = get_zohar_tensor(alpha, beta, gamma, delta)
     elif model == 'zohar_gamma':
         tensor[1, 0, 1, 0, 1, 0] = param
         tensor[0, 1, 0, 1, 0, 1] = param
@@ -191,6 +161,7 @@ def toric_tensors_lgt_approach(model, param, d=2):
         for i in range(d):
             for j in range(d):
                 tensor[i, j, :, :, :, :] *= (1 + param) ** (i + j)
+        tensor /= ((1 + param) ** 2)**0.75
     elif model == 'zohar':
         alpha, beta, gamma, delta = param
         tensor[0, 0, 0, 0, 0, 0] = alpha
@@ -336,11 +307,11 @@ corner_projectors = [corner_projector_0, corner_projector_1]
 wall_projector_0 = np.diag([1, 0, 1, 0])
 wall_projector_1 = np.diag([0, 1, 0, 1])
 wall_projectors = [wall_projector_0, wall_projector_1]
-swap_op_tensor = np.zeros((d ** 4, d ** 4))
-for i in range(d ** 2):
-    for j in range(d ** 2):
-        swap_op_tensor[i + j * d ** 2, j + i * d ** 2] = 1
-swap_op = tn.Node(swap_op_tensor)
+swap_op_tensor = np.zeros((d, d, d, d))
+for i in range(d):
+    for j in range(d):
+        swap_op_tensor[i, j, j, i] = 1
+swap_op = tn.Node(swap_op_tensor.reshape([d**2, d**2]))
 
 
 def get_block_probability(filename, h, n, bi, d=2, corner_num=1, corner_charges_i=0, wall_charges_i=0, gap_l=2, edge_dim=2,
@@ -574,17 +545,17 @@ def large_system_expectation_value(w, h, cUp, dUp, cDown, dDown, leftRow, rightR
     p_d_up = bops.permute(bops.contract(dUp, tau_projector, '1', '1'), [0, 2, 1])
     p_c_down = bops.permute(bops.contract(cDown, tau_projector, '1', '1'), [1, 2, 0])
     p_d_down = bops.permute(bops.contract(dDown, tau_projector, '1', '1'), [1, 2, 0])
-    cylinder_mult = 1
-    up_row = [p_c_up, p_d_up] * int((1 + cylinder_mult) * w / 2)
+    full_system_length = 2 * w
+    up_row = [p_c_up, p_d_up] * int(full_system_length / 2)
     up_row = to_cannonical(up_row, PBC=True)
-    down_row = [p_d_down, p_c_down] * int((1 + cylinder_mult) * w / 2)
+    down_row = [p_d_down, p_c_down] * int(full_system_length / 2)
     down_row = to_cannonical(down_row, PBC=True)
     for hi in range(h):
         dbg = 1
         mid_row = [tn.Node(bops.permute(bops.contract(open_tau, ops[hi][wi], '01', '01'), [0, 2, 3, 1]))
                    for wi in range(w)] + \
             [tn.Node(bops.permute(bops.contract(open_tau, tn.Node(np.eye(openA[0].dimension)), '01', '01'),
-                                  [0, 2, 3, 1]))] * w * cylinder_mult
+                                  [0, 2, 3, 1]))] * (full_system_length - w) # w * cylinder_mult
         mid_row = fold_mpo(mid_row)
         for wi in range(len(up_row)):
             up_row[wi] = tn.Node(bops.contract(up_row[wi], mid_row[wi], '1', '0').tensor.\
@@ -595,13 +566,17 @@ def large_system_expectation_value(w, h, cUp, dUp, cDown, dDown, leftRow, rightR
         up_max_te = 0
         for k in range(len(up_row) - 2, -1, -1):
             M = bops.contract(up_row[k], up_row[(k+1) % len(up_row)], '2', '0')
-            l, s, r, te = bops.svdTruncation(M, [0, 1], [2, 3], '>*<', maxBondDim=chi)
+            l, s, r, te = bops.svdTruncation(M, [0, 1], [2, 3], '>*<', maxBondDim=chi, normalize=False)
             up_row[k], up_row[(k+1) % len(up_row)] = bops.contract(l, s, '2', '0'), r
+            tst = bops.contract(bops.contract(up_row[k], up_row[(k+1)], '2', '0'), M, '0123', '0123*').tensor \
+                  / bops.contract(M, M, '0123', '0123*').tensor
+            if np.abs(tst - 1) > 1e-3:
+                dbg = 1
             if len(te) > 0 and np.max(te / np.max(s.tensor)) > 1e-3:
                 print(np.max(te) / np.max(s.tensor))
             if sum(np.diag(s.tensor)) < 1e-8:
                 dbg = 1
-                bops.svdTruncation(M, [0, 1], [2, 3], '>*<', maxBondDim=chi)
+                bops.svdTruncation(M, [0, 1], [2, 3], '>*<', maxBondDim=chi, normalize=False)
         for k in range(len(up_row) - 1):
             up_row = bops.shiftWorkingSite(up_row, k, '>>')
         dbg = 1
@@ -609,10 +584,6 @@ def large_system_expectation_value(w, h, cUp, dUp, cDown, dDown, leftRow, rightR
     for i in range(1, len(up_row)):
         curr = bops.contract(bops.contract(curr, up_row[i], '0', '0'), down_row[i], '01', '01')
     return curr.tensor[0, 0]
-    # curr = bops.permute(bops.contract(up_row[0], down_row[0], '1', '1'), [0, 2, 1, 3])
-    # for wi in range(1, len(up_row) - 1):
-    #     curr = bops.contract(bops.contract(curr, up_row[wi], '2', '0'), down_row[wi], '23', '01')
-    # return bops.contract(bops.contract(curr, up_row[-1], '02', '20'), down_row[-1], '012', '201').tensor * 1
 
 
 def large_system_block_entanglement(model, param, param_name, dirname, h, w, b_inds, corner_charges, tau_projector=None, chi=128, corner_num=1):
@@ -647,11 +618,21 @@ def large_system_block_entanglement(model, param, param_name, dirname, h, w, b_i
         ops.append([I] * (hi - (h - 1 - corner_num) + 1) + [corner_projs[corner_charges[hi]]]
                    + [I] * (w + h - 4 - hi - corner_num) + [vert_projs[b_inds[w + h - 2 - corner_num + hi]]])
     ops.append([I] * (1 + corner_num) + [horiz_projs[b_inds[wi]]
-                                      for wi in range(w + 2 * h - 3 - 2 * corner_num, w + 2 * h - 5 - 3 * corner_num + w)] + [I])
-
+                                      for wi in range(w + 2 * h - 3 - 2 * corner_num, w + 2 * h - 4 - 3 * corner_num + w)])
+    # ops.append([I] * (1 + corner_num) + [horiz_projs[b_inds[wi]]
+    #                                   for wi in range(w + 2 * h - 3 - 2 * corner_num, w + 2 * h - 5 - 3 * corner_num + w)] + [I])
+    norm = large_system_expectation_value(
+        w, h, cUp, dUp, cDown, dDown, leftRow, rightRow, openA, tau_projector, ops, chi=chi)
+    openA /= np.abs((2 * norm) ** (1 / (2 * w * h)))
     norm = large_system_expectation_value(
         w, h, cUp, dUp, cDown, dDown, leftRow, rightRow, openA, tau_projector, ops, chi=chi)
 
+    d = ops[0][0][0].dimension
+    swap_op_tensor = np.zeros((d, d, d, d))
+    for i in range(d):
+        for j in range(d):
+            swap_op_tensor[i, j, j, i] = 1
+    swap_op = tn.Node(swap_op_tensor.reshape([d**2, d**2]))
     tau_projector = tn.Node(np.kron(tau_projector.tensor, tau_projector.tensor))
     ops = [[tn.Node(np.kron(ops[hi][wi].tensor, ops[hi][wi].tensor)) for wi in range(w)] for hi in range(h)]
     cUp, dUp, cDown, dDown, leftRow, rightRow, openA = \
@@ -662,8 +643,8 @@ def large_system_block_entanglement(model, param, param_name, dirname, h, w, b_i
                 ops[hi][wi] = bops.contract(ops[hi][wi], swap_op, '1', '0')
     p2 = large_system_expectation_value(
         w, h, cUp, dUp, cDown, dDown, leftRow, rightRow, openA, tau_projector, ops, chi=chi)
-    print(param, p2 / norm**2)
-    return p2 / norm**2
+    print(param, p2 / np.abs(norm**2))
+    return p2 / np.abs(norm**2)
 
 
 def wilson_expectations(model, param, param_name, dirname, plot=False, chi=128):
@@ -686,25 +667,51 @@ def wilson_expectations(model, param, param_name, dirname, plot=False, chi=128):
     return p[0]
 
 
-def purity_law(model, param, param_name, dirname, plot=False, chi=128, tau_projector=None):
-    [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB] = \
-        get_boundaries(dir_name, model, param_name, param, silent=True)
+def purity_corner_law(model, param, param_name, dirname, plot=False, chi=128, tau_projector=None):
+    L = 6
+    corners = list(range(1, L - 1))
+    p2s = np.zeros(len(corners), dtype=complex)
+    for ci in range(len(corners)):
+        c = corners[ci]
+        p2_filename = dirname + '/' + model + '_' + param_name + '_' + str(param) + '_p2_corner_c_' + str(c) + '_chi_' + str(chi)
+        if os.path.exists(p2_filename):
+            p2 = pickle.load(open(p2_filename, 'rb'))
+        else:
+            p2 = large_system_block_entanglement(model, param, param_name, dirname,
+                            L, L, [0] * L**2 * 100, corner_charges=[0] * L, tau_projector=tau_projector, chi=chi, corner_num=ci)
+            pickle.dump(p2, open(p2_filename, 'wb'))
+        p2s[ci] = p2
+        gc.collect()
+    p, residuals, _, _, _ = np.polyfit(corners, np.log(p2s), 2, full=True)
+    if plot:
+        import matplotlib.pyplot as plt
+        plt.plot(corners, np.log(p2s))
+        plt.title('corner ' + param_name + ' = ' + str(param))
+        plt.show()
+    return p[0], p2s, corners
 
+
+def purity_area_law(model, param, param_name, dirname, plot=False, chi=128, tau_projector=None):
     Ls = 2 * np.array(range(3, 7))
     p2s = np.zeros(len(Ls), dtype=complex)
     for Li in range(len(Ls)):
         L = Ls[Li]
-        p2 = large_system_block_entanglement(model, param, param_name, dirname,
-                            L, L, [0] * L**2 * 100, corner_charge=0, tau_projector=tau_projector, chi=chi)
+        p2_filename = dirname + '/' + model + '_' + param_name + '_' + str(param) + '_p2_square_L_' + str(L) + '_chi_' + str(chi)
+        if os.path.exists(p2_filename):
+            p2 = pickle.load(open(p2_filename, 'rb'))
+        else:
+            p2 = large_system_block_entanglement(model, param, param_name, dirname,
+                            L, L, [0] * L**2 * 100, corner_charges=[0] * L, tau_projector=tau_projector, chi=chi, corner_num=1)
+            pickle.dump(p2, open(p2_filename, 'wb'))
         p2s[Li] = p2
         gc.collect()
     p, residuals, _, _, _ = np.polyfit(Ls, np.log(p2s), 2, full=True)
     if plot:
         import matplotlib.pyplot as plt
         plt.plot(Ls, np.log(p2s))
-        plt.title(param_name + ' = ' + str(param))
+        plt.title('area ' + param_name + ' = ' + str(param))
         plt.show()
-    return p[0], p2s
+    return p[0], p2s, Ls
 
 
 def purity_stairs_law():
@@ -717,38 +724,16 @@ def purity_stairs_law():
 
 model = sys.argv[1]
 edge_dim = 2
-if model == 'zohar':
-    params = [[alpha, beta, gamma, delta] for alpha in [np.round(0.5 * i, 8) for i in range(-2, 3)] \
-              for beta in [np.round(0.5 * i, 8) for i in range(-2, 3)] \
-              for gamma in [np.round(0.5 * i, 8) for i in range(-2, 3)] \
-              for delta in [np.round(0.5 * i, 8) for i in range(-2, 3)]]
-    param_name = 'params'
-elif model == 'toric_c':
+params = []
+param_name = ''
+if model == 'toric_c':
     params = [np.round(0.1 * i, 8) for i in range(1, 40)] + [np.round(1 + 0.01 * i, 8) for i in range(-9, 10)]
     params.sort()
     param_name = 'c'
-elif model == 'zohar_alpha':
-    params = [np.round(0.2 * a, 8) for a in range(-10, 11)]
-    param_name = 'alpha'
-elif model == 'zohar_gamma':
-    params = [np.round(0.2 * a, 8) for a in range(-10, 11)]
-    param_name = 'gamma'
 elif model == 'orus':
     # https://journals.aps.org/prl/abstract/10.1103/PhysRevLett.113.257202
     params = [np.round(0.1 * i, 8) for i in range(3, 13)]
     param_name = 'g'
-elif model == 'alpha_1_beta_05_delta_08':
-    params = [np.round(0.1 * i, 4) for i in range(20)]# + [np.round(1 * i, 4) for i in range(2, 6)]
-    param_name = 'gamma'
-elif model == 'beta_03_gamma_05_delta_1':
-    params = [np.round(0.2 * a, 8) for a in range(-10, 11)]
-    param_name = 'alpha'
-elif model == 'alpha_1_beta_05_delta_1':
-    params = [np.round(0.1 * i, 4) for i in range(20)] + [np.round(1 * i, 4) for i in range(2, 6)]
-    param_name = 'gamma'
-elif model == 'alpha_10_beta_1_delta_8':
-    params = [np.round(0.1 * i, 4) for i in range(20)] + [np.round(1 * i, 4) for i in range(2, 20)]
-    param_name = 'gamma'
 elif model == 'vary_alpha':
     param_name = 'alpha'
     params = [np.round(0.2 * a, 8) for a in range(-10, 11)]
@@ -776,16 +761,22 @@ elif model == 'vary_gamma':
              + [np.round(1 + 0.001 * a, 8) for a in range(-100, -80)] \
              + [np.round(1 + 0.001 * a, 8) for a in range(40, 50)]
     params.sort()
-    alpha = float(sys.argv[1])
-    beta = float(sys.argv[2])
-    delta = float(sys.argv[3])
+    alpha = float(sys.argv[2])
+    beta = float(sys.argv[3])
+    delta = float(sys.argv[4])
     model = model + '_' + str(alpha) + '_' + str(beta) + '_' + str(delta)
 dir_name = "results/gauge/" + model
 if not os.path.exists(dir_name):
     os.mkdir(dir_name)
 
-large_system_block_entanglement(model, params[2], param_name, dir_name, 6, 6, [0, 1, 1, 0, 1, 0, 0, 1] * 100, [0] * 8,
-                                chi=2048, corner_num=3)
+L_p2s = np.zeros(len(params))
+c_p2s = np.zeros(len(params))
+for pi in range(len(params)):
+    param = params[pi]
+    L_p2s[pi] = purity_area_law(model, param, param_name, dir_name, plot=False, chi=32, tau_projector=None)[0]
+    c_p2s[pi] = purity_corner_law(model, param, param_name, dir_name, plot=False, chi=32, tau_projector=None)[0]
+print(L_p2s)
+print(c_p2s)
 
 wilson_results = np.zeros(len(params))
 for pi in range(len(params)):
@@ -799,43 +790,6 @@ for pi in range(len(params)):
         pickle.dump(bulk_coeff, open(wilson_filename, 'wb'))
     wilson_results[pi] = bulk_coeff
 
-zeros_large_systems = np.zeros(len(params))
-for pi in range(len(params)):
-    param = params[pi]
-    res_filename = 'results/gauge/' + model + '/zero_large_system_' + model + '_' + param_name + '_' + str(param)
-    if os.path.exists(res_filename):
-        zero_entanglement = pickle.load(open(res_filename, 'rb'))
-    else:
-        zero_entanglement = large_system_block_entanglement(model, params[pi], param_name, dir_name, 6, 6, [0] * 100, 0, chi=2048)
-        pickle.dump(zero_entanglement, open(res_filename, 'wb'))
-    zeros_large_systems[pi] = zero_entanglement
-    print(param, zero_entanglement, '0 block')
-
-arbitrary_block_large_systems = np.zeros(len(params))
-for pi in range(len(params)):
-    param = params[pi]
-    res_filename = 'results/gauge/' + model + '/arbtry_blk_large_system_' + model + '_' + param_name + '_' + str(param)
-    if os.path.exists(res_filename):
-        arbitrary_block_entanglement = pickle.load(open(res_filename, 'rb'))
-    else:
-        arbitrary_block_entanglement = large_system_block_entanglement(model, params[pi], param_name, dir_name, 6, 6, [0, 1, 1, 0, 1, 0, 0, 1] * 100, 0, chi=2048)
-        pickle.dump(arbitrary_block_entanglement, open(res_filename, 'wb'))
-    arbitrary_block_large_systems[pi] = arbitrary_block_entanglement
-    print(param, arbitrary_block_entanglement)
-
-ones_block_large_systems = np.zeros(len(params))
-for pi in range(len(params)):
-    param = params[pi]
-    res_filename = 'results/gauge/' + model + '/ones_large_system_' + model + '_' + param_name + '_' + str(param)
-    if os.path.exists(res_filename):
-        ones_block_entanglement = pickle.load(open(res_filename, 'rb'))
-    else:
-        ones_block_entanglement = large_system_block_entanglement(model, params[pi], param_name, dir_name, 6, 6, [1] * 100, 0, chi=2048)
-        pickle.dump(ones_block_entanglement, open(res_filename, 'wb'))
-    ones_block_large_systems[pi] = ones_block_entanglement
-    print(param, ones_block_entanglement)
-
-
 
 full_purity_large_systems = np.zeros(len(params))
 for pi in range(len(params)):
@@ -844,17 +798,15 @@ for pi in range(len(params)):
     if os.path.exists(res_filename):
         full_p2 = pickle.load(open(res_filename, 'rb'))
     else:
-        full_p2 = large_system_block_entanglement(model, params[pi], param_name, dir_name, 6, 6, [-1] * 100, 0, chi=2048)
+        L = 6
+        full_p2 = large_system_block_entanglement(model, params[pi], param_name, dir_name, L, L, [-1] * 100, [0] * L, chi=2048)
         pickle.dump(full_p2, open(res_filename, 'wb'))
     full_purity_large_systems[pi] = full_p2
     print(param, full_p2, 'full p2')
 
 
 import matplotlib.pyplot as plt
-plt.plot(params, np.abs(wilson_results))
-plt.plot(params, -np.log(zeros_large_systems))
-plt.plot(params, -np.log(arbitrary_block_large_systems), '--')
-plt.plot(params, -np.log(ones_block_large_systems), ':')
+plt.plot(params, np.abs(wilson_results) * 10)
 plt.plot(params, -np.log(full_purity_large_systems), '--')
-plt.legend(['Wilson', r'$p_2(q=0)$', r'$p_2(q arbitrary)$', r'$p_2$ full'])
+plt.legend(['Wilson  * 10', r'$p_2(q=0)$', r'$p_2(q arbitrary)$', r'$p_2(q=1)$', r'$p_2$ full'])
 plt.show()
