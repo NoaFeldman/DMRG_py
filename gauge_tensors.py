@@ -9,6 +9,7 @@ import sys
 import gc
 import tdvp
 import corner_tm as ctm
+import scipy.sparse as sparse
 
 X = np.array([[0, 1], [1, 0]])
 I = np.eye(2)
@@ -109,13 +110,13 @@ def get_2_by_n_explicit_block(filename, n, bi, d=2):
     return block
 
 
-def get_zohar_tensor(alpha, beta, gamma, delta):
+def get_zohar_tensor(alpha, betas, gamma, delta):
     tensor = np.zeros([d] * 6, dtype=complex)
     tensor[0, 0, 0, 0, 0, 0] = alpha
-    tensor[1, 1, 0, 0, 1, 1] = beta
-    tensor[1, 0, 0, 1, 1, 0] = beta
-    tensor[0, 0, 1, 1, 0, 0] = beta
-    tensor[0, 1, 1, 0, 0, 1] = beta
+    tensor[1, 1, 0, 0, 1, 1] = betas[0]
+    tensor[1, 0, 0, 1, 1, 0] = betas[1]
+    tensor[0, 0, 1, 1, 0, 0] = betas[2]
+    tensor[0, 1, 1, 0, 0, 1] = betas[3]
     tensor[1, 0, 1, 0, 1, 0] = gamma
     tensor[0, 1, 0, 1, 0, 1] = gamma
     tensor[1, 1, 1, 1, 1, 1] = delta
@@ -143,17 +144,20 @@ def toric_tensors_lgt_approach(model, param, d=2):
         tensor[0, 0, 0, 0, 0, 0] = param
     elif model[:10] == 'vary_alpha':
         alpha = param
-        tensor = get_zohar_tensor(alpha, beta, gamma, delta)
+        tensor = get_zohar_tensor(alpha, beta * np.ones(4), gamma, delta)
     elif model[:9] == 'vary_beta':
         beta = param
-        tensor = get_zohar_tensor(alpha, beta, gamma, delta)
+        tensor = get_zohar_tensor(alpha, beta * np.ones(4), gamma, delta)
     elif model[:10] == 'vary_gamma':
         gamma = param
-        tensor = get_zohar_tensor(alpha, beta, gamma, delta)
+        tensor = get_zohar_tensor(alpha, beta * np.ones(4), gamma, delta)
     elif model[:7] == 'vary_ad':
         alpha = param
         delta = param
-        tensor = get_zohar_tensor(alpha, beta, gamma, delta)
+        tensor = get_zohar_tensor(alpha, beta * np.ones(4), gamma, delta)
+    elif model[:14] == 'zohar_non_symm':
+        gamma = param
+        tensor = get_zohar_tensor(alpha, [beta_ur, beta_lu, beta_dl, beta_rd], gamma, delta)
     elif model == 'zohar_gamma':
         tensor[1, 0, 1, 0, 1, 0] = param
         tensor[0, 1, 0, 1, 0, 1] = param
@@ -171,37 +175,18 @@ def toric_tensors_lgt_approach(model, param, d=2):
         tensor[0, 1, 0, 1, 0, 1] = gamma
         tensor[1, 0, 1, 0, 1, 0] = gamma
         tensor[1, 1, 1, 1, 1, 1] = delta
-    elif model == 'zohar_deltas':
-        alpha, beta, gamma = np.sqrt(2), 1, 0
-        delta = param
-        tensor[0, 0, 0, 0, 0, 0] = alpha
-        for i in range(2):
-            for j in range(2):
-                tensor[i, j, (i + 1) % 2, (j + 1) % 2, i, j] = beta
-        tensor[0, 1, 0, 1, 0, 1] = gamma
-        tensor[1, 0, 1, 0, 1, 0] = gamma
-        tensor[1, 1, 1, 1, 1, 1] = delta
-    elif model == 'zohar_deltas_large_alpha':
-        alpha, beta, gamma = 2, 1, 0
-        delta = param
-        tensor[0, 0, 0, 0, 0, 0] = alpha
-        for i in range(2):
-            for j in range(2):
-                tensor[i, j, (i + 1) % 2, (j + 1) % 2, i, j] = beta
-        tensor[0, 1, 0, 1, 0, 1] = gamma
-        tensor[1, 0, 1, 0, 1, 0] = gamma
         tensor[1, 1, 1, 1, 1, 1] = delta
     elif model == 'toric_c':
         tensor = np.zeros([2] * 6, dtype=complex)
         tensor[0, 0, 0, 0, 0, 0] = 1
-        tensor[0, 0, 0, 1, 1, 0] = param**0.25
-        tensor[0, 0, 1, 0, 0, 1] = param**0.25
+        tensor[1, 1, 1, 1, 0, 0] = param
+        tensor[1, 0, 1, 1, 0, 1] = param**0.75
+        tensor[0, 1, 0, 0, 0, 1] = param**0.25
+        tensor[0, 1, 1, 1, 1, 0] = param**0.75
+        tensor[1, 0, 0, 0, 1, 0] = param**0.25
         tensor[0, 0, 1, 1, 1, 1] = param**0.5
         tensor[1, 1, 0, 0, 1, 1] = param**0.5
-        tensor[1, 1, 0, 1, 0, 1] = param**0.75
-        tensor[1, 1, 1, 0, 1, 0] = param**0.75
-        tensor[1, 1, 1, 1, 0, 0] = param
-        tensor /= param
+        # tensor /= param
     elif model == 'toric_c_constructed':
         tensor = np.zeros([2] * 10, dtype=complex)
         tensor[0, 0, 0, 0, 0, 0, 0, 0, 0, 0] = 1
@@ -513,6 +498,17 @@ def get_boundaries(dirname, model, param_name, param, max_allowed_te=1e-10, sile
     return cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openA
 
 
+# For debugging purposes - can erase when done
+def split_kron(node):
+    tensor = node.tensor
+    sh = tensor.shape
+    l, s, r, te = bops.svdTruncation(tn.Node(tensor.reshape([int(np.sqrt(sh[i//2])) for i in range(len(sh)*2)])
+            .transpose([i * 2 for i in range(len(sh))] + [i * 2 + 1 for i in range(len(sh))])),
+                       list(range(len(sh))), list(range(len(sh), 2 * len(sh))), '>*<')
+    return l, s, r, te
+
+
+
 def to_cannonical(psi, PBC=True):
     if PBC:
         N = len(psi)
@@ -531,10 +527,10 @@ def to_cannonical(psi, PBC=True):
 
 def fold_mpo(mpo):
     N = len(mpo)
-    return [tn.Node(bops.contract(mpo[0], mpo[-1], '2', '3').tensor.transpose([0, 3, 1, 4, 2, 5])
+    return [tn.Node(bops.contract(mpo[0], mpo[-1], '2', '3').tensor.astype(np.float32).transpose([0, 3, 1, 4, 2, 5])
                     .reshape([mpo[0][0].dimension**2] * 2 + [1, mpo[0][3].dimension * mpo[-1][2].dimension]))] + \
-           [tn.Node(np.kron(mpo[i].tensor, mpo[-1-i].tensor.transpose([0, 1, 3, 2]))) for i in range(1, N//2 - 1)] + \
-           [tn.Node(bops.contract(mpo[N//2 - 1], mpo[N//2], '3', '2').tensor.transpose([0, 3, 1, 4, 2, 5])
+           [tn.Node(np.kron(mpo[i].tensor.astype(np.float32), mpo[-1-i].tensor.astype(np.float32).transpose([0, 1, 3, 2]))) for i in range(1, N//2 - 1)] + \
+           [tn.Node(bops.contract(mpo[N//2 - 1], mpo[N//2], '3', '2').tensor.astype(np.float32).transpose([0, 3, 1, 4, 2, 5])
                     .reshape([mpo[0][0].dimension**2] * 2 + [mpo[N//2 - 1][2].dimension * mpo[N//2][3].dimension, 1]))]
 
 
@@ -557,6 +553,8 @@ def large_system_expectation_value(w, h, cUp, dUp, cDown, dDown, leftRow, rightR
             [tn.Node(bops.permute(bops.contract(open_tau, tn.Node(np.eye(openA[0].dimension)), '01', '01'),
                                   [0, 2, 3, 1]))] * (full_system_length - w) # w * cylinder_mult
         mid_row = fold_mpo(mid_row)
+        if openA[0].dimension == 16:
+            dbg = 1
         for wi in range(len(up_row)):
             up_row[wi] = tn.Node(bops.contract(up_row[wi], mid_row[wi], '1', '0').tensor.\
                 transpose([0, 3, 2, 1, 4]).reshape(
@@ -570,10 +568,11 @@ def large_system_expectation_value(w, h, cUp, dUp, cDown, dDown, leftRow, rightR
             up_row[k], up_row[(k+1) % len(up_row)] = bops.contract(l, s, '2', '0'), r
             tst = bops.contract(bops.contract(up_row[k], up_row[(k+1)], '2', '0'), M, '0123', '0123*').tensor \
                   / bops.contract(M, M, '0123', '0123*').tensor
+            # print(hi, k, tst, openA[0].dimension)
             if np.abs(tst - 1) > 1e-3:
                 dbg = 1
             if len(te) > 0 and np.max(te / np.max(s.tensor)) > 1e-3:
-                print(np.max(te) / np.max(s.tensor))
+                print(np.diag(s.tensor), np.max(te) / np.max(s.tensor))
             if sum(np.diag(s.tensor)) < 1e-8:
                 dbg = 1
                 bops.svdTruncation(M, [0, 1], [2, 3], '>*<', maxBondDim=chi, normalize=False)
@@ -586,7 +585,7 @@ def large_system_expectation_value(w, h, cUp, dUp, cDown, dDown, leftRow, rightR
     return curr.tensor[0, 0]
 
 
-def large_system_block_entanglement(model, param, param_name, dirname, h, w, b_inds, corner_charges, tau_projector=None, chi=128, corner_num=1):
+def large_system_block_entanglement(model, param, param_name, dirname, h, w, b_inds, corner_charges, tau_projector=None, chi=128, corner_num=1, sys_h=None, sys_w=None):
     [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB] = \
         get_boundaries(dir_name, model, param_name, param, silent=True)
     D = int(np.sqrt(openA[1].dimension))
@@ -594,6 +593,10 @@ def large_system_block_entanglement(model, param, param_name, dirname, h, w, b_i
         tau_projector = tn.Node(np.zeros((D, D**2)))
         for Di in range(D):
             tau_projector.tensor[Di, Di * (D + 1)] = 1
+    if sys_w is None:
+        sys_w = w
+    if sys_h is None:
+        sys_h = h
 
     horiz_projs = [tn.Node(np.diag([1, 1, 0, 0])), tn.Node(np.diag([0, 0, 1, 1])), tn.Node(np.eye(4))]
     vert_projs = [tn.Node(np.diag([1, 0, 1, 0])), tn.Node(np.diag([0, 1, 0, 1])),  tn.Node(np.eye(4))]
@@ -607,25 +610,111 @@ def large_system_block_entanglement(model, param, param_name, dirname, h, w, b_i
 
     if corner_num == h - 1:
         ops = [[I, corner_projs[corner_charges[0]] + [horiz_projs[b_inds[wi]] for wi in range(2, w - 1)] +
-                [bops.contract(vert_projs[b_inds[w]], horiz_projs[b_inds[w - 1]], '0', '1')]]]
+                [bops.contract(vert_projs[b_inds[w]], horiz_projs[b_inds[w - 1]], '0', '1')]] + [I] * (sys_w - w)]
     else:
         ops = [[vert_projs[b_inds[0]]] +
                [horiz_projs[b_inds[wi]] for wi in range(1, w - 1)] +
-               [bops.contract(vert_projs[b_inds[w]], horiz_projs[b_inds[w - 1]], '0', '1')]]
+               [bops.contract(vert_projs[b_inds[w]], horiz_projs[b_inds[w - 1]], '0', '1')] + [I] * (sys_w - w)]
     for hi in range(1, h - 1 - corner_num):
-        ops.append([vert_projs[b_inds[w + 1 + hi * 2]]] + [I] * (w - 2) + [vert_projs[b_inds[w + 2 + hi * 2]]])
+        ops.append([vert_projs[b_inds[w + 1 + hi * 2]]] + [I] * (w - 2) + [vert_projs[b_inds[w + 2 + hi * 2]]]  + [I] * (sys_w - w))
     for hi in range(h - 1 - corner_num, h - 1):
         ops.append([I] * (hi - (h - 1 - corner_num) + 1) + [corner_projs[corner_charges[hi]]]
-                   + [I] * (w + h - 4 - hi - corner_num) + [vert_projs[b_inds[w + h - 2 - corner_num + hi]]])
-    ops.append([I] * (1 + corner_num) + [horiz_projs[b_inds[wi]]
-                                      for wi in range(w + 2 * h - 3 - 2 * corner_num, w + 2 * h - 4 - 3 * corner_num + w)])
+                   + [I] * (w + h - 4 - hi - corner_num) + [vert_projs[b_inds[w + h - 2 - corner_num + hi]]]  + [I] * (sys_w - w))
     # ops.append([I] * (1 + corner_num) + [horiz_projs[b_inds[wi]]
-    #                                   for wi in range(w + 2 * h - 3 - 2 * corner_num, w + 2 * h - 5 - 3 * corner_num + w)] + [I])
+    #                                   for wi in range(w + 2 * h - 3 - 2 * corner_num, w + 2 * h - 4 - 3 * corner_num + w)])
+    ops.append([I] * (1 + corner_num) + [horiz_projs[b_inds[wi]]
+                                      for wi in range(w + 2 * h - 3 - 2 * corner_num, w + 2 * h - 5 - 3 * corner_num + w)] + [I]  + [I] * (sys_w - w))
+    ops += [[I] * sys_w] * (sys_h - h)
+
+    ops = [[I for wi in range(sys_w)] for hi in range(sys_h)]
+
+    print(param, w, h, corner_num, 'norm')
     norm = large_system_expectation_value(
-        w, h, cUp, dUp, cDown, dDown, leftRow, rightRow, openA, tau_projector, ops, chi=chi)
-    openA /= np.abs((2 * norm) ** (1 / (2 * w * h)))
+        sys_w, sys_h, cUp, dUp, cDown, dDown, leftRow, rightRow, openA, tau_projector, ops, chi=chi)
+    openA /= np.abs((norm) ** (1 / (2 * sys_w * sys_h)))
+    print(param, w, h, corner_num, 'norm_new')
     norm = large_system_expectation_value(
-        w, h, cUp, dUp, cDown, dDown, leftRow, rightRow, openA, tau_projector, ops, chi=chi)
+        sys_w, sys_h, cUp, dUp, cDown, dDown, leftRow, rightRow, openA, tau_projector, ops, chi=chi)
+    print(norm)
+
+    # ops_copy = [[tn.Node(I) for wi in range(sys_w)] for hi in range(sys_h)]
+    # ops_copy[0][0].tensor = np.matmul(ops[0][0].tensor, np.kron(np.eye(2), np.diag([1, -1])))
+    # ops_copy[0][1].tensor = np.matmul(ops[0][1].tensor, np.kron(np.diag([1, -1]), np.diag([1, -1])))
+    # ops_copy[1][1].tensor = np.matmul(ops[1][1].tensor, np.kron(np.diag([1, -1]), np.eye(2)))
+    # print(large_system_expectation_value(
+    #             sys_w, sys_h, cUp, dUp, cDown, dDown, leftRow, rightRow, openA, tau_projector, ops_copy, chi=chi))
+    # ops_copy = [[tn.Node(ops[hi][wi].tensor) for wi in range(sys_w)] for hi in range(sys_h)]
+    # ops_copy[1][0].tensor = np.matmul(ops[1][0].tensor, np.kron(np.eye(2), np.diag([1, -1])))
+    # ops_copy[1][1].tensor = np.matmul(ops[1][1].tensor, np.kron(np.diag([1, -1]), np.diag([1, -1])))
+    # ops_copy[2][1].tensor = np.matmul(ops[2][1].tensor, np.kron(np.diag([1, -1]), np.eye(2)))
+    # print(large_system_expectation_value(
+    #     sys_w, sys_h, cUp, dUp, cDown, dDown, leftRow, rightRow, openA, tau_projector, ops_copy, chi=chi))
+    # ops_copy = [[tn.Node(ops[hi][wi].tensor) for wi in range(sys_w)] for hi in range(sys_h)]
+    # ops_copy[2][0].tensor = np.matmul(ops[2][0].tensor, np.kron(np.eye(2), np.diag([1, -1])))
+    # ops_copy[2][1].tensor = np.matmul(ops[2][1].tensor, np.kron(np.diag([1, -1]), np.diag([1, -1])))
+    # ops_copy[3][1].tensor = np.matmul(ops[3][1].tensor, np.kron(np.diag([1, -1]), np.eye(2)))
+    # print(large_system_expectation_value(
+    #     sys_w, sys_h, cUp, dUp, cDown, dDown, leftRow, rightRow, openA, tau_projector, ops_copy, chi=chi))
+    # ops_copy = [[tn.Node(ops[hi][wi].tensor) for wi in range(sys_w)] for hi in range(sys_h)]
+    # ops_copy[0][1].tensor = np.matmul(ops[0][1].tensor, np.kron(np.eye(2), np.diag([1, -1])))
+    # ops_copy[0][2].tensor = np.matmul(ops[0][2].tensor, np.kron(np.diag([1, -1]), np.diag([1, -1])))
+    # ops_copy[1][2].tensor = np.matmul(ops[1][2].tensor, np.kron(np.diag([1, -1]), np.eye(2)))
+    # print(large_system_expectation_value(
+    #     sys_w, sys_h, cUp, dUp, cDown, dDown, leftRow, rightRow, openA, tau_projector, ops_copy, chi=chi))
+    # ops_copy = [[tn.Node(ops[hi][wi].tensor) for wi in range(sys_w)] for hi in range(sys_h)]
+    # ops_copy[1][1].tensor = np.matmul(ops[1][1].tensor, np.kron(np.eye(2), np.diag([1, -1])))
+    # ops_copy[1][2].tensor = np.matmul(ops[1][2].tensor, np.kron(np.diag([1, -1]), np.diag([1, -1])))
+    # ops_copy[2][2].tensor = np.matmul(ops[2][2].tensor, np.kron(np.diag([1, -1]), np.eye(2)))
+    # print(large_system_expectation_value(
+    #     sys_w, sys_h, cUp, dUp, cDown, dDown, leftRow, rightRow, openA, tau_projector, ops_copy, chi=chi))
+    # ops_copy = [[tn.Node(ops[hi][wi].tensor) for wi in range(sys_w)] for hi in range(sys_h)]
+    # ops_copy[2][1].tensor = np.matmul(ops[2][1].tensor, np.kron(np.eye(2), np.diag([1, -1])))
+    # ops_copy[2][2].tensor = np.matmul(ops[2][2].tensor, np.kron(np.diag([1, -1]), np.diag([1, -1])))
+    # ops_copy[3][2].tensor = np.matmul(ops[3][2].tensor, np.kron(np.diag([1, -1]), np.eye(2)))
+    # print(large_system_expectation_value(
+    #     sys_w, sys_h, cUp, dUp, cDown, dDown, leftRow, rightRow, openA, tau_projector, ops_copy, chi=chi))
+    # ops_copy = [[tn.Node(ops[hi][wi].tensor) for wi in range(sys_w)] for hi in range(sys_h)]
+    # ops_copy[0][2].tensor = np.matmul(ops[0][2].tensor, np.kron(np.eye(2), np.diag([1, -1])))
+    # ops_copy[0][3].tensor = np.matmul(ops[0][3].tensor, np.kron(np.diag([1, -1]), np.diag([1, -1])))
+    # ops_copy[1][3].tensor = np.matmul(ops[1][3].tensor, np.kron(np.diag([1, -1]), np.eye(2)))
+    # print(large_system_expectation_value(
+    #     sys_w, sys_h, cUp, dUp, cDown, dDown, leftRow, rightRow, openA, tau_projector, ops_copy, chi=chi))
+    # ops_copy = [[tn.Node(ops[hi][wi].tensor) for wi in range(sys_w)] for hi in range(sys_h)]
+    # ops_copy[1][2].tensor = np.matmul(ops[1][2].tensor, np.kron(np.eye(2), np.diag([1, -1])))
+    # ops_copy[1][3].tensor = np.matmul(ops[1][3].tensor, np.kron(np.diag([1, -1]), np.diag([1, -1])))
+    # ops_copy[2][3].tensor = np.matmul(ops[2][3].tensor, np.kron(np.diag([1, -1]), np.eye(2)))
+    # print(large_system_expectation_value(
+    #     sys_w, sys_h, cUp, dUp, cDown, dDown, leftRow, rightRow, openA, tau_projector, ops_copy, chi=chi))
+    # ops_copy = [[tn.Node(ops[hi][wi].tensor) for wi in range(sys_w)] for hi in range(sys_h)]
+    # ops_copy[2][2].tensor = np.matmul(ops[2][2].tensor, np.kron(np.eye(2), np.diag([1, -1])))
+    # ops_copy[2][3].tensor = np.matmul(ops[2][3].tensor, np.kron(np.diag([1, -1]), np.diag([1, -1])))
+    # ops_copy[3][3].tensor = np.matmul(ops[3][3].tensor, np.kron(np.diag([1, -1]), np.eye(2)))
+    # print(large_system_expectation_value(
+    #     sys_w, sys_h, cUp, dUp, cDown, dDown, leftRow, rightRow, openA, tau_projector, ops_copy, chi=chi))
+
+    # for tsti in range(100):
+    #     ops_copy = [[ops[hi][wi] for wi in range(sys_w)] for hi in range(sys_h)]
+    #     rand_in = [[np.random.randint(0, 2) for wi in range(w - 2)] for hi in range(h - 2)]
+    #     rand_out = [[np.random.randint(0, 2) for wi in range(w - 2)] for hi in range(h - 2)]
+    #     op = np.zeros((4, 4))
+    #     op[rand_in[0][0], rand_out[0][0]] = 1
+    #     ops_copy[0][1] = tn.Node(op)
+    #
+    #     op = np.zeros((4, 4))
+    #     op[rand_in[0][1], rand_out[0][1]] = 1
+    #     ops_copy[0][2] = tn.Node(op)
+    #
+    #     op = np.zeros((2, 2))
+    #     op[rand_in[1][0], rand_out[1][0]] = 1
+    #     op = np.kron(np.eye(2), op)
+    #     ops_copy[1][1] = tn.Node(op)
+    #     op = np.zeros((2, 2))
+    #     op[rand_in[1][1], rand_out[1][1]] = 1
+    #     op = np.kron(np.eye(2), op)
+    #     ops_copy[1][2] = tn.Node(op)
+    #     print(large_system_expectation_value(
+    #         sys_w, sys_h, cUp, dUp, cDown, dDown, leftRow, rightRow, openA, tau_projector, ops_copy, chi=chi))
+
 
     d = ops[0][0][0].dimension
     swap_op_tensor = np.zeros((d, d, d, d))
@@ -633,16 +722,20 @@ def large_system_block_entanglement(model, param, param_name, dirname, h, w, b_i
         for j in range(d):
             swap_op_tensor[i, j, j, i] = 1
     swap_op = tn.Node(swap_op_tensor.reshape([d**2, d**2]))
-    tau_projector = tn.Node(np.kron(tau_projector.tensor, tau_projector.tensor))
-    ops = [[tn.Node(np.kron(ops[hi][wi].tensor, ops[hi][wi].tensor)) for wi in range(w)] for hi in range(h)]
-    cUp, dUp, cDown, dDown, leftRow, rightRow, openA = \
+    tau_projector_2 = tn.Node(np.kron(tau_projector.tensor, tau_projector.tensor))
+    ops_2 = [[tn.Node(np.kron(ops[hi][wi].tensor, ops[hi][wi].tensor)) for wi in range(sys_w)] for hi in range(sys_h)]
+    cUp_2, dUp_2, cDown_2, dDown_2, leftRow_2, rightRow_2, openA_2 = \
         [tn.Node(np.kron(node.tensor, node.tensor)) for node in [cUp, dUp, cDown, dDown, leftRow, rightRow, openA]]
+    # TODO the term below should equal norm**2, but it doesn't
+    # norm_2 = large_system_expectation_value(
+    #     sys_w, sys_h, cUp_2, dUp_2, cDown_2, dDown_2, leftRow_2, rightRow_2, openA_2, tau_projector_2, ops_2, chi=chi)
     for wi in range(1, w):
         for hi in range(h - 1):
             if [hi, wi] in subsystem_sites:
-                ops[hi][wi] = bops.contract(ops[hi][wi], swap_op, '1', '0')
+                ops_2[hi][wi] = bops.contract(ops_2[hi][wi], swap_op, '1', '0')
+    print(param, w, h, corner_num, 'p2')
     p2 = large_system_expectation_value(
-        w, h, cUp, dUp, cDown, dDown, leftRow, rightRow, openA, tau_projector, ops, chi=chi)
+        sys_w, sys_h, cUp_2, dUp_2, cDown_2, dDown_2, leftRow_2, rightRow_2, openA_2, tau_projector_2, ops_2, chi=chi)
     print(param, p2 / np.abs(norm**2))
     return p2 / np.abs(norm**2)
 
@@ -673,43 +766,47 @@ def purity_corner_law(model, param, param_name, dirname, plot=False, chi=128, ta
     p2s = np.zeros(len(corners), dtype=complex)
     for ci in range(len(corners)):
         c = corners[ci]
-        p2_filename = dirname + '/' + model + '_' + param_name + '_' + str(param) + '_p2_corner_c_' + str(c) + '_chi_' + str(chi)
+        p2_filename = dirname + '/corner_' + param_name + '_' + str(param) + '_p2_c_' + str(c) + '_chi_' + str(chi)
         if os.path.exists(p2_filename):
             p2 = pickle.load(open(p2_filename, 'rb'))
         else:
             p2 = large_system_block_entanglement(model, param, param_name, dirname,
-                            L, L, [0] * L**2 * 100, corner_charges=[0] * L, tau_projector=tau_projector, chi=chi, corner_num=ci)
+                            L, L, [0] * L**2 * 100, corner_charges=[0] * L, tau_projector=tau_projector, chi=chi, corner_num=c)
             pickle.dump(p2, open(p2_filename, 'wb'))
         p2s[ci] = p2
         gc.collect()
     p, residuals, _, _, _ = np.polyfit(corners, np.log(p2s), 2, full=True)
     if plot:
         import matplotlib.pyplot as plt
-        plt.plot(corners, np.log(p2s))
-        plt.title('corner ' + param_name + ' = ' + str(param))
+        plt.plot(corners, p2s)
+        plt.title('corner ' + param_name + ' = ' + str(param) + ', fit params = ' + str(p))
         plt.show()
-    return p[0], p2s, corners
+    return p[1], p2s, corners
 
 
 def purity_area_law(model, param, param_name, dirname, plot=False, chi=128, tau_projector=None):
-    Ls = 2 * np.array(range(3, 7))
+    Ls = 2 * np.array(range(2, 7))
     p2s = np.zeros(len(Ls), dtype=complex)
+    norms_p2s = np.zeros(len(Ls), dtype=complex)
     for Li in range(len(Ls)):
         L = Ls[Li]
-        p2_filename = dirname + '/' + model + '_' + param_name + '_' + str(param) + '_p2_square_L_' + str(L) + '_chi_' + str(chi)
+        p2_filename = dirname + '/' + param_name + '_' + str(param) + '_p2_square_L_' + str(L) + '_chi_' + str(chi)
         if os.path.exists(p2_filename):
             p2 = pickle.load(open(p2_filename, 'rb'))
         else:
             p2 = large_system_block_entanglement(model, param, param_name, dirname,
-                            L, L, [0] * L**2 * 100, corner_charges=[0] * L, tau_projector=tau_projector, chi=chi, corner_num=1)
+                            L, L, [0] * L**2 * 100, corner_charges=[0] * L, tau_projector=tau_projector, chi=chi, corner_num=1, sys_h=Ls[-1], sys_w=Ls[-1])
+            # norm_p2 = large_system_block_entanglement(model, param, param_name, dirname,
+            #                 6, 6, [0] * L**2 * 100, corner_charges=[0] * L, tau_projector=tau_projector, chi=chi, corner_num=1, sys_h=L, sys_w=L)
             pickle.dump(p2, open(p2_filename, 'wb'))
         p2s[Li] = p2
+        # norms_p2s[Li] = norm_p2
         gc.collect()
     p, residuals, _, _, _ = np.polyfit(Ls, np.log(p2s), 2, full=True)
     if plot:
         import matplotlib.pyplot as plt
-        plt.plot(Ls, np.log(p2s))
-        plt.title('area ' + param_name + ' = ' + str(param))
+        plt.plot(Ls, p2s)
+        plt.title('area ' + param_name + ' = ' + str(param) + ', fit params = ' + str([np.format_float_positional(x, precision=4) for x in p]))
         plt.show()
     return p[0], p2s, Ls
 
@@ -721,13 +818,14 @@ def purity_stairs_law():
         param = params[pi]
 
 
+#TODO equipartition check, some system that changes area and corners
 
 model = sys.argv[1]
 edge_dim = 2
 params = []
 param_name = ''
 if model == 'toric_c':
-    params = [np.round(0.1 * i, 8) for i in range(1, 40)] + [np.round(1 + 0.01 * i, 8) for i in range(-9, 10)]
+    params = [1.0] #[np.round(0.1 * i, 8) for i in range(1, 16)] #[np.round(0.1 * i, 8) for i in range(1, 40)] + [np.round(1 + 0.01 * i, 8) for i in range(-9, 10)]
     params.sort()
     param_name = 'c'
 elif model == 'orus':
@@ -756,15 +854,27 @@ elif model == 'vary_ad':
     model = model + '_' + str(beta) + '_' + str(gamma)
 elif model == 'vary_gamma':
     param_name = 'gamma'
-    params = [np.round(0.001 * a, 3) for a in range(30)] \
-             + [np.round(0.2 * a, 8) for a in range(5)] \
-             + [np.round(1 + 0.001 * a, 8) for a in range(-100, -80)] \
-             + [np.round(1 + 0.001 * a, 8) for a in range(40, 50)]
+    # params = [np.round(0.001 * a, 3) for a in range(30)] \
+    #          + [np.round(0.2 * a, 8) for a in range(5)] + \
+    # params = [np.round(1 + 0.001 * a, 8) for a in range(-100, -80)] \
+    #          + [np.round(1 + 0.001 * a, 8) for a in range(40, 50)]
+    params = [np.round(a * 0.01, 8) for a in range(6)] + [np.round(1 + 0.002 * a, 8) for a in list(range(-30, 1)) + list(range(5, 30))]
     params.sort()
     alpha = float(sys.argv[2])
     beta = float(sys.argv[3])
     delta = float(sys.argv[4])
     model = model + '_' + str(alpha) + '_' + str(beta) + '_' + str(delta)
+elif model == 'zohar_non_symm':
+    param_name = 'gamma'
+    params = [np.round(a * 0.01, 8) for a in range(6)] + [np.round(1 + 0.002 * a, 8) for a in list(range(-10, 1)) + list(range(5, 10))]
+    params.sort()
+    alpha = 1.0
+    beta_ur = 0.1
+    beta_rd = 0.2
+    beta_dl = 0.3
+    beta_lu = 0.4
+    delta = 0.95
+    model = model + '_' + str(alpha) + '_' + str(beta_lu) + '_' + str(beta_dl) + '_' + str(beta_rd) + '_' + str(beta_ur) + '_' + str(delta)
 dir_name = "results/gauge/" + model
 if not os.path.exists(dir_name):
     os.mkdir(dir_name)
@@ -773,8 +883,15 @@ L_p2s = np.zeros(len(params))
 c_p2s = np.zeros(len(params))
 for pi in range(len(params)):
     param = params[pi]
-    L_p2s[pi] = purity_area_law(model, param, param_name, dir_name, plot=False, chi=32, tau_projector=None)[0]
-    c_p2s[pi] = purity_corner_law(model, param, param_name, dir_name, plot=False, chi=32, tau_projector=None)[0]
+    print(param)
+    # tau_projector = np.zeros((2, 4))
+    # tau_projector[0, 0] = 1
+    # tau_projector[2, 3] = 1
+    # tau_projector[1, 1] = np.sqrt(1/2)
+    # tau_projector[1, 2] = np.sqrt(1/2)
+    tau_projector = np.eye(4)
+    L_p2s[pi] = purity_area_law(model, param, param_name, dir_name, plot=False, chi=8, tau_projector=tn.Node(tau_projector))[0]
+    c_p2s[pi] = purity_corner_law(model, param, param_name, dir_name, plot=False, chi=8, tau_projector=tn.Node(tau_projector))[0]
 print(L_p2s)
 print(c_p2s)
 
@@ -799,7 +916,7 @@ for pi in range(len(params)):
         full_p2 = pickle.load(open(res_filename, 'rb'))
     else:
         L = 6
-        full_p2 = large_system_block_entanglement(model, params[pi], param_name, dir_name, L, L, [-1] * 100, [0] * L, chi=2048)
+        full_p2 = large_system_block_entanglement(model, params[pi], param_name, dir_name, L, L, [-1] * 100, [-1] * L, chi=128)
         pickle.dump(full_p2, open(res_filename, 'wb'))
     full_purity_large_systems[pi] = full_p2
     print(param, full_p2, 'full p2')
@@ -807,6 +924,8 @@ for pi in range(len(params)):
 
 import matplotlib.pyplot as plt
 plt.plot(params, np.abs(wilson_results) * 10)
+plt.plot(params, L_p2s)
+plt.plot(params, c_p2s)
 plt.plot(params, -np.log(full_purity_large_systems), '--')
-plt.legend(['Wilson  * 10', r'$p_2(q=0)$', r'$p_2(q arbitrary)$', r'$p_2(q=1)$', r'$p_2$ full'])
+plt.legend(['Wilson  * 10', r'areas', r'corners', r'$p_2$ full'])
 plt.show()
