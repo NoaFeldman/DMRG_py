@@ -46,6 +46,9 @@ def square_wilson_loop_expectation_value(cUp: tn.Node, dUp: tn.Node, cDown: tn.N
     tau_projector = tn.Node(np.eye(openA[1].dimension))
     X = np.array([[0, 1], [1, 0]])
     I = np.eye(2)
+    tst_norm = large_system_expectation_value(4, 4, cUp, dUp, cDown, dDown, leftRow, rightRow, openA, tau_projector,
+                                          [[tn.Node(np.eye(openA[0].dimension))] * L] * L, chi=chi)
+    openA.tensor *= tst_norm**(-1 / (2*4**2))
     wilson = large_system_expectation_value(L, L, cUp, dUp, cDown, dDown, leftRow, rightRow, openA,
             tn.Node(np.eye(openA[1].dimension)),
             [[tn.Node(np.kron(I, X))] * (L - 1) + [tn.Node(np.kron(I, I))]] + \
@@ -138,26 +141,9 @@ def toric_tensors_lgt_approach(model, param, d=2):
                                       np.exp(2j * np.pi * j / d) *
                                       np.exp(-2j * np.pi * k / d)) * d / (2 * np.pi), 10)) % d,
                 i, j] = 1
-    if model == 'zeros_diff':
-        tensor[0, 0, 0, 0, 0, 0] = param
-    elif model == 'zohar_alpha':
-        tensor[0, 0, 0, 0, 0, 0] = param
-    elif model[:10] == 'vary_alpha':
-        alpha = param
-        tensor = get_zohar_tensor(alpha, beta * np.ones(4), gamma, delta)
-    elif model[:9] == 'vary_beta':
-        beta = param
-        tensor = get_zohar_tensor(alpha, beta * np.ones(4), gamma, delta)
-    elif model[:10] == 'vary_gamma':
+    if model[:10] == 'vary_gamma':
         gamma = param
         tensor = get_zohar_tensor(alpha, beta * np.ones(4), gamma, delta)
-    elif model[:7] == 'vary_ad':
-        alpha = param
-        delta = param
-        tensor = get_zohar_tensor(alpha, beta * np.ones(4), gamma, delta)
-    elif model[:14] == 'zohar_non_symm':
-        gamma = param
-        tensor = get_zohar_tensor(alpha, [beta_ur, beta_lu, beta_dl, beta_rd], gamma, delta)
     elif model == 'zohar_gamma':
         tensor[1, 0, 1, 0, 1, 0] = param
         tensor[0, 1, 0, 1, 0, 1] = param
@@ -166,6 +152,107 @@ def toric_tensors_lgt_approach(model, param, d=2):
             for j in range(d):
                 tensor[i, j, :, :, :, :] *= (1 + param) ** (i + j)
         tensor /= ((1 + param) ** 2)**0.75
+    elif model == 'orus_expanded':
+        for i in range(d):
+            for j in range(d):
+                tensor[i, j, :, :, :, :] *= (1 + param) ** (i + j)
+        tensor /= ((1 + param) ** 2)**0.75
+        expander_term = 0.5
+        expander_single = np.zeros((2, 4), dtype=complex)
+        expander_single[0, 0] = 1
+        expander_single[0, 3] = expander_term
+        expander_single[1, 1] = 1
+        expander_single[1, 2] = expander_term
+        expander_double = np.zeros((2, 2, 4, 4), dtype=complex)
+        expander_double[0, 0, 0, 0] = 1
+        expander_double[0, 0, 0, 3] = expander_term**(-1)
+        expander_double[0, 0, 3, 0] = expander_term**(-1)
+        expander_double[0, 0, 3, 3] = expander_term**(-2)
+        expander_double[1, 1, 0, 0] = 1
+        expander_double[1, 1, 0, 3] = expander_term**(-1)
+        expander_double[1, 1, 3, 0] = expander_term**(-1)
+        expander_double[1, 1, 3, 3] = expander_term**(-2)
+        expander_double[0, 0, 1, 1] = 1
+        expander_double[0, 0, 1, 2] = expander_term**(-1)
+        expander_double[0, 0, 2, 1] = expander_term**(-1)
+        expander_double[0, 0, 2, 2] = expander_term**(-2)
+        expander_double[1, 1, 1, 1] = 1
+        expander_double[1, 1, 1, 2] = expander_term**(-1)
+        expander_double[1, 1, 2, 1] = expander_term**(-1)
+        expander_double[1, 1, 2, 2] = expander_term**(-2)
+        expander_double[0, 1, 0, 1] = 1
+        expander_double[0, 1, 0, 2] = expander_term**(-1)
+        expander_double[0, 1, 3, 1] = expander_term**(-1)
+        expander_double[0, 1, 3, 2] = expander_term**(-2)
+        expander_double[0, 1, 1, 0] = 1
+        expander_double[0, 1, 1, 3] = expander_term**(-1)
+        expander_double[0, 1, 2, 0] = expander_term**(-1)
+        expander_double[0, 1, 2, 3] = expander_term**(-2)
+        expander_double[1, 0, 0, 1] = 1
+        expander_double[1, 0, 0, 2] = expander_term**(-1)
+        expander_double[1, 0, 3, 1] = expander_term**(-1)
+        expander_double[1, 0, 3, 2] = expander_term**(-2)
+        expander_double[1, 0, 1, 0] = 1
+        expander_double[1, 0, 1, 3] = expander_term**(-1)
+        expander_double[1, 0, 2, 0] = expander_term**(-1)
+        expander_double[1, 0, 2, 3] = expander_term**(-2)
+        tensor = np.tensordot(np.tensordot(np.tensordot(
+            tensor, expander_single, ([0], [0])), expander_single, ([0], [0])), expander_double, ([0,1], [0,1]))\
+            .transpose([2, 3, 4, 5, 0, 1]).reshape([4, 4, 4, 4, 4])
+        return tn.Node(tensor)
+
+    elif model == 'my':
+        tensor_base = np.zeros((2, 2, 2, 2, 2, 2), dtype=complex)
+        tensor_base[0, 0, 0, 0, 0, 0] = 1
+        tensor_base[0, 0, 1, 1, 0, 0] = 1
+        tensor_base[0, 1, 0, 1, 0, 1] = 1
+        tensor_base[0, 1, 1, 0, 0, 1] = 1
+        tensor_base[1, 0, 0, 1, 1, 0] = 1
+        tensor_base[1, 0, 1, 0, 1, 0] = 1
+        tensor_base[1, 1, 0, 0, 1, 1] = 1
+        tensor_base[1, 1, 1, 1, 1, 1] = 1
+        expander_single = np.zeros((2, 4), dtype=complex)
+        expander_single[0, 0] = 1
+        expander_single[0, 3] = param
+        expander_single[1, 1] = 1
+        expander_single[1, 2] = param
+        expander_double = np.zeros((2, 2, 4, 4), dtype=complex)
+        expander_double[0, 0, 0, 0] = 1
+        expander_double[0, 0, 0, 3] = param**(-1)
+        expander_double[0, 0, 3, 0] = param**(-1)
+        expander_double[0, 0, 3, 3] = param**(-2)
+        expander_double[1, 1, 0, 0] = 1
+        expander_double[1, 1, 0, 3] = param**(-1)
+        expander_double[1, 1, 3, 0] = param**(-1)
+        expander_double[1, 1, 3, 3] = param**(-2)
+        expander_double[0, 0, 1, 1] = 1
+        expander_double[0, 0, 1, 2] = param**(-1)
+        expander_double[0, 0, 2, 1] = param**(-1)
+        expander_double[0, 0, 2, 2] = param**(-2)
+        expander_double[1, 1, 1, 1] = 1
+        expander_double[1, 1, 1, 2] = param**(-1)
+        expander_double[1, 1, 2, 1] = param**(-1)
+        expander_double[1, 1, 2, 2] = param**(-2)
+        expander_double[0, 1, 0, 1] = 1
+        expander_double[0, 1, 0, 2] = param**(-1)
+        expander_double[0, 1, 3, 1] = param**(-1)
+        expander_double[0, 1, 3, 2] = param**(-2)
+        expander_double[0, 1, 1, 0] = 1
+        expander_double[0, 1, 1, 3] = param**(-1)
+        expander_double[0, 1, 2, 0] = param**(-1)
+        expander_double[0, 1, 2, 3] = param**(-2)
+        expander_double[1, 0, 0, 1] = 1
+        expander_double[1, 0, 0, 2] = param**(-1)
+        expander_double[1, 0, 3, 1] = param**(-1)
+        expander_double[1, 0, 3, 2] = param**(-2)
+        expander_double[1, 0, 1, 0] = 1
+        expander_double[1, 0, 1, 3] = param**(-1)
+        expander_double[1, 0, 2, 0] = param**(-1)
+        expander_double[1, 0, 2, 3] = param**(-2)
+        tensor = np.tensordot(np.tensordot(np.tensordot(
+            tensor_base, expander_single, ([0], [0])), expander_single, ([0], [0])), expander_double, ([0,1], [0,1]))\
+            .transpose([2, 3, 4, 5, 0, 1]).reshape([4, 4, 4, 4, 4])
+        return tn.Node(tensor)
     elif model == 'zohar':
         alpha, beta, gamma, delta = param
         tensor[0, 0, 0, 0, 0, 0] = alpha
@@ -186,7 +273,7 @@ def toric_tensors_lgt_approach(model, param, d=2):
         tensor[1, 1, 1, 0, 1, 0] = param**0.75
         tensor[0, 0, 1, 1, 1, 1] = param**0.5
         tensor[1, 1, 0, 0, 1, 1] = param**0.5
-        # tensor /= param
+        if param > 1: tensor /= param
     elif model == 'toric_c_constructed':
         tensor = np.zeros([2] * 10, dtype=complex)
         tensor[0, 0, 0, 0, 0, 0, 0, 0, 0, 0] = 1
@@ -534,7 +621,7 @@ def fold_mpo(mpo):
                     .reshape([mpo[0][0].dimension**2] * 2 + [mpo[N//2 - 1][2].dimension * mpo[N//2][3].dimension, 1]))]
 
 
-def large_system_expectation_value(w, h, cUp, dUp, cDown, dDown, leftRow, rightRow, openA, tau_projector, ops, chi=128):
+def large_system_expectation_value(w, h, cUp, dUp, cDown, dDown, leftRow, rightRow, openA, tau_projector, ops, chi=128, pbc=False):
     open_tau = bops.contract(bops.contract(bops.contract(bops.contract(
         openA, tau_projector, '1', '1'), tau_projector, '1', '1'), tau_projector, '1', '1'), tau_projector, '1', '1')
     p_c_up = bops.permute(bops.contract(cUp, tau_projector, '1', '1'), [0, 2, 1])
@@ -543,18 +630,35 @@ def large_system_expectation_value(w, h, cUp, dUp, cDown, dDown, leftRow, rightR
     p_d_down = bops.permute(bops.contract(dDown, tau_projector, '1', '1'), [1, 2, 0])
     full_system_length = 2 * w
     up_row = [p_c_up, p_d_up] * int(full_system_length / 2)
-    up_row = to_cannonical(up_row, PBC=True)
     down_row = [p_d_down, p_c_down] * int(full_system_length / 2)
-    down_row = to_cannonical(down_row, PBC=True)
+    if pbc:
+        up_row = to_cannonical(up_row, PBC=True)
+        down_row = to_cannonical(down_row, PBC=True)
+    else:
+        up_row = [tn.Node(np.eye(up_row[0][0].dimension).reshape([1] + [up_row[0][0].dimension] * 2))]\
+                 + up_row + [tn.Node(np.eye(up_row[-1][2].dimension).reshape([up_row[0][0].dimension] * 2 + [1]))]
+        down_row = [tn.Node(np.eye(down_row[0][0].dimension).reshape([1] + [down_row[0][0].dimension] * 2))]\
+                + down_row + [tn.Node(np.eye(down_row[-1][2].dimension).reshape([down_row[0][0].dimension] * 2 + [1]))]
+        p_left = bops.permute(bops.contract(bops.contract(leftRow, tau_projector, '1', '1'), tau_projector, '1', '1'), [0, 2, 3, 1])
+        ld, lu, te = bops.svdTruncation(p_left, [0, 1], [2, 3], '>>')
+        lefts = [tn.Node(lu.tensor.reshape(list(lu.tensor.shape) + [1]).transpose([2, 0, 3, 1])),
+                 tn.Node(ld.tensor.reshape(list(ld.tensor.shape) + [1]).transpose([2, 0, 3, 1]))]
+        p_right = bops.permute(bops.contract(bops.contract(rightRow, tau_projector, '1', '1'), tau_projector, '1', '1'), [0, 2, 3, 1])
+        ru, rd, te = bops.svdTruncation(p_right, [0, 1], [2, 3], '>>')
+        rights = [tn.Node(ru.tensor.reshape(list(ru.tensor.shape) + [1]).transpose([0, 2, 1, 3])),
+                 tn.Node(rd.tensor.reshape(list(rd.tensor.shape) + [1]).transpose([0, 2, 1, 3]))]
     for hi in range(h):
         dbg = 1
-        mid_row = [tn.Node(bops.permute(bops.contract(open_tau, ops[hi][wi], '01', '01'), [0, 2, 3, 1]))
+        mid_row = [tn.Node(bops.permute(bops.contract(open_tau, tn.Node(np.eye(openA[0].dimension)), '01', '01'),
+                                  [0, 2, 3, 1]))] * ((full_system_length - w) // 2) + \
+                  [tn.Node(bops.permute(bops.contract(open_tau, ops[hi][wi], '01', '01'), [0, 2, 3, 1]))
                    for wi in range(w)] + \
-            [tn.Node(bops.permute(bops.contract(open_tau, tn.Node(np.eye(openA[0].dimension)), '01', '01'),
-                                  [0, 2, 3, 1]))] * (full_system_length - w) # w * cylinder_mult
-        mid_row = fold_mpo(mid_row)
-        if openA[0].dimension == 16:
-            dbg = 1
+                  [tn.Node(bops.permute(bops.contract(open_tau, tn.Node(np.eye(openA[0].dimension)), '01', '01'),
+                                  [0, 2, 3, 1]))] * (full_system_length - w - (full_system_length - w) // 2)
+        if pbc:
+            mid_row = fold_mpo(mid_row)
+        else:
+            mid_row = [lefts[hi % 2]] + mid_row + [rights[hi % 2]]
         for wi in range(len(up_row)):
             up_row[wi] = tn.Node(bops.contract(up_row[wi], mid_row[wi], '1', '0').tensor.\
                 transpose([0, 3, 2, 1, 4]).reshape(
@@ -565,6 +669,8 @@ def large_system_expectation_value(w, h, cUp, dUp, cDown, dDown, leftRow, rightR
         for k in range(len(up_row) - 2, -1, -1):
             M = bops.contract(up_row[k], up_row[(k+1) % len(up_row)], '2', '0')
             l, s, r, te = bops.svdTruncation(M, [0, 1], [2, 3], '>*<', maxBondDim=chi, normalize=False)
+            if np.round(sum(np.diag(s.tensor)), 8) == 0:
+                dbg = 0
             up_row[k], up_row[(k+1) % len(up_row)] = bops.contract(l, s, '2', '0'), r
             tst = bops.contract(bops.contract(up_row[k], up_row[(k+1)], '2', '0'), M, '0123', '0123*').tensor \
                   / bops.contract(M, M, '0123', '0123*').tensor
@@ -699,7 +805,12 @@ def wilson_expectations(model, param, param_name, dirname, plot=False, chi=128):
     wilson_expectations = np.zeros(len(Ls), dtype=complex)
     for Li in range(len(Ls)):
         L = Ls[Li]
-        wilson_exp = square_wilson_loop_expectation_value(cUp, dUp, cDown, dDown, leftRow, rightRow, openA, L, chi=chi)
+        filename = dirname + '/wilson_' + param_name + '_' + str(param) + '_L_' + str(L)
+        if os.path.exists(filename):
+            wilson_exp = pickle.load(open(filename, 'rb'))
+        else:
+            wilson_exp = square_wilson_loop_expectation_value(cUp, dUp, cDown, dDown, leftRow, rightRow, openA, L, chi=chi)
+            pickle.dump(wilson_exp, open(filename, 'wb'))
         wilson_expectations[Li] = wilson_exp
         gc.collect()
     p, residuals, _, _, _ = np.polyfit(Ls, np.log(wilson_expectations), 2, full=True)
@@ -773,33 +884,13 @@ edge_dim = 2
 params = []
 param_name = ''
 if model == 'toric_c':
-    params = [0.5, 1.0, 1.5, 3.0] #[np.round(0.1 * i, 8) for i in range(1, 16)] #[np.round(0.1 * i, 8) for i in range(1, 40)] + [np.round(1 + 0.01 * i, 8) for i in range(-9, 10)]
+    params = [np.round(0.1 * i, 8) for i in range(1, 16)] #[np.round(0.1 * i, 8) for i in range(1, 40)] + [np.round(1 + 0.01 * i, 8) for i in range(-9, 10)]
     params.sort()
     param_name = 'c'
 elif model == 'orus':
     # https://journals.aps.org/prl/abstract/10.1103/PhysRevLett.113.257202
     params = [np.round(0.1 * i, 8) for i in range(3, 13)]
     param_name = 'g'
-elif model == 'vary_alpha':
-    param_name = 'alpha'
-    params = [np.round(0.2 * a, 8) for a in range(-10, 11)]
-    beta = float(sys.argv[1])
-    gamma = float(sys.argv[2])
-    delta = float(sys.argv[3])
-    model = model + '_' + str(beta) + '_' + str(gamma) + '_' + str(delta)
-elif model == 'vary_beta':
-    param_name = 'beta'
-    params = [np.round(0.1 * a, 8) for a in range(11)]
-    alpha = float(sys.argv[1])
-    gamma = float(sys.argv[2])
-    delta = float(sys.argv[3])
-    model = model + '_' + str(alpha) + '_' + str(gamma) + '_' + str(delta)
-elif model == 'vary_ad':
-    param_name = 'alpha'
-    params = [np.round(0.2 * a, 8) for a in range(-10, 8)]
-    beta = float(sys.argv[1])
-    gamma = float(sys.argv[2])
-    model = model + '_' + str(beta) + '_' + str(gamma)
 elif model == 'vary_gamma':
     param_name = 'gamma'
     # params = [np.round(0.001 * a, 3) for a in range(30)] \
@@ -812,49 +903,33 @@ elif model == 'vary_gamma':
     beta = float(sys.argv[3])
     delta = float(sys.argv[4])
     model = model + '_' + str(alpha) + '_' + str(beta) + '_' + str(delta)
-elif model == 'zohar_non_symm':
-    param_name = 'gamma'
-    params = [np.round(a * 0.01, 8) for a in range(6)] + [np.round(1 + 0.002 * a, 8) for a in list(range(-10, 1)) + list(range(5, 10))]
-    params.sort()
-    alpha = 1.0
-    beta_ur = 0.1
-    beta_rd = 0.2
-    beta_dl = 0.3
-    beta_lu = 0.4
-    delta = 0.95
-    model = model + '_' + str(alpha) + '_' + str(beta_lu) + '_' + str(beta_dl) + '_' + str(beta_rd) + '_' + str(beta_ur) + '_' + str(delta)
+elif model == 'my':
+    param_name = 'epsilon'
+    params = [np.round(0.1 * i, 8) for i in range(1, 10)]
+
+
 dir_name = "results/gauge/" + model
 if not os.path.exists(dir_name):
     os.mkdir(dir_name)
+
+
+wilson_results = np.zeros(len(params))
+for pi in range(len(params)):
+    param = params[pi]
+    print(param)
+    bulk_coeff = wilson_expectations(model, param, param_name, dir_name, chi=256, plot=False)
+    wilson_results[pi] = bulk_coeff
 
 L_p2s = np.zeros(len(params))
 c_p2s = np.zeros(len(params))
 for pi in range(len(params)):
     param = params[pi]
     print(param)
-    # tau_projector = np.zeros((2, 4))
-    # tau_projector[0, 0] = 1
-    # tau_projector[2, 3] = 1
-    # tau_projector[1, 1] = np.sqrt(1/2)
-    # tau_projector[1, 2] = np.sqrt(1/2)
     tau_projector = np.eye(4)
     L_p2s[pi] = purity_area_law(model, param, param_name, dir_name, plot=False, chi=8, tau_projector=tn.Node(tau_projector))[0]
     c_p2s[pi] = purity_corner_law(model, param, param_name, dir_name, plot=False, chi=8, tau_projector=tn.Node(tau_projector))[0]
 print(L_p2s)
 print(c_p2s)
-
-wilson_results = np.zeros(len(params))
-for pi in range(len(params)):
-    param = params[pi]
-    print(param)
-    wilson_filename = 'results/gauge/' + model + '/wilson_' + model + '_' + param_name + '_' + str(param)
-    if os.path.exists(wilson_filename):
-        bulk_coeff = pickle.load(open(wilson_filename, 'rb'))
-    else:
-        bulk_coeff = wilson_expectations(model, param, param_name, dir_name, chi=256)
-        pickle.dump(bulk_coeff, open(wilson_filename, 'wb'))
-    wilson_results[pi] = bulk_coeff
-
 
 full_purity_large_systems = np.zeros(len(params))
 for pi in range(len(params)):
@@ -869,11 +944,10 @@ for pi in range(len(params)):
     full_purity_large_systems[pi] = full_p2
     print(param, full_p2, 'full p2')
 
-
 import matplotlib.pyplot as plt
-plt.plot(params, np.abs(wilson_results) * 10)
+plt.plot(params, np.abs(wilson_results))
 plt.plot(params, L_p2s)
 plt.plot(params, c_p2s)
 plt.plot(params, -np.log(full_purity_large_systems), '--')
-plt.legend(['Wilson  * 10', r'areas', r'corners', r'$p_2$ full'])
+plt.legend(['Wilson', r'areas', r'corners', r'$p_2$ full'])
 plt.show()
