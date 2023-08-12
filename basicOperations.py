@@ -494,7 +494,8 @@ def getEdgeNames(node: tn.Node):
 
 
 # k is curr working site, shift it by one in dir direction.
-def shiftWorkingSite(psi: List[tn.Node], k, dir, maxBondDim=1024):
+def shiftWorkingSite(psi: List[tn.Node], k, dir, maxBondDim=1024, return_trunc_err=False):
+    te = 0
     if dir == '<<':
         pair = multiContraction(psi[k-1], psi[k], [2], [0], cleanOr1=True, cleanOr2=True)
         if maxBondDim is None:
@@ -510,7 +511,10 @@ def shiftWorkingSite(psi: List[tn.Node], k, dir, maxBondDim=1024):
         psi[k] = l
         psi[k + 1] = r
         tn.remove_node(pair)
-    return psi
+    if return_trunc_err:
+        return psi, I
+    else:
+        return psi
 
 
 def moveOrthogonalityCenter(psi, n):
