@@ -17,23 +17,37 @@ d = 2
 
 
 def square_wilson_loop_expectation_value(cUp: tn.Node, dUp: tn.Node, cDown: tn.Node, dDown: tn.Node,
-                                         leftRow: tn.Node, rightRow: tn.Node, openA: tn.Node, L: int, chi=128):
+                                         leftRow: tn.Node, rightRow: tn.Node, openA: tn.Node, L: int, chi=128, sys_L=None):
     tau_projector = tn.Node(np.eye(openA[1].dimension))
     X = np.array([[0, 1], [1, 0]])
     I = np.eye(2)
-    tst_norm = large_system_expectation_value(4, 4, cUp, dUp, cDown, dDown, leftRow, rightRow, openA, tau_projector,
+    if sys_L is None:
+        sys_L = L
+
+    open_tau = bops.contract(bops.contract(bops.contract(bops.contract(
+        openA, tau_projector, '1', '1'), tau_projector, '1', '1'), tau_projector, '1', '1'), tau_projector, '1', '1')
+    p_c_up = bops.permute(bops.contract(cUp, tau_projector, '1', '1'), [0, 2, 1])
+    p_d_up = bops.permute(bops.contract(dUp, tau_projector, '1', '1'), [0, 2, 1])
+    p_c_down = bops.permute(bops.contract(cDown, tau_projector, '1', '1'), [1, 2, 0])
+    p_d_down = bops.permute(bops.contract(dDown, tau_projector, '1', '1'), [1, 2, 0])
+    p_left = bops.permute(bops.contract(bops.contract(leftRow, tau_projector, '1', '1'), tau_projector, '1', '1'),
+                          [0, 2, 3, 1])
+    p_right = bops.permute(bops.contract(bops.contract(rightRow, tau_projector, '1', '1'), tau_projector, '1', '1'),
+                           [0, 2, 3, 1])
+
+    tst_norm = large_system_expectation_value(4, 4, p_c_up, p_d_up, p_c_down, p_d_down, p_left, p_right, open_tau,
                                           [[tn.Node(np.eye(openA[0].dimension))] * L] * L, chi=chi)
     openA.tensor *= tst_norm**(-1 / (2*4**2))
-    wilson = large_system_expectation_value(L, L, cUp, dUp, cDown, dDown, leftRow, rightRow, openA,
-            tn.Node(np.eye(openA[1].dimension)),
-            [[tn.Node(np.kron(I, X))] * (L - 1) + [tn.Node(np.kron(I, I))]] + \
-            [[tn.Node(np.kron(X, I))] + [tn.Node(np.kron(I, I))] * (L - 2) + [tn.Node(np.kron(X, I))]] * (L - 2) + \
-            [[tn.Node(np.kron(X, X))] + [tn.Node(np.kron(I, X))] * (L - 2) + [tn.Node(np.kron(X, I))]], chi=chi)
-    norm = large_system_expectation_value(L, L, cUp, dUp, cDown, dDown, leftRow, rightRow, openA, tau_projector,
-                                          [[tn.Node(np.eye(openA[0].dimension))] * L] * L, chi=chi)
+    wilson = large_system_expectation_value(sys_L, sys_L, p_c_up, p_d_up, p_c_down, p_d_down, p_left, p_right, open_tau,
+            [[tn.Node(np.kron(I, X))] * (L - 1) + [tn.Node(np.kron(I, I))] + [tn.Node(np.kron(I, I))] * (sys_L - L)] + \
+            [[tn.Node(np.kron(X, I))] + [tn.Node(np.kron(I, I))] * (L - 2) + [tn.Node(np.kron(X, I))]  + [tn.Node(np.kron(I, I))] * (sys_L - L)] * (L - 2) + \
+            [[tn.Node(np.kron(X, X))] + [tn.Node(np.kron(I, X))] * (L - 2) + [tn.Node(np.kron(X, I))] + [tn.Node(np.kron(I, I))] * (sys_L - L)] + \
+                                            [[tn.Node(np.kron(I, I))] * sys_L] * (sys_L - L), chi=chi)
+    norm = large_system_expectation_value(sys_L, sys_L, p_c_up, p_d_up, p_c_down, p_d_down, p_left, p_right, open_tau,
+                                          [[tn.Node(np.eye(openA[0].dimension))] * sys_L] * sys_L, chi=chi)
     if norm == 0:
-        large_system_expectation_value(L, L, cUp, dUp, cDown, dDown, leftRow, rightRow, openA, tau_projector,
-                                       [[tn.Node(np.eye(openA[0].dimension))] * L] * L, chi=chi)
+        large_system_expectation_value(sys_L, sys_L, p_c_up, p_d_up, p_c_down, p_d_down, p_left, p_right, open_tau,
+                                       [[tn.Node(np.eye(openA[0].dimension))] * sys_L] * sys_L, chi=chi)
     print(L, wilson, norm, wilson / norm)
     return wilson / norm
 
@@ -63,29 +77,6 @@ def get_choice_indices(boundary, choice, n, d=2):
     result += [boundary[n * 2 - 1], boundary[-1],
                (boundary[-1] + choice[-1] + boundary[n * 2 - 1]) % d, np.sum(boundary) % d]
     return result
-
-
-# TODO here only d = 2
-def get_2_by_n_explicit_block(filename, n, bi, d=2):
-    [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, A, B] = get_boundaries_from_file(filename, w=n, h=2)
-    boundary = [int(c) for c in bin(bi).split('b')[1].zfill(2 * n + 2)]
-    projectors = [[np.diag([1, 0]), np.array([[0, 0], [1, 0]])],
-                  [np.array([[0, 1], [0, 0]]), np.diag([0, 1])]]
-
-    num_of_choices = n - 1
-    block = np.zeros((d ** num_of_choices, d ** num_of_choices), dtype=complex)
-    choices = [[int(c) for c in bin(choice).split('b')[1].zfill(num_of_choices)] for choice in
-               range(d ** num_of_choices)]
-    for ci in range(len(choices)):
-        ingoing = get_choice_indices(boundary, choices[ci], n)
-        for cj in range(len(choices)):
-            outgoing = get_choice_indices(boundary, choices[cj], n)
-            ops = [tn.Node(np.kron(projectors[ingoing[2 * i]][outgoing[2 * i]],
-                                   projectors[ingoing[2 * i + 1]][outgoing[2 * i + 1]])) for i in
-                   range(int(len(ingoing) / 2))]
-            block[ci, cj] = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, h=2, w=n,
-                                                   ops=ops)
-    return block
 
 
 def get_zohar_tensor(alpha, betas, gamma, delta):
@@ -332,125 +323,11 @@ def get_full_purity(filename, h, n, corner_num, gap_l, edge_dim=2, d=2, corner_c
     return purity
 
 
-def get_corner_projector(b, d=2):
-    if d == 2:
-        if b == 0:
-            # 0000, 0101, 1010, 1111
-            return tn.Node(np.diag([int(i in [0, 5, 10, 15]) for i in range(16)])
-                           .reshape([4, 4, 4, 4]))
-        else:
-            # 0011, 0110, 1001, 1100
-            return tn.Node(np.diag([int(i in [3, 6, 9, 12]) for i in range(16)])
-                           .reshape([4, 4, 4, 4]))
-
-
-corner_projector_0 = np.diag([1, 0, 0, 1])
-corner_projector_1 = np.diag([0, 1, 1, 0])
-corner_projectors = [corner_projector_0, corner_projector_1]
-wall_projector_0 = np.diag([1, 0, 1, 0])
-wall_projector_1 = np.diag([0, 1, 0, 1])
-wall_projectors = [wall_projector_0, wall_projector_1]
 swap_op_tensor = np.zeros((d, d, d, d))
 for i in range(d):
     for j in range(d):
         swap_op_tensor[i, j, j, i] = 1
 swap_op = tn.Node(swap_op_tensor.reshape([d**2, d**2]))
-
-
-def get_block_probability(filename, h, n, bi, d=2, corner_num=1, corner_charges_i=0, wall_charges_i=0, gap_l=2, edge_dim=2,
-                          PBC=False, purity_mode=False, normalize=False, boundaries=None):
-    if boundaries is None:
-        [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB] = \
-            get_boundaries(dir_name, model, param_name, param, silent=True)
-    else:
-        cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB = boundaries
-    continuous_l = int(n / corner_num)
-    if normalize:
-        w = corner_num * (continuous_l + gap_l)
-        norm = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow,
-                                      openA, openA, h, w, [tn.Node(np.eye(d ** 2))] * h * w, PBC=PBC)
-        leftRow.tensor /= norm**(2/h)
-    boundary = [int(c) for c in bin(bi).split('b')[1].zfill(2 * n - corner_num)]
-    corner_charges = [int(c) for c in bin(corner_charges_i).split('b')[1].zfill(corner_num)]
-    wall_charges = [int(c) for c in bin(wall_charges_i).split('b')[1].zfill(2 * corner_num * (h - 1))]
-    edge_projectors = [tn.Node(np.diag([1, 0, 0, 0])), tn.Node(np.diag([0, 0, 0, 1]))]
-    if edge_dim == 4:
-        edge_projectors = [tn.Node(np.diag([1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1])),
-                           tn.Node(np.diag([0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0]))]
-    dUps = [bops.permute(bops.contract(dUp, edge_projectors[boundary[ni]], '1', '0'), [0, 2, 1]) for ni in
-            range(int(n / 2))]
-    cDowns = [bops.permute(bops.contract(cDown, edge_projectors[boundary[int(n / 2) + ni]], '1', '0'), [0, 2, 1]) for ni
-              in range(int(n / 2))]
-    cUps = [bops.permute(bops.contract(cUp, edge_projectors[boundary[int(n / 2) * 2 + ni]], '1', '0'), [0, 2, 1]) for ni
-            in range(int(n / 2))]
-    dDowns = [bops.permute(bops.contract(dDown, edge_projectors[boundary[int(n / 2) * 3 + ni]], '1', '0'), [0, 2, 1])
-              for ni in range(int(n / 2) - corner_num)]
-    ops = []
-    cups_full = []
-    dups_full = []
-    cdowns_full = []
-    ddowns_full = []
-    for ci in range(corner_num):
-        ops += [tn.Node(np.eye(d ** 2))] * h * (gap_l - 1) + \
-               [tn.Node(wall_projectors[wall_charges[2 * (h - 1) * ci + hi]]) for hi in range(h - 1)] + \
-               [tn.Node(np.eye(d ** 2))] + \
-               [tn.Node(np.eye(d ** 2))] * (h - 1) + [tn.Node(corner_projectors[corner_charges[ci]])] + \
-               [tn.Node(np.eye(d ** 2))] * h * (continuous_l - 2) + \
-               [tn.Node(wall_projectors[wall_charges[2 * (h - 1) * ci + hi]]) for hi in range(h - 1, 2 * h - 2)] + \
-               [tn.Node(np.eye(d ** 2))]
-        cups_full += [cUp] * int(gap_l / 2) + cUps[int(continuous_l / 2) * ci: int(continuous_l / 2) * (ci + 1)]
-        dups_full += [dUp] * int(gap_l / 2) + dUps[int(continuous_l / 2) * ci: int(continuous_l / 2) * (ci + 1)]
-        cdowns_full += [cDown] * int(gap_l / 2) + cDowns[int(continuous_l / 2) * ci: int(continuous_l / 2) * (ci + 1)]
-        ddowns_full += [dDown] * (int(gap_l / 2) + 1) + \
-                       dDowns[(int(continuous_l / 2) - 1) * ci: (int(continuous_l / 2) - 1) * (ci + 1)]
-    if purity_mode:
-        dbg = 1
-        cups_full = [tn.Node(np.kron(o.tensor, o.tensor)) for o in cups_full]
-        dups_full = [tn.Node(np.kron(o.tensor, o.tensor)) for o in dups_full]
-        cdowns_full = [tn.Node(np.kron(o.tensor, o.tensor)) for o in cdowns_full]
-        ddowns_full = [tn.Node(np.kron(o.tensor, o.tensor)) for o in ddowns_full]
-        leftRow = tn.Node(np.kron(leftRow.tensor, leftRow.tensor))
-        rightRow = tn.Node(np.kron(rightRow.tensor, rightRow.tensor))
-        openA = tn.Node(np.kron(openA.tensor, openA.tensor))
-        ops = [tn.Node(np.kron(node.tensor, node.tensor)) for node in ops]
-        for ci in range(corner_num):
-            for si in range((gap_l + continuous_l) * h * ci + gap_l * h, (gap_l + continuous_l) * h * (ci + 1)):
-                ops[si] = bops.contract(ops[si], swap_op, '1', '0')
-    return pe.applyLocalOperators_detailedBoundary(cups_full, dups_full, cdowns_full, ddowns_full, [leftRow],
-               [rightRow], openA, openA, 2, corner_num * (continuous_l + gap_l), ops, PBC=PBC, period_num=corner_num)
-
-
-def get_purity(w, h, filename, boundary_ops=None, gap_l=2, PBC=False, corner_num=1):
-    [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB, A, B] = \
-        get_boundaries_from_file(filename, w=w + gap_l * corner_num, h=h)
-    cUp = tn.Node(np.kron(cUp.tensor, cUp.tensor))
-    dUp = tn.Node(np.kron(dUp.tensor, dUp.tensor))
-    cDown = tn.Node(np.kron(cDown.tensor, cDown.tensor))
-    dDown = tn.Node(np.kron(dDown.tensor, dDown.tensor))
-    leftRows = [tn.Node(np.kron(o.tensor, o.tensor)) for o in [leftRow] * int(h / 2)]
-    rightRows = [tn.Node(np.kron(o.tensor, o.tensor)) for o in [rightRow] * int(h / 2)]
-    openA = tn.Node(np.kron(openA.tensor, openA.tensor))
-    openB = tn.Node(np.kron(openB.tensor, openB.tensor))
-    ops = []
-    cups_full = []
-    dups_full = []
-    cdowns_full = []
-    ddowns_full = []
-    continuous_l = int(w / corner_num)
-    # TODO suit projectors to A and not openA, and for D=4
-    double_corner_projectors = [np.kron(p, p) for p in corner_projectors]
-    double_wall_projector_0 = np.kron(wall_projector_0, wall_projector_0)
-    for ci in range(corner_num):
-        ops += [tn.Node(np.eye(d ** 4))] * 2 * gap_l + \
-               [tn.Node(swap_op)] * 2 * (continuous_l)
-        cups_full += [cUp] * (int(gap_l / 2) + int(continuous_l / 2))
-        dups_full += [dUp] * (int(gap_l / 2) + int(continuous_l / 2))
-        cdowns_full += [cDown] * (int(gap_l / 2) + int(continuous_l / 2))
-        ddowns_full += [dDown] * (int(gap_l / 2) + int(continuous_l / 2))
-    purity = pe.applyLocalOperators_detailedBoundary(cups_full, dups_full, cdowns_full, ddowns_full,
-                 leftRows, rightRows, openA, openB, h, (continuous_l + gap_l) * corner_num, ops, PBC=PBC,
-                                                     period_num=corner_num)
-    return purity
 
 
 def numberToBase(n, b):
@@ -535,9 +412,23 @@ def get_boundaries(dirname, model, param_name, param, max_allowed_te=1e-10, sile
     else:
         global d
         A, tau, openA, singlet_projector = tensors_from_transfer_matrix(model, param, d=d)
+
+
+
+
+        return [0, 0, 0, 0, 0, 0, openA, openA]
+
+
+
+
         bond_dim = A[0].dimension
         AEnv = bops.contract(openA, tn.Node(np.eye(4)), '05', '01')
+        if not tau_projector is None:
+            AEnv = bops.contract(bops.contract(bops.contract(bops.contract(
+                AEnv, tau_projector, '0', '1'), tau_projector, '0', '1'),
+                tau_projector, '0', '1'), tau_projector, '0', '1')
         upRow, downRow, leftRow, rightRow = peps.applyBMPS(AEnv, AEnv, d=d ** 2, gauge=True)
+        # TODO add non-projected left and down rows
         with open(boundary_filename, 'wb') as f:
             pickle.dump([upRow, downRow, leftRow, rightRow, openA, openA, A, A], f)
     bond_dim = 2
@@ -565,7 +456,6 @@ def split_kron(node):
             .transpose([i * 2 for i in range(len(sh))] + [i * 2 + 1 for i in range(len(sh))])),
                        list(range(len(sh))), list(range(len(sh), 2 * len(sh))), '>*<')
     return l, s, r, te
-
 
 
 def to_cannonical(psi, PBC=True):
@@ -627,17 +517,22 @@ def large_system_expectation_value(w, h, p_c_up, p_d_up, p_c_down, p_d_down, p_l
         else:
             mid_row = [lefts[hi % 2]] + mid_row + [rights[hi % 2]]
         for wi in range(len(up_row)):
-            up_row[wi] = tn.Node(bops.contract(up_row[wi], mid_row[wi], '1', '0').tensor.\
-                transpose([0, 3, 2, 1, 4]).reshape(
-                [up_row[wi][0].dimension * mid_row[wi][2].dimension,
-                 mid_row[wi][1].dimension,
-                 up_row[wi][2].dimension * mid_row[wi][3].dimension]))
+            try:
+                up_row[wi] = tn.Node(bops.contract(up_row[wi], mid_row[wi], '1', '0').tensor.\
+                    transpose([0, 3, 2, 1, 4]).reshape(
+                    [up_row[wi][0].dimension * mid_row[wi][2].dimension,
+                     mid_row[wi][1].dimension,
+                     up_row[wi][2].dimension * mid_row[wi][3].dimension]))
+            except ValueError:
+                dbg = 1
         for k in range(len(up_row) - 1):
             up_row, te = bops.shiftWorkingSite(up_row, k, '>>', maxBondDim=chi, return_trunc_err=True)
             if len(te) > 0 and np.max(te) > 1e-5:
                 bops.shiftWorkingSite(up_row, k, '>>', maxBondDim=chi, return_trunc_err=True)
                 l, s, r, te_ = bops.svdTruncation(bops.contract(up_row[k], up_row[k+1], '2', '0'), [0, 1], [2, 3], '>*<', maxBondDim=chi)
-                if np.max(te) / np.max(np.diag(s.tensor)) > 1e-5:
+                # print(bops.contract(bops.contract(up_row[k], up_row[k+1], '2', '0'),
+                #                     bops.contract(up_row[k], up_row[k+1], '2', '0'), '0123', '0123').tensor)
+                if np.max(te) / np.max(np.diag(s.tensor)) > 1e-3:
                     print(np.max(te), np.max(te) / np.max(np.diag(s.tensor)))
                     dbg = 1
     curr = bops.contract(up_row[0], down_row[0], '01', '01')
@@ -660,16 +555,142 @@ def get_ops(openA, w, h, b_inds, corner_num, corner_charges, sys_w, sys_h):
                [horiz_projs[b_inds[wi]] for wi in range(1, w - 1)] +
                [bops.contract(vert_projs[b_inds[w]], horiz_projs[b_inds[w - 1]], '0', '1')] + [I] * (sys_w - w)]
     for hi in range(1, h - 1 - corner_num):
-        ops.append([vert_projs[b_inds[w + 1 + hi * 2]]] + [I] * (w - 2) + [vert_projs[b_inds[w + 2 + hi * 2]]]  + [I] * (sys_w - w))
+        ops.append([vert_projs[b_inds[w - 1 + hi * 2]]] + [I] * (w - 2) + [vert_projs[b_inds[w + hi * 2]]]  + [I] * (sys_w - w))
     for hi in range(h - 1 - corner_num, h - 1):
         ops.append([I] * (hi - (h - 1 - corner_num) + 1) + [corner_projs[corner_charges[hi]]]
                    + [I] * (w + h - 4 - hi - corner_num) + [vert_projs[b_inds[w + h - 2 - corner_num + hi]]]  + [I] * (sys_w - w))
     # ops.append([I] * (1 + corner_num) + [horiz_projs[b_inds[wi]]
     #                                   for wi in range(w + 2 * h - 3 - 2 * corner_num, w + 2 * h - 4 - 3 * corner_num + w)])
     ops.append([I] * (1 + corner_num) + [horiz_projs[b_inds[wi]]
-                                      for wi in range(w + 2 * h - 3 - 2 * corner_num, w + 2 * h - 5 - 3 * corner_num + w)] + [I]  + [I] * (sys_w - w))
+                                      for wi in range(w + 2 * h - 2 - 2 * corner_num, w + 2 * h - 4 - 3 * corner_num + w + 1)] + [I] * (sys_w - w))
     ops += [[I] * sys_w] * (sys_h - h)
     return ops
+
+
+def d_equals_D_block_entanlgement(model, param, param_name, h, w, b_inds, corner_charges, corner_num=1):
+    [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB] = \
+        get_boundaries(dir_name, model, param_name, param, silent=True)
+
+    D = int(np.sqrt(openA[1].dimension))
+    tau_projector = tn.Node(np.zeros((D, D**2)))
+    for Di in range(D):
+        tau_projector.tensor[Di, Di * (D + 1)] = 1
+
+    open_tau = bops.contract(bops.contract(bops.contract(bops.contract(
+        openA, tau_projector, '1', '1'), tau_projector, '1', '1'), tau_projector, '1', '1'), tau_projector, '1', '1')
+    if param > 1:
+        open_tau.tensor /= param
+    p_c_up = bops.permute(bops.contract(cUp, tau_projector, '1', '1'), [0, 2, 1])
+    p_d_up = bops.permute(bops.contract(dUp, tau_projector, '1', '1'), [0, 2, 1])
+    ups = [p_c_up, p_d_up]
+    p_c_down = bops.permute(bops.contract(cDown, tau_projector, '1', '1'), [1, 2, 0])
+    p_d_down = bops.permute(bops.contract(dDown, tau_projector, '1', '1'), [1, 2, 0])
+    downs = [p_c_down, p_d_down]
+    p_left = bops.permute(bops.contract(bops.contract(leftRow, tau_projector, '1', '1'), tau_projector, '1', '1'),
+                          [0, 2, 3, 1])
+    p_right = bops.permute(bops.contract(bops.contract(rightRow, tau_projector, '1', '1'), tau_projector, '1', '1'),
+                           [0, 2, 3, 1])
+    AEnv = bops.contract(open_tau, tn.Node(np.eye(4)), '01', '01')
+
+    corner_proj_0 = np.zeros((4, 4, 2, 2))
+    corner_proj_1 = np.zeros((4, 4, 2, 2))
+    corner_proj_none = np.eye(16).reshape([4, 4, 4, 4]) #.transpose([0, 2, 1, 3])
+    for i in range(2):
+        for j in range(2):
+            corner_proj_0[2*i + j, 2*i + j, i, j] = 1
+            corner_proj_1[2 * i + j, 2 * ((i+1)%2) + (j+1)%2, i, j] = 1
+    corner_projs = [tn.Node(corner_proj_0), tn.Node(corner_proj_1), tn.Node(corner_proj_none)]
+    A_corners = [bops.contract(bops.contract(bops.contract(bops.contract(
+        openA, tn.Node(np.eye(4)), '05', '01'), tau_projector, '0', '1'), tau_projector, '0', '1'),
+        corner_projs[corner_charges[ci]], '01', '01') for ci in range(corner_num)]
+
+    outer = tn.Node(np.eye(p_c_up[0].dimension))
+    for wi in range(w // 2):
+        outer = bops.contract(outer, tn.Node(p_c_up.tensor[:, b_inds[2 * wi], :]), '1', '0')
+        outer = bops.contract(outer, tn.Node(p_d_up.tensor[:, b_inds[2 * wi + 1], :]), '1', '0')
+    for hi in range(h // 2):
+        outer = bops.contract(outer, tn.Node(p_right.tensor[:, b_inds[w + 2 * hi], b_inds[w + 1 + 2 * hi], :]), '1', '0')
+    bottom_length = w - corner_num
+    for wi in range(bottom_length // 2):
+        outer = bops.contract(outer, tn.Node(p_c_down.tensor[:, b_inds[w + h + 2 * wi], :]), '1', '0')
+        outer = bops.contract(outer, tn.Node(p_d_down.tensor[:, b_inds[w + h + 2 * wi + 1], :]), '1', '0')
+    if bottom_length % 2 == 1:
+        outer = bops.contract(outer, tn.Node(p_c_down.tensor[:, b_inds[w + h + bottom_length - 1], :]), '1', '0')
+    for hi in range(bottom_length // 2):
+        outer = bops.contract(tn.Node(p_left.tensor[:, b_inds[w + h + bottom_length + 2 * hi],
+                                                b_inds[w + h + bottom_length + 2 * hi + 1], :]), outer, '1', '0')
+    if bottom_length % 2 == 1:
+        outer = bops.contract(tn.Node(p_left.tensor[:, :, b_inds[w + h + bottom_length + bottom_length], :]), outer, '2', '0')
+    columns = []
+    if corner_num == 7:
+        dbg = 1
+    for wi in range(w - bottom_length):
+        columns.append(tn.Node(downs[(w - bottom_length + 1) % 2].tensor.transpose([1, 0, 2])))
+        for hi in range(wi):
+            columns[wi] = bops.contract(columns[wi], AEnv, [hi*2], '2')
+        columns[wi] = tn.Node(columns[wi].tensor.transpose(list(range(2 * wi)) + [2 * wi + 1, 2 * wi + 2, 2 * wi]))
+    if corner_num > 2:
+        columns[w - bottom_length - 1] = bops.contract(columns[w - bottom_length - 1], p_left, '135', '012')
+    for hi in range((corner_num - 3) // 2):
+        columns[w - bottom_length - 1] = bops.contract(columns[w - bottom_length - 1], p_left,
+                                                       [2 * corner_num - 2*(hi+1), 2 * (hi+2), 2 * (hi + 3)], '012')
+    if corner_num % 2 == 1:
+        stairs = columns[-1]
+    else:
+        if corner_num == 2:
+            stairs = bops.contract(columns[-1], p_left, [1, 3], [0, 1])
+        else:
+            stairs = bops.contract(columns[-1], p_left,
+                               [len(columns[-1].tensor.shape) - 1, len(columns[-1].tensor.shape) - 3], [0, 1])
+    for wi in range(len(columns) - 2, -1, -1):
+        stairs = bops.contract(columns[wi], stairs, [2 * i + 1 for i in range(len(columns[wi].tensor.shape) // 2)], list(range(len(columns[wi].tensor.shape) // 2)))
+    if corner_num == 1:
+        outer = bops.contract(outer, stairs, [0, 2], [1, 0])
+    elif corner_num % 2 == 1:
+        outer = bops.contract(outer, stairs, [0, 2], [len(stairs.tensor.shape) - 1, 0])
+    else:
+        outer = bops.contract(outer, stairs, [0, 1], [len(stairs.tensor.shape) - 1, 0])
+    outer_corner_proj0 = np.zeros((2, 2, 2, 2))
+    outer_corner_proj0[0, 0, 0, 0] = 1
+    outer_corner_proj0[1, 1, 1, 1] = 1
+    outer_corner_proj1 = np.zeros((2, 2, 2, 2))
+    outer_corner_proj1[0, 1, 0, 0] = 1
+    outer_corner_proj1[1, 0, 1, 1] = 1
+    outer_corner_projs = [tn.Node(outer_corner_proj0), tn.Node(outer_corner_proj1)]
+    for ci in range(corner_num):
+        outer = bops.contract(outer, outer_corner_projs[corner_charges[corner_num - 1 - ci]], '01', '01')
+
+    left_length = h - corner_num
+    rows = []
+    rows.append(tn.Node(AEnv.tensor[b_inds[0], :, :, b_inds[w + h + bottom_length]]))
+    for wi in range(1, w - 1):
+        rows[0] = bops.contract(rows[0], tn.Node(AEnv.tensor[b_inds[wi], :, :, :]), [wi - 1], [2])
+    rows[0] = bops.contract(rows[0], tn.Node(AEnv.tensor[b_inds[w-1], b_inds[w], :, :]), [w - 2], '1')
+    for hi in range(1, left_length):
+        rows[0] = bops.contract(rows[0], tn.Node(AEnv.tensor[:, :, :, b_inds[w + h + bottom_length + hi]]), '0', '0')
+        for wi in range(1, w-1):
+            rows[0] = bops.contract(rows[0], AEnv, [0, w-1], '03')
+        rows[0] = bops.contract(rows[0], tn.Node(AEnv.tensor[:, b_inds[w + hi], :, :]), [0, w-1], '02')
+    for hi in range(h - left_length):
+        if w - hi == 0:
+            rows.append(tn.Node(A_corners[hi].tensor[:, b_inds[w + left_length + hi], :, :]))
+        else:
+            rows.append(tn.Node(AEnv.tensor[:, b_inds[w + left_length + hi], :, :]))
+            for wi in range(1, w - hi - 1):
+                rows[hi + 1] = bops.contract(rows[hi + 1], AEnv, [2 * wi], '1')
+            rows[hi + 1] = bops.contract(rows[hi + 1], A_corners[hi], [2 * wi], '1')
+    inner = bops.contract(rows[1], rows[0], [2 * i for i in range(w)], list(range(w - 1, -1, -1)))
+    for hi in range(2, len(rows)):
+        inner = bops.contract(rows[hi], inner, [2 * i for i in range(w - hi + 1)], list(range(w - hi + 1)))
+    for wi in range(bottom_length):
+        inner.tensor = inner.tensor[b_inds[w + h + wi], :]
+    inner = bops.permute(inner, [2*i for i in range(corner_num)] + [2*i + 1 for i in range(corner_num)])
+    inner_rdm = inner.tensor.reshape([2 ** corner_num] * 2)
+    outer = bops.permute(outer, [2*i for i in range(corner_num)] + [2*i + 1 for i in range(corner_num)])
+    outer_rdm = outer.tensor.reshape([2 ** corner_num] * 2)
+    return np.linalg.matrix_power(inner_rdm, 2).trace() / inner_rdm.trace() ** 2
+    # return np.matmul(inner_rdm, np.matmul(outer_rdm, np.matmul(inner_rdm, outer_rdm))). trace() / \
+    #        np.matmul(inner_rdm, outer_rdm).trace()**2
 
 
 def large_system_block_entanglement(model, param, param_name, dirname, h, w, b_inds, corner_charges, tau_projector=None, chi=128, corner_num=1, sys_h=None, sys_w=None):
@@ -684,6 +705,22 @@ def large_system_block_entanglement(model, param, param_name, dirname, h, w, b_i
         sys_w = w
     if sys_h is None:
         sys_h = h
+
+    AEnv = bops.contract(openA, tn.Node(np.eye(4)), '05', '01')
+    # AEnv.tensor /= param + 0.5
+    cUp = tn.Node(AEnv.tensor[0, :, :, :].transpose([2, 1, 0]) + AEnv.tensor[3, :, :, :].transpose([2, 1, 0]))
+    dUp = tn.Node(AEnv.tensor[0, :, :, :].transpose([2, 1, 0]) + AEnv.tensor[3, :, :, :].transpose([2, 1, 0]))
+    cDown = tn.Node(AEnv.tensor[:, :, 0, :].transpose([2, 0, 1]) + AEnv.tensor[:, :, 3, :].transpose([2, 0, 1]))
+    dDown = tn.Node(AEnv.tensor[:, :, 0, :].transpose([2, 0, 1]) + AEnv.tensor[:, :, 3, :].transpose([2, 0, 1]))
+    leftRow = tn.Node(bops.contract(AEnv, AEnv, '2', '0').tensor[:, :, 0, :, :, 0].transpose([3, 2, 1, 0]) +
+                      bops.contract(AEnv, AEnv, '2', '0').tensor[:, :, 0, :, :, 3].transpose([3, 2, 1, 0]) +
+                      bops.contract(AEnv, AEnv, '2', '0').tensor[:, :, 3, :, :, 0].transpose([3, 2, 1, 0]) +
+                      bops.contract(AEnv, AEnv, '2', '0').tensor[:, :, 3, :, :, 3].transpose([3, 2, 1, 0]))
+    rightRow = tn.Node(bops.contract(AEnv, AEnv, '2', '0').tensor[:, 0, :, 0, :, :].transpose([0, 1, 3, 2]) +
+                       bops.contract(AEnv, AEnv, '2', '0').tensor[:, 0, :, 3, :, :].transpose([0, 1, 3, 2]) +
+                       bops.contract(AEnv, AEnv, '2', '0').tensor[:, 3, :, 0, :, :].transpose([0, 1, 3, 2]) +
+                       bops.contract(AEnv, AEnv, '2', '0').tensor[:, 3, :, 3, :, :].transpose([0, 1, 3, 2]))
+
 
     subsystem_sites = [[[hi, wi] for wi in \
                        range(1 + int(hi > (h - 1 - corner_num)) * (hi - (h - 1 - corner_num)), w)] \
@@ -702,25 +739,31 @@ def large_system_block_entanglement(model, param, param_name, dirname, h, w, b_i
     p_right = bops.permute(bops.contract(bops.contract(rightRow, tau_projector, '1', '1'), tau_projector, '1', '1'),
                            [0, 2, 3, 1])
 
-
     norm = large_system_expectation_value(
         sys_w, sys_h, p_c_up, p_d_up, p_c_down, p_d_down, p_left, p_right, open_tau, ops, chi=chi)
-    open_tau.tensor /= np.abs((norm) ** (1 / (2 * sys_w * sys_h)))
+    print('--', norm)
+    open_tau.tensor /= np.abs(norm ** (1 / (2 * sys_w * sys_h)))
+    p_c_up.tensor /= np.abs(norm**(1/(4*sys_w)))
+    p_d_up.tensor /= np.abs(norm**(1/(4*sys_w)))
+    p_c_down.tensor /= np.abs(norm**(1/(4*sys_w)))
+    p_d_down.tensor /= np.abs(norm**(1/(4*sys_w)))
     norm = large_system_expectation_value(
         sys_w, sys_h, p_c_up, p_d_up, p_c_down, p_d_down, p_left, p_right, open_tau, ops, chi=chi)
 
+    print('--', norm)
     d = ops[0][0][0].dimension
     swap_op_tensor = np.zeros((d, d, d, d))
     for i in range(d):
         for j in range(d):
             swap_op_tensor[i, j, j, i] = 1
     swap_op = tn.Node(swap_op_tensor.reshape([d**2, d**2]))
-    ops_2 = [[tn.Node(np.kron(ops[hi][wi].tensor, ops[hi][wi].tensor)) for wi in range(sys_w)] for hi in range(sys_h)]
+    ops_2 = [[tn.Node(np.kron(ops[hi][wi].tensor, ops[hi][wi].tensor)) for wi in range(len(ops[0]))] for hi in range(len(ops))]
     p_c_up_2, p_d_up_2, p_c_down_2, p_d_down_2, p_left_2, p_right_2, open_tau_2 = \
         [tn.Node(np.kron(node.tensor, node.tensor)) for node in [p_c_up, p_d_up, p_c_down, p_d_down, p_left, p_right, open_tau]]
     # TODO the term below should equal norm**2, but it doesn't
     norm_2 = large_system_expectation_value(
-        sys_w, sys_h, p_c_up_2, p_d_up_2, p_c_down_2, p_d_down_2, p_left_2, p_right_2, open_tau_2, ops_2, chi=chi) / norm**2
+        sys_w, sys_h, p_c_up_2, p_d_up_2, p_c_down_2, p_d_down_2, p_left_2, p_right_2, open_tau_2, ops_2, chi=chi)
+    norm_2 /= norm**2
     print(f"{norm_2=}")
     for wi in range(1, w):
         for hi in range(h - 1):
@@ -729,9 +772,6 @@ def large_system_block_entanglement(model, param, param_name, dirname, h, w, b_i
     p2 = large_system_expectation_value(
         sys_w, sys_h, p_c_up_2, p_d_up_2, p_c_down_2, p_d_down_2, p_left_2, p_right_2, open_tau_2, ops_2, chi=chi)
     print('p2', p2, p2 / np.abs(norm**2))
-    # print(param)
-    # if p2 / np.abs(norm**2) - 1 > 1e-3:
-    #     print(param, norm_2, p2 / np.abs(norm**2))
     return p2 / np.abs(norm**2)
 
 
@@ -739,7 +779,7 @@ def wilson_expectations(model, param, param_name, dirname, plot=False, chi=128):
     [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB] = \
         get_boundaries(dir_name, model, param_name, param, silent=True)
 
-    Ls = 2 * np.array(range(3, 7))
+    Ls = 2 * np.array(range(4, 9))
     wilson_expectations = np.zeros(len(Ls), dtype=complex)
     for Li in range(len(Ls)):
         L = Ls[Li]
@@ -747,7 +787,7 @@ def wilson_expectations(model, param, param_name, dirname, plot=False, chi=128):
         if os.path.exists(filename):
             wilson_exp = pickle.load(open(filename, 'rb'))
         else:
-            wilson_exp = square_wilson_loop_expectation_value(cUp, dUp, cDown, dDown, leftRow, rightRow, openA, L, chi=chi)
+            wilson_exp = square_wilson_loop_expectation_value(cUp, dUp, cDown, dDown, leftRow, rightRow, openA, L, chi=chi, sys_L = Ls[-1])
             pickle.dump(wilson_exp, open(filename, 'wb'))
         wilson_expectations[Li] = wilson_exp
         gc.collect()
@@ -755,41 +795,41 @@ def wilson_expectations(model, param, param_name, dirname, plot=False, chi=128):
     if plot:
         import matplotlib.pyplot as plt
         plt.plot(Ls, np.log(wilson_expectations))
-        plt.title(param_name + ' = ' + str(param))
+        plt.title(param_name + ' = ' + str(param) + ' ' + str(p))
         plt.show()
     return p[0]
 
 
-def purity_corner_law(model, param, param_name, dirname, plot=False, chi=128, tau_projector=None, charges=None):
+def purity_corner_law(model, param, param_name, dirname, plot=False, chi=128, tau_projector=None, charges=None, case=''):
     L = 6
-    corners = list(range(1, L - 1))
+    corners = 2 * np.array(range(1, int(L/2))) # np.array(range(1, L))
     p2s = np.zeros(len(corners), dtype=complex)
     for ci in range(len(corners)):
         c = corners[ci]
-        p2_filename = dirname + '/corner_' + param_name + '_' + str(param) + '_p2_c_' + str(c) + '_chi_' + str(chi)
-        if charges is not None:
-            p2_filename += str(charges is None)
+        p2_filename = dirname + '/corner_' + param_name + '_' + str(param) + '_p2_c_' + str(c) + '_chi_' + str(chi) + '_' + case
         if os.path.exists(p2_filename):
             p2 = pickle.load(open(p2_filename, 'rb'))
         else:
             if charges is None:
-                charges = [0] * L**2 * 100
+                charges = [0] * L**2 * 1000
             p2 = large_system_block_entanglement(model, param, param_name, dirname,
                             L, L, charges, corner_charges=[0] * L, tau_projector=tau_projector, chi=chi, corner_num=c)
+            # p2 = d_equals_D_block_entanlgement(model, param, param_name, L*4, L, charges, corner_charges=[0] * 1000, corner_num=c)
             pickle.dump(p2, open(p2_filename, 'wb'))
         p2s[ci] = p2
         gc.collect()
     p, residuals, _, _, _ = np.polyfit(corners, np.log(p2s), 2, full=True)
     if plot:
         import matplotlib.pyplot as plt
-        plt.plot(corners, p2s)
+        plt.plot(corners, -np.log(p2s))
         plt.title('corner ' + param_name + ' = ' + str(param) + ', fit params = ' + str(p))
         plt.show()
     return p[1], p2s, corners
 
 
 def purity_area_law(model, param, param_name, dirname, plot=False, chi=128, tau_projector=None, b_inds=None, corner_charges=None):
-    Ls = np.array(range(3, 11))
+    # Ls = np.array(range(3, 8))
+    Ls = 2 * np.array(range(3, 7))
     p2s = np.zeros(len(Ls), dtype=complex)
     norms_p2s = np.zeros(len(Ls), dtype=complex)
     for Li in range(len(Ls)):
@@ -804,15 +844,20 @@ def purity_area_law(model, param, param_name, dirname, plot=False, chi=128, tau_
         if os.path.exists(p2_filename):
             p2 = pickle.load(open(p2_filename, 'rb'))
         else:
-            p2 = large_system_block_entanglement(model, param, param_name, dirname,
-                            L, L, b_inds, corner_charges=corner_charges, tau_projector=tau_projector, chi=chi, corner_num=1, sys_h=Ls[-1], sys_w=Ls[-1])
+            sys_size = 8
+            if True: # b_inds[0] == -1:
+                p2 = large_system_block_entanglement(model, param, param_name, dirname,
+                                L, L, b_inds, corner_charges=corner_charges, tau_projector=tau_projector, chi=chi,
+                                                     corner_num=1, sys_h=sys_size, sys_w=sys_size)
+            else:
+                p2 = d_equals_D_block_entanlgement(model, param, param_name, 2*L, L, b_inds, corner_charges, corner_num=1)
             pickle.dump(p2, open(p2_filename, 'wb'))
         p2s[Li] = p2
         gc.collect()
-    p, residuals, _, _, _ = np.polyfit(Ls - 1, np.log(p2s), 2, full=True)
+    p, residuals, _, _, _ = np.polyfit(Ls, np.log(p2s), 1, full=True)
     if plot:
         import matplotlib.pyplot as plt
-        plt.plot(Ls - 1, p2s)
+        plt.plot(Ls, -np.log(p2s))
         plt.title('area ' + param_name + ' = ' + str(param) + ', fit params = ' + str([np.format_float_positional(x, precision=4) for x in p]))
         plt.show()
     return p[0], p2s, Ls
@@ -843,7 +888,9 @@ elif model == 'orus':
 elif model == 'vary_gamma':
     param_name = 'gamma'
     tau_projector = None
-    params = [np.round(a * 0.01, 8) for a in range(6)] + [np.round(0.1 * a, 8) for a in range(1, 5)] #20)] + [np.round(1 + 0.002 * a, 8) for a in list(range(-10, -5)) + list(range(5, 10))]
+    # params = [np.round(a * 0.01, 8) for a in range(6)] + [np.round(0.1 * a, 8) for a in range(1, 60)] +\
+    #          [np.round(1.2 + 0.002 * a, 8) for a in list(range(-10, 10))]
+    params = [np.round(0.1 * a, 8) for a in range(20)] + [np.round(1 + 0.01 * i, 8) for i in range(-10, 10)] + [np.round(0.01 * i, 8) for i in range(1, 10)]
     params.sort()
     alpha = float(sys.argv[2])
     beta = float(sys.argv[3])
@@ -852,27 +899,29 @@ elif model == 'vary_gamma':
 elif model == 'gamma_c':
     c = float(sys.argv[2])
     param_name = 'gamma'
-    params = [np.round(0.2 * a, 8) for a in range(10)]
+    params = [float(sys.argv[3])] #[0.0, 0.4] + [np.round(0.2 * a, 8) for a in range(5, 10)]
+    params.sort()
     tau_projector = None
     model = model + '_' + str(c)
-elif model == 'my':
-    param_name = 'epsilon'
-    params = [np.round(0.1 * i, 8) for i in range(1, 10)]
 
 
-dir_name = "results/gauge/" + model
+dir_name = sys.argv[-1] + model # "results/gauge/" + model
 if not os.path.exists(dir_name):
     os.mkdir(dir_name)
 
 L_p2s = np.zeros(len(params))
 c_p2s = np.zeros(len(params))
 c1_p2s = np.zeros(len(params))
+c2_p2s = np.zeros(len(params))
 for pi in range(len(params)):
     param = params[pi]
     print(param)
     L_p2s[pi] = purity_area_law(model, param, param_name, dir_name, plot=False, chi=128, tau_projector=tau_projector)[0]
     c_p2s[pi] = purity_corner_law(model, param, param_name, dir_name, plot=False, chi=128, tau_projector=tau_projector)[0]
-    c1_p2s[pi] = purity_corner_law(model, param, param_name, dir_name, plot=False, chi=128, tau_projector=tau_projector, charges= [0, 0, 0, 1, 0, 0, 0, 0, 1] + [0]*1000)[0]
+    c1_p2s[pi] = purity_corner_law(model, param, param_name, dir_name, plot=False, chi=16, tau_projector=tau_projector,
+                                   charges=[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1] + [0]*1000, case='flux')[0]
+    c2_p2s[pi] = purity_corner_law(model, param, param_name, dir_name, plot=False, chi=16, tau_projector=tau_projector,
+                                   charges=[1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1] + [0]*1000, case='flux2')[0]
 
 full_purity_large_systems = np.zeros(len(params))
 for pi in range(len(params)):
@@ -888,11 +937,23 @@ for pi in range(len(params)):
     bulk_coeff = wilson_expectations(model, param, param_name, dir_name, chi=256, plot=False)
     wilson_results[pi] = bulk_coeff
 
+colors = ['#FFD700', '#FFB14E', '#FA8775', '#EA5F94', '#CD34B5', '#9D02D7', '#000099']
+
 import matplotlib.pyplot as plt
-plt.plot(params, np.abs(wilson_results))
-plt.plot(params, L_p2s)
-plt.plot(params, c_p2s)
-# plt.plot(params, c1_p2s, ':')
-plt.plot(params, full_purity_large_systems, '--')
-plt.legend(['Wilson', r'areas', r'corners', r'corners flux', r'$p_2$ full'])
+fig, axs = plt.subplots(2, 1, height_ratios=[1, 2])
+plt.subplots_adjust(hspace=0)
+plt.rcParams["font.family"] = "serif"
+plt.rcParams["mathtext.fontset"] = "dejavuserif"
+
+axs[0].plot(params, np.abs(wilson_results), color=colors[5])
+axs[0].set_ylabel('confinement $c_w$', fontsize=14)
+axs[1].set_xlabel(r'$\gamma$', fontsize=14)
+axs[1].set_ylabel(r'$p_2$ system-size-dependence', fontsize=14)
+axs[1].plot(params, L_p2s * 0.4, color=colors[2])
+axs[1].plot(params, c_p2s, color=colors[6])
+axs[1].plot(params, c1_p2s, '--', color=colors[1])
+# axs[1].plot(params, c2_p2s, ':', color=colors[5])
+axs[1].plot(params, full_purity_large_systems, color=colors[3])
+axs[1].legend([r'SR Purity $c_{area}$', r'SR purity $c_{corner}, q=\{1,1\dots1\}$',
+            r'SR purity $c_{corner}, q=$random',  r'full purity $c_{area}$'], fontsize=14)
 plt.show()
