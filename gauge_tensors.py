@@ -413,10 +413,21 @@ def get_boundaries(dirname, model, param_name, param, max_allowed_te=1e-10, sile
         global d
         A, tau, openA, singlet_projector = tensors_from_transfer_matrix(model, param, d=d)
 
-
-
-
-        return [0, 0, 0, 0, 0, 0, openA, openA]
+        AEnv = bops.contract(openA, tn.Node(np.eye(4)), '05', '01')
+        # AEnv.tensor /= param + 0.5
+        cUp = tn.Node(AEnv.tensor[0, :, :, :].transpose([2, 1, 0]) + AEnv.tensor[3, :, :, :].transpose([2, 1, 0]))
+        dUp = tn.Node(AEnv.tensor[0, :, :, :].transpose([2, 1, 0]) + AEnv.tensor[3, :, :, :].transpose([2, 1, 0]))
+        cDown = tn.Node(AEnv.tensor[:, :, 0, :].transpose([2, 0, 1]) + AEnv.tensor[:, :, 3, :].transpose([2, 0, 1]))
+        dDown = tn.Node(AEnv.tensor[:, :, 0, :].transpose([2, 0, 1]) + AEnv.tensor[:, :, 3, :].transpose([2, 0, 1]))
+        leftRow = tn.Node(bops.contract(AEnv, AEnv, '2', '0').tensor[:, :, 0, :, :, 0].transpose([3, 2, 1, 0]) +
+                          bops.contract(AEnv, AEnv, '2', '0').tensor[:, :, 0, :, :, 3].transpose([3, 2, 1, 0]) +
+                          bops.contract(AEnv, AEnv, '2', '0').tensor[:, :, 3, :, :, 0].transpose([3, 2, 1, 0]) +
+                          bops.contract(AEnv, AEnv, '2', '0').tensor[:, :, 3, :, :, 3].transpose([3, 2, 1, 0]))
+        rightRow = tn.Node(bops.contract(AEnv, AEnv, '2', '0').tensor[:, 0, :, 0, :, :].transpose([0, 1, 3, 2]) +
+                           bops.contract(AEnv, AEnv, '2', '0').tensor[:, 0, :, 3, :, :].transpose([0, 1, 3, 2]) +
+                           bops.contract(AEnv, AEnv, '2', '0').tensor[:, 3, :, 0, :, :].transpose([0, 1, 3, 2]) +
+                           bops.contract(AEnv, AEnv, '2', '0').tensor[:, 3, :, 3, :, :].transpose([0, 1, 3, 2]))
+        return [cUp, cDown, dUp, dDown, leftRow, rightRow, openA, openA]
 
 
 
@@ -483,6 +494,62 @@ def fold_mpo(mpo):
                     .reshape([mpo[0][0].dimension**2] * 2 + [mpo[N//2 - 1][2].dimension * mpo[N//2][3].dimension, 1]))]
 
 
+# TODO PBC?
+def mpo_expectation_value(vec, p_left_edge, p_right_edge, open_tau, ops, chi=128, pbc=False, step_num=20):
+    mpo = [p_left_edge] + [bops.permute(bops.contract(open_tau, ops[i], '01', '01'), [0, 2, 3, 1])
+                                        for i in range(len(ops))] + [p_right_edge]
+    r_vec = bops.copyState(vec)
+    for si in range(step_num):
+        for wi in range(len(mpo)):
+            try:
+                r_vec[wi] = tn.Node(bops.contract(r_vec[wi], mpo[wi], '1', '0').tensor.\
+                    transpose([0, 3, 2, 1, 4]).reshape(
+                    [mpo[wi][2].dimension * r_vec[wi][0].dimension,
+                     mpo[wi][1].dimension,
+                     r_vec[wi][2].dimension * mpo[wi][3].dimension]))
+            except ValueError:
+                dbg = 1
+        test_norm = bops.getOverlap(r_vec, r_vec)
+        if test_norm == 0:
+            dbg = 1
+        r_vec, te = bops.to_canonical(r_vec)
+        r_vec, te = bops.to_canonical(r_vec, '<<', maxBondDim=chi, normalize=False)
+        if te > 1e-5:
+            print(te)
+        r_vec, te = bops.to_canonical(r_vec, '>>', maxBondDim=chi, normalize=False)
+    h_r_vec = []
+    for wi in range(len(mpo)):
+        try:
+            h_r_vec.append(tn.Node(bops.contract(r_vec[wi], mpo[wi], '1', '0').tensor. \
+                transpose([0, 3, 2, 1, 4]).reshape(
+                [r_vec[wi][0].dimension * mpo[wi][2].dimension,
+                 mpo[wi][1].dimension,
+                 r_vec[wi][2].dimension * mpo[wi][3].dimension])))
+        except ValueError:
+            dbg = 1
+    # left eigvec
+    mpo = [tn.Node(mpo[i].tensor.transpose([1, 0, 2, 3])) for i in range(len(mpo))]
+    l_vec = bops.copyState(vec)
+    for si in range(step_num):
+        for wi in range(len(mpo)):
+            try:
+                l_vec[wi] = tn.Node(bops.contract(l_vec[wi], mpo[wi], '1', '0').tensor.\
+                    transpose([0, 3, 2, 1, 4]).reshape(
+                    [l_vec[wi][0].dimension * mpo[wi][2].dimension,
+                     mpo[wi][1].dimension,
+                     l_vec[wi][2].dimension * mpo[wi][3].dimension]))
+            except ValueError:
+                dbg = 1
+        l_vec, te = bops.to_canonical(l_vec)
+        l_vec, te = bops.to_canonical(l_vec, '<<', maxBondDim=chi, normalize=False)
+        if te > 1e-5:
+            print(te)
+        l_vec, te = bops.to_canonical(l_vec, '>>', maxBondDim=chi, normalize=False)
+    res = bops.getOverlap(h_r_vec, l_vec) / bops.getOverlap(r_vec, l_vec)
+    print(res)
+    return res
+
+
 def large_system_expectation_value(w, h, p_c_up, p_d_up, p_c_down, p_d_down, p_left, p_right, open_tau, ops, chi=128, pbc=False):
     if pbc:
         full_system_length = 2 * w
@@ -525,16 +592,11 @@ def large_system_expectation_value(w, h, p_c_up, p_d_up, p_c_down, p_d_down, p_l
                      up_row[wi][2].dimension * mid_row[wi][3].dimension]))
             except ValueError:
                 dbg = 1
-        for k in range(len(up_row) - 1):
-            up_row, te = bops.shiftWorkingSite(up_row, k, '>>', maxBondDim=chi, return_trunc_err=True)
-            if len(te) > 0 and np.max(te) > 1e-5:
-                bops.shiftWorkingSite(up_row, k, '>>', maxBondDim=chi, return_trunc_err=True)
-                l, s, r, te_ = bops.svdTruncation(bops.contract(up_row[k], up_row[k+1], '2', '0'), [0, 1], [2, 3], '>*<', maxBondDim=chi)
-                # print(bops.contract(bops.contract(up_row[k], up_row[k+1], '2', '0'),
-                #                     bops.contract(up_row[k], up_row[k+1], '2', '0'), '0123', '0123').tensor)
-                if np.max(te) / np.max(np.diag(s.tensor)) > 1e-3:
-                    print(np.max(te), np.max(te) / np.max(np.diag(s.tensor)))
-                    dbg = 1
+        bops.to_canonical(up_row)
+        te = bops.to_canonical(up_row, '<<', maxBondDim=chi)
+        if te > 1e-5:
+            print(te)
+        bops.to_canonical(up_row, '>>', maxBondDim=chi)
     curr = bops.contract(up_row[0], down_row[0], '01', '01')
     for i in range(1, len(up_row)):
         curr = bops.contract(bops.contract(curr, up_row[i], '0', '0'), down_row[i], '01', '01')
@@ -775,29 +837,66 @@ def large_system_block_entanglement(model, param, param_name, dirname, h, w, b_i
     return p2 / np.abs(norm**2)
 
 
-def wilson_expectations(model, param, param_name, dirname, plot=False, chi=128):
+def wilson_transfer_matrices(model, param, param_name, dirname, plot=False, chi=128):
     [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB] = \
         get_boundaries(dir_name, model, param_name, param, silent=True)
 
-    Ls = 2 * np.array(range(4, 9))
-    wilson_expectations = np.zeros(len(Ls), dtype=complex)
-    for Li in range(len(Ls)):
-        L = Ls[Li]
-        filename = dirname + '/wilson_' + param_name + '_' + str(param) + '_L_' + str(L)
+    AEnv = bops.contract(openA, tn.Node(np.eye(4)), '05', '01')
+    left = tn.Node(AEnv.tensor[:, :, :, 0].transpose([0, 2, 1]).reshape([1] + [AEnv[0].dimension] * 3))
+    right = tn.Node(AEnv.tensor[:, 0, :, :].reshape([AEnv[0].dimension] * 3 + [1]))
+
+
+    ls = np.array([16, 32, 64, 128, 192, 256])
+    for li in range(len(ls)):
+        l = ls[li]
+        E = [left] + [AEnv] * (l-2) + [right]
+        v1, rho1, te
+
+
+def wilson_loop_exp(model, param, param_name, chi, full_system_size, R, step_num):
+    [cUp, dUp, cDown, dDown, leftRow, rightRow, openA, openB] = \
+        get_boundaries(dir_name, model, param_name, param, silent=True)
+    AEnv = bops.contract(openA, tn.Node(np.eye(4)), '05', '01')
+    D = openA[1].dimension
+    left_edge = tn.Node(AEnv.tensor[:, :, :, 0].reshape([D, D, D, 1]).transpose([0, 2, 3, 1]))
+    right_edge = tn.Node(AEnv.tensor[:, 0, :, :].reshape([D, 1, D, D]).transpose([0, 2, 3, 1]))
+    startup_left_edge = tn.Node(AEnv.tensor[0, :, :, 0].reshape([1, D, D]).transpose([0, 2, 1]))
+    startup_right_edge = tn.Node(AEnv.tensor[0, 0, :, :].reshape([D, D, 1]).transpose([1, 0, 2]))
+    startup_env = tn.Node(AEnv.tensor[0, :, :, :].transpose([2, 1, 0]))
+    startup_A = tn.Node(bops.contract(openA, tn.Node(np.kron(I, X)), '05', '01').tensor[0, :, :, :].transpose([2, 1, 0]))
+    vec = [startup_left_edge] + [startup_env]*int((full_system_size-R)/2) + [startup_A] * R + [startup_env]*int((full_system_size-R)/2) + [startup_right_edge]
+    norm = bops.getOverlap(vec, vec)
+    vec = [tn.Node(node.tensor / norm ** (1 / (2 * len(vec)))) for node in vec]
+    return mpo_expectation_value(vec, left_edge, right_edge, bops.permute(openA, [0, 5, 1, 2, 3, 4]),
+                                                     [tn.Node(np.kron(I, I))] * int((full_system_size-R)/2) +
+                                                     [tn.Node(np.kron(X, I))] +
+                                                     [tn.Node(np.kron(I, I))] * (R - 1) +
+                                                     [tn.Node(np.kron(X, I))] +
+                                                     [tn.Node(np.kron(I, I))] * ( int((full_system_size-R)/2) - 1),
+                                                     chi=chi, step_num=step_num)
+
+
+def wilson_expectations(model, param, param_name, dirname, plot=False, chi=128, step_num=20):
+    Rs = np.array([i * 2 for i in range(7, 14)])
+    full_system_size = Rs[-1] * 3
+    transfer_mat_eigvals = np.zeros(len(Rs), dtype=complex)
+    for Ri in range(len(Rs)):
+        R = Rs[Ri]
+        filename = dirname + '/wilson_e_par_' + param_name + '_' + str(param) + '_sys_' + str(full_system_size) + '_R_' + str(R)
         if os.path.exists(filename):
-            wilson_exp = pickle.load(open(filename, 'rb'))
+            transfer_mat_eigvals[Ri] = pickle.load(open(filename, 'rb'))
         else:
-            wilson_exp = square_wilson_loop_expectation_value(cUp, dUp, cDown, dDown, leftRow, rightRow, openA, L, chi=chi, sys_L = Ls[-1])
-            pickle.dump(wilson_exp, open(filename, 'wb'))
-        wilson_expectations[Li] = wilson_exp
-        gc.collect()
-    p, residuals, _, _, _ = np.polyfit(Ls, np.log(wilson_expectations), 2, full=True)
+            transfer_mat_eigvals[Ri] = wilson_loop_exp(model, param, param_name, chi, full_system_size, R, step_num)
+            pickle.dump(transfer_mat_eigvals[Ri], open(filename, 'wb'))
+        print('wilson', Ri, transfer_mat_eigvals[Ri])
+    p, residuals, _, _, _ = np.polyfit(Rs, -np.log(transfer_mat_eigvals), 1, full=True)
     if plot:
         import matplotlib.pyplot as plt
-        plt.plot(Ls, np.log(wilson_expectations))
-        plt.title(param_name + ' = ' + str(param) + ' ' + str(p))
+        plt.plot(Rs, -np.log(transfer_mat_eigvals))
+        plt.plot(Rs, p[0] * Rs + p[1], '--')
+        plt.title('wilson ' + param_name + ' = ' + str(param) + ', fit params = ' + str(p))
         plt.show()
-    return p[0]
+    return p[1]
 
 
 def purity_corner_law(model, param, param_name, dirname, plot=False, chi=128, tau_projector=None, charges=None, case=''):
@@ -913,28 +1012,28 @@ L_p2s = np.zeros(len(params))
 c_p2s = np.zeros(len(params))
 c1_p2s = np.zeros(len(params))
 c2_p2s = np.zeros(len(params))
-for pi in range(len(params)):
-    param = params[pi]
-    print(param)
-    L_p2s[pi] = purity_area_law(model, param, param_name, dir_name, plot=False, chi=128, tau_projector=tau_projector)[0]
-    c_p2s[pi] = purity_corner_law(model, param, param_name, dir_name, plot=False, chi=128, tau_projector=tau_projector)[0]
-    c1_p2s[pi] = purity_corner_law(model, param, param_name, dir_name, plot=False, chi=16, tau_projector=tau_projector,
-                                   charges=[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1] + [0]*1000, case='flux')[0]
-    c2_p2s[pi] = purity_corner_law(model, param, param_name, dir_name, plot=False, chi=16, tau_projector=tau_projector,
-                                   charges=[1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1] + [0]*1000, case='flux2')[0]
+# for pi in range(len(params)):
+#     param = params[pi]
+#     print(param)
+    # L_p2s[pi] = purity_area_law(model, param, param_name, dir_name, plot=False, chi=128, tau_projector=tau_projector)[0]
+    # c_p2s[pi] = purity_corner_law(model, param, param_name, dir_name, plot=False, chi=128, tau_projector=tau_projector)[0]
+    # c1_p2s[pi] = purity_corner_law(model, param, param_name, dir_name, plot=False, chi=16, tau_projector=tau_projector,
+    #                                charges=[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1] + [0]*1000, case='flux')[0]
+    # c2_p2s[pi] = purity_corner_law(model, param, param_name, dir_name, plot=False, chi=16, tau_projector=tau_projector,
+    #                                charges=[1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1] + [0]*1000, case='flux2')[0]
 
 full_purity_large_systems = np.zeros(len(params))
-for pi in range(len(params)):
-    param = params[pi]
-    print(param)
-    full_p2 = purity_area_law(model, param, param_name, dir_name, plot=False, chi=128, tau_projector=tau_projector, b_inds=[-1]*1000, corner_charges=[-1]*100)
-    full_purity_large_systems[pi] = full_p2[0]
+# for pi in range(len(params)):
+#     param = params[pi]
+#     print(param)
+#     full_p2 = purity_area_law(model, param, param_name, dir_name, plot=False, chi=128, tau_projector=tau_projector, b_inds=[-1]*1000, corner_charges=[-1]*100)
+#     full_purity_large_systems[pi] = full_p2[0]
 
 wilson_results = np.zeros(len(params))
 for pi in range(len(params)):
     param = params[pi]
     print(param)
-    bulk_coeff = wilson_expectations(model, param, param_name, dir_name, chi=256, plot=False)
+    bulk_coeff = wilson_expectations(model, param, param_name, dir_name, chi=64, plot=False)
     wilson_results[pi] = bulk_coeff
 
 colors = ['#FFD700', '#FFB14E', '#FA8775', '#EA5F94', '#CD34B5', '#9D02D7', '#000099']
@@ -945,7 +1044,7 @@ plt.subplots_adjust(hspace=0)
 plt.rcParams["font.family"] = "serif"
 plt.rcParams["mathtext.fontset"] = "dejavuserif"
 
-axs[0].plot(params, np.abs(wilson_results), color=colors[5])
+axs[0].plot(params, wilson_results, color=colors[5])
 axs[0].set_ylabel('confinement $c_w$', fontsize=14)
 axs[1].set_xlabel(r'$\gamma$', fontsize=14)
 axs[1].set_ylabel(r'$p_2$ system-size-dependence', fontsize=14)

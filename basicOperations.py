@@ -517,6 +517,25 @@ def shiftWorkingSite(psi: List[tn.Node], k, dir, maxBondDim=1024, return_trunc_e
         return psi
 
 
+def to_canonical(psi, dir='>>', maxBondDim=1024, normalize=True):
+    full_te = 0
+    if dir == '>>':
+        for k in range(len(psi) - 1):
+            psi, te = shiftWorkingSite(psi, k, '>>', maxBondDim=maxBondDim, return_trunc_err=True)
+            full_te += sum(te)
+    else:
+        for k in range(len(psi) - 1, 0, -1):
+            psi, te = shiftWorkingSite(psi, k, '<<', maxBondDim=maxBondDim, return_trunc_err=True)
+            full_te += sum(te)
+    if normalize:
+        norm = getOverlap(psi, psi)
+        if norm == 0:
+            dbg = 1
+        psi = [multNode(psi[i], 1/norm**(1 / (len(psi) * 2))) for i in range(len(psi))]
+    return psi, full_te
+
+
+
 def moveOrthogonalityCenter(psi, n):
     k = len(psi) - 1
     while k > n:
