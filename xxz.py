@@ -20,6 +20,8 @@ n = int(sys.argv[3])
 range_i = int(sys.argv[4])
 range_f = int(sys.argv[5])
 
+X = np.array([[0, 1], [1, 0]])
+Z = np.diag([1, -1])
 
 def get_xxz_dmrg_terms(delta):
     onsite_terms = [0 * np.eye(d) for i in range(n)]
@@ -246,6 +248,7 @@ def run():
             for ti in range(len(thetas)):
                 for pi in range(len(phis)):
                     for ei in range(len(etas)):
+                        print(ti, pi, ei)
                         u = tn.Node(np.matmul(np.matmul(linalg.expm(1j * np.pi * thetas[ti] * X),
                                                         linalg.expm(1j * np.pi * phis[pi] * Z)),
                                                         linalg.expm(1j * np.pi * etas[ei] * X)))
@@ -436,4 +439,4 @@ def analyze_ising_2d():
     axs[3].set_ylabel(r'$\theta/\pi$')
     axs[3].set_xlabel(r'$h$')
     plt.show()
-analyze_ising_2d()
+run()
