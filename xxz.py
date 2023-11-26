@@ -10,6 +10,7 @@ import sys
 import random
 import randomUs as ru
 from os import path
+from scipy import linalg
 
 
 d = 2
@@ -163,6 +164,10 @@ elif model == 'ising_magic':
     param_name = 'theta'
     params = [np.round(i * 0.005, 8) for i in range(range_i, range_f)]
     h_func = get_magic_ising_dmrg_terms
+elif model == 'ising_magic_h_2':
+    param_name = 'theta'
+    params = [np.round(i * 0.005, 8) for i in range(range_i, range_f)]
+    h_func = get_magic_ising_h_2_dmrg_terms
 elif model == 'xy':
     param_name = 'gamma'
     params = [np.round(i * 0.1, 1) for i in range(-10, 11)]
@@ -184,15 +189,16 @@ elif model == 'fermion_tight_binding':
     params = [np.round(1.5 + 0.1 * i, 8) for i in range(11)]
     h_func = get_fermion_tight_binding_dmrg_terms
 
-thetas = [t * np.pi for t in [0.0, 0.15, 0.25, 0.4]]
-phis = [p * np.pi for p in [0.0, 0.15, 0.25, 0.4]]
-etas = [e * np.pi for e in [0.0, 0.15, 0.25, 0.4]]
-
+angle_step = 10
+thetas = [np.round(i/angle_step, 3) for i in range(angle_step)]
+phis = [np.round(i/angle_step, 3) for i in range(angle_step)]
+etas = [np.round(i/angle_step, 3) for i in range(angle_step)]
 
 def run():
     psi = [tn.Node(np.array([np.sqrt(2), np.sqrt(2)]).reshape([1, 2, 1])) for i in range(n)] #bops.getStartupState(n, d)
     m2s = np.zeros((len(params), len(thetas), len(phis), len(etas)))
     mhalves = np.zeros((len(params), len(thetas), len(phis), len(etas)))
+    m2_avgs = np.zeros((len(params), len(thetas), len(phis), len(etas)))
     for pi in range(len(params)):
         param = params[pi]
         print(param)
@@ -237,17 +243,24 @@ def run():
             if psi[int(n / 2)].tensor.shape[0] > 4:
                 psi = bops.relaxState(psi, 4)
                 print(bops.getOverlap(psi, psi_orig))
-            m2 = magicRenyi.getSecondRenyi(psi, d)
-            print('m2 = ' + str(m2))
-            dm = get_half_system_dm(psi)
-            mhalf = magicRenyi.getHalfRenyiExact_dm(dm, d)
-            print('mhalf = ' + str(mhalf))
-            m2_avg = magicRenyi.getSecondRenyiAverage(psi, int(n / 2), d)
-            print('m2_avg = ' + str(m2_avg))
-            print(psi[int(n/2)].tensor.shape)
-            print(param)
+            for ti in range(len(thetas)):
+                for pi in range(len(phis)):
+                    for ei in range(len(etas)):
+                        u = tn.Node(np.matmul(np.matmul(linalg.expm(1j * np.pi * thetas[ti] * X),
+                                                        linalg.expm(1j * np.pi * phis[pi] * Z)),
+                                                        linalg.expm(1j * np.pi * etas[ei] * X)))
+                        psi_curr = [bops.permute(bops.contract(site, u, '1', '0'), [0, 2, 1]) for site in psi]
+                        m2s[ti, pi, ei] = magicRenyi.getSecondRenyi(psi_curr, d)
+                        print('m2 = ' + str(m2))
+                        dm = get_half_system_dm(psi_curr)
+                        mhalves[ti, pi, ei] = magicRenyi.getHalfRenyiExact_dm(dm, d)
+                        print('mhalf = ' + str(mhalf))
+                        m2_avgs[ti, pi, ei] = magicRenyi.getSecondRenyiAverage(psi_curr, int(n / 2), d)
+                        print('m2_avg = ' + str(m2_avg))
+                        print(psi[int(n/2)].tensor.shape)
+                        print(param)
             with open(filename(indir, model, param_name, param, n), 'wb') as f:
-                pickle.dump([psi_orig, m2, mhalf, m2_avg], f)
+                pickle.dump([psi_orig, m2s, mhalves, m2_avgs], f)
 
 
 def darken(color, i):
