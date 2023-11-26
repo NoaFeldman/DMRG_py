@@ -198,10 +198,10 @@ etas = [np.round(i/angle_step, 3) for i in range(angle_step)]
 
 def run():
     psi = [tn.Node(np.array([np.sqrt(2), np.sqrt(2)]).reshape([1, 2, 1])) for i in range(n)] #bops.getStartupState(n, d)
-    m2s = np.zeros((len(params), len(thetas), len(phis), len(etas)))
-    mhalves = np.zeros((len(params), len(thetas), len(phis), len(etas)))
-    m2_avgs = np.zeros((len(params), len(thetas), len(phis), len(etas)))
     for pi in range(len(params)):
+        m2s = np.zeros((len(thetas), len(phis), len(etas)))
+        mhalves = np.zeros((len(thetas), len(phis), len(etas)))
+        m2_avgs = np.zeros((len(thetas), len(phis), len(etas)))
         param = params[pi]
         print(param)
         final_file_name = filename(indir, model, param_name, param, n)
@@ -254,12 +254,9 @@ def run():
                                                         linalg.expm(1j * np.pi * etas[ei] * X)))
                         psi_curr = [bops.permute(bops.contract(site, u, '1', '0'), [0, 2, 1]) for site in psi]
                         m2s[ti, pi, ei] = magicRenyi.getSecondRenyi(psi_curr, d)
-                        print('m2 = ' + str(m2))
                         dm = get_half_system_dm(psi_curr)
                         mhalves[ti, pi, ei] = magicRenyi.getHalfRenyiExact_dm(dm, d)
-                        print('mhalf = ' + str(mhalf))
                         m2_avgs[ti, pi, ei] = magicRenyi.getSecondRenyiAverage(psi_curr, int(n / 2), d)
-                        print('m2_avg = ' + str(m2_avg))
                         print(psi[int(n/2)].tensor.shape)
                         print(param)
             with open(filename(indir, model, param_name, param, n), 'wb') as f:
@@ -325,6 +322,9 @@ def analyze():
     m2s = np.zeros(len(params))
     mhalves = np.zeros(len(params))
     m2s_avgs = np.zeros(len(params))
+    m2s_min = np.zeros(len(params))
+    mhalves_min = np.zeros(len(params))
+    m2s_avgs_min = np.zeros(len(params))
     for pi in range(len(params)):
         param = params[pi]
         if not os.path.exists(filename(indir, model, param_name, param, n)):
@@ -332,20 +332,26 @@ def analyze():
         with open(filename(indir, model, param_name, param, n), 'rb') as f:
             a = pickle.load(f)
             psi = a[0]
-            m2 = a[1]
-            mhalf = a[2]
-            m2_avg = a[3]
+            m2s_curr = a[1]
+            mhalves_curr = a[2]
+            m2_avgs_curr = a[3]
         p2s[pi] = bops.getRenyiEntropy(psi, 2, int(len(psi) / 2))
-        m2s[pi] = m2
-        mhalves[pi] = mhalf
-        m2s_avgs[pi] = m2_avg
+        m2s[pi] = m2s_curr[0, 0, 0]
+        mhalves[pi] = mhalves_curr[0, 0, 0]
+        m2s_avgs[pi] = m2_avgs_curr[0, 0, 0]
+        m2s_min[pi] = np.amin(m2s_curr[0, 0, 0])
+        mhalves_min[pi] = np.amin(mhalves_curr[0, 0, 0])
+        m2s_avgs_min[pi] = np.amin(m2_avgs_curr[0, 0, 0])
     axs[0].plot(params, p2s)
     axs[0].set_ylabel(r'$p_2$')
     axs[1].plot(params, m2s)
+    axs[1].plot(params, m2s_min)
     axs[1].set_ylabel(r'$M_2$')
     axs[2].plot(params, mhalves)
+    axs[2].plot(params, mhalves_min)
     axs[2].set_ylabel(r'$M_{1/2}$')
     axs[3].plot(params, m2s_avgs)
+    axs[3].plot(params, m2s_avgs_min)
     axs[3].set_ylabel(r'$\overline{M_2}$')
     plt.xlabel(r'$\theta/\pi$')
     plt.show()
