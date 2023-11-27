@@ -111,7 +111,7 @@ def get_fermion_tight_binding_dmrg_terms(mu):
 
 
 def filename(indir, model, param_name, param, n):
-    return indir + '/magic/results/' + model + '/' + param_name + '_' + str(param) + '_n_' + str(n)
+    return indir + '/' + model + '/' + param_name + '_' + str(param) + '_n_' + str(n)
 
 
 def get_H_explicit(onsite_terms, neighbor_terms):
