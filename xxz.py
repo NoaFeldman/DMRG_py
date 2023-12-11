@@ -48,12 +48,12 @@ t_z = np.array([[0, np.exp(1j * np.pi / 4)], [np.exp(-1j * np.pi / 4), 0]])
 hadamard = np.array([[1, 1, ], [1, -1]]) / np.sqrt(2)
 rotated_t_gate = np.matmul(hadamard, np.matmul(t_z, hadamard))
 def get_magic_ising_dmrg_terms(theta):
-    onsite_terms = [- np.diag([1, np.exp(1j * np.pi * theta)]) for i in range(n)]
+    onsite_terms = [- np.array([[0, np.exp(1j * np.pi * theta)], [np.exp(-1j * np.pi * theta), 0]]) for i in range(n)]
     neighbor_terms = [- np.kron(basic.pauli2X, basic.pauli2X) for i in range(n - 1)]
     return onsite_terms, neighbor_terms
 
 def get_magic_ising_h_2_dmrg_terms(theta):
-    onsite_terms = [- 2 * np.diag([1, np.exp(1j * np.pi * theta)]) for i in range(n)]
+    onsite_terms = [- 2 * - np.array([[0, np.exp(1j * np.pi * theta)], [np.exp(-1j * np.pi * theta), 0]]) for i in range(n)]
     neighbor_terms = [- np.kron(basic.pauli2X, basic.pauli2X) for i in range(n - 1)]
     return onsite_terms, neighbor_terms
 
@@ -325,6 +325,9 @@ def analyze():
     m2s_min = np.zeros(len(params))
     mhalves_min = np.zeros(len(params))
     m2s_avgs_min = np.zeros(len(params))
+    m2s_max = np.zeros(len(params))
+    mhalves_max = np.zeros(len(params))
+    m2s_avgs_max = np.zeros(len(params))
     for pi in range(len(params)):
         param = params[pi]
         if not os.path.exists(filename(indir, model, param_name, param, n)):
@@ -339,19 +342,25 @@ def analyze():
         m2s[pi] = m2s_curr[0, 0, 0]
         mhalves[pi] = mhalves_curr[0, 0, 0]
         m2s_avgs[pi] = m2_avgs_curr[0, 0, 0]
-        m2s_min[pi] = np.amin(m2s_curr[0, 0, 0])
-        mhalves_min[pi] = np.amin(mhalves_curr[0, 0, 0])
-        m2s_avgs_min[pi] = np.amin(m2_avgs_curr[0, 0, 0])
+        m2s_min[pi] = np.amin(m2s_curr)
+        mhalves_min[pi] = np.amin(mhalves_curr)
+        m2s_avgs_min[pi] = np.amin(m2_avgs_curr)
+        m2s_max[pi] = np.amax(m2s_curr)
+        mhalves_max[pi] = np.amax(mhalves_curr)
+        m2s_avgs_max[pi] = np.amax(m2_avgs_curr)
     axs[0].plot(params, p2s)
     axs[0].set_ylabel(r'$p_2$')
     axs[1].plot(params, m2s)
-    axs[1].plot(params, m2s_min)
+    axs[1].plot(params, m2s_min, '--')
+    axs[1].plot(params, m2s_max)
     axs[1].set_ylabel(r'$M_2$')
     axs[2].plot(params, mhalves)
-    axs[2].plot(params, mhalves_min)
+    axs[2].plot(params, mhalves_min, '--')
+    axs[2].plot(params, mhalves_max)
     axs[2].set_ylabel(r'$M_{1/2}$')
     axs[3].plot(params, m2s_avgs)
-    axs[3].plot(params, m2s_avgs_min)
+    axs[3].plot(params, m2s_avgs_min, '--')
+    axs[3].plot(params, m2s_avgs_max)
     axs[3].set_ylabel(r'$\overline{M_2}$')
     plt.xlabel(r'$\theta/\pi$')
     plt.show()
@@ -446,3 +455,4 @@ def analyze_ising_2d():
     axs[3].set_xlabel(r'$h$')
     plt.show()
 run()
+# analyze()
