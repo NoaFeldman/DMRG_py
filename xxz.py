@@ -49,12 +49,12 @@ hadamard = np.array([[1, 1, ], [1, -1]]) / np.sqrt(2)
 rotated_t_gate = np.matmul(hadamard, np.matmul(t_z, hadamard))
 def get_magic_ising_dmrg_terms(theta):
     onsite_terms = [- np.array([[0, np.exp(1j * np.pi * theta)], [np.exp(-1j * np.pi * theta), 0]]) for i in range(n)]
-    neighbor_terms = [- np.kron(basic.pauli2X, basic.pauli2X) for i in range(n - 1)]
+    neighbor_terms = [- np.kron(basic.pauli2Z, basic.pauli2Z) for i in range(n - 1)]
     return onsite_terms, neighbor_terms
 
 def get_magic_ising_h_2_dmrg_terms(theta):
     onsite_terms = [- 2 * - np.array([[0, np.exp(1j * np.pi * theta)], [np.exp(-1j * np.pi * theta), 0]]) for i in range(n)]
-    neighbor_terms = [- np.kron(basic.pauli2X, basic.pauli2X) for i in range(n - 1)]
+    neighbor_terms = [- np.kron(basic.pauli2Z, basic.pauli2Z) for i in range(n - 1)]
     return onsite_terms, neighbor_terms
 
 def get_magic_xxz_dmrg_terms(delta):
@@ -343,6 +343,7 @@ def analyze():
         mhalves[pi] = mhalves_curr[0, 0, 0]
         m2s_avgs[pi] = m2_avgs_curr[0, 0, 0]
         m2s_min[pi] = np.amin(m2s_curr)
+        print(param, np.where(m2s_curr == np.amin(m2s_curr)))
         mhalves_min[pi] = np.amin(mhalves_curr)
         m2s_avgs_min[pi] = np.amin(m2_avgs_curr)
         m2s_max[pi] = np.amax(m2s_curr)
