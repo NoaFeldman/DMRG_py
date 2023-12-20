@@ -57,9 +57,10 @@ def get_magic_ising_h_2_dmrg_terms(theta):
     neighbor_terms = [- np.kron(basic.pauli2Z, basic.pauli2Z) for i in range(n - 1)]
     return onsite_terms, neighbor_terms
 
-def get_magic_xxz_dmrg_terms(delta):
-    onsite_terms = [0 * np.eye(d) for i in range(n)]
-    neighbor_terms = [np.kron(t_z, t_z) * delta + \
+def get_magic_xxz_dmrg_terms(params):
+    h, theta, delta = [0.1 * params[0], 0.1 * np.pi * params[1], 0.1 * params[2] - 2]
+    onsite_terms = [h * np.array([[0, np.exp(1j * theta)], [np.exp(-1j * theta), 0]]) for i in range(n)]
+    neighbor_terms = [np.kron(basic.pauli2Z, basic.pauli2Z) * delta + \
                       np.kron(basic.pauli2X, basic.pauli2X) + \
                       np.kron(basic.pauli2Y, basic.pauli2Y) for i in range(n - 1)]
     return onsite_terms, neighbor_terms
@@ -151,7 +152,11 @@ if model == 'xxz':
     h_func = get_xxz_dmrg_terms
 elif model == 'magic_xxz':
     param_name = 'delta'
-    params = [np.round(i * 0.1 - 2, 1) for i in range(range_i, range_f)]
+    delta_range = 40
+    theta_range = 10
+    params = [[(i - i % delta_range - (((i - i % delta_range) / delta_range) % theta_range) * delta_range) / (delta_range*theta_range),
+               ((i - i % delta_range) / delta_range) % theta_range,
+               i % delta_range] for i in range(range_i, range_f)]
     h_func = get_magic_xxz_dmrg_terms
 elif model == 'magic_xxz_rotations':
     param_name = 'theta'
@@ -317,7 +322,6 @@ def analyze_kitaev_2d():
 
 def analyze():
     import matplotlib.pyplot as plt
-    f, axs = plt.subplots(4, 1)
     p2s = np.zeros(len(params))
     m2s = np.zeros(len(params))
     mhalves = np.zeros(len(params))
@@ -343,12 +347,19 @@ def analyze():
         mhalves[pi] = mhalves_curr[0, 0, 0]
         m2s_avgs[pi] = m2_avgs_curr[0, 0, 0]
         m2s_min[pi] = np.amin(m2s_curr)
-        print(param, np.where(m2s_curr == np.amin(m2s_curr)))
+        wh = np.where(mhalves_curr - np.amin(mhalves_curr) < 0.01)
+        print(param, [[wh[0][i], wh[1][i], wh[2][i]] for i in range(len(wh[0]))])
         mhalves_min[pi] = np.amin(mhalves_curr)
+        # plt.plot(mhalves_curr.reshape(1000))
+        # plt.title(str(param))
+        # plt.show()
+        if param == 0.045:
+            dbg = 1
         m2s_avgs_min[pi] = np.amin(m2_avgs_curr)
         m2s_max[pi] = np.amax(m2s_curr)
         mhalves_max[pi] = np.amax(mhalves_curr)
         m2s_avgs_max[pi] = np.amax(m2_avgs_curr)
+    f, axs = plt.subplots(4, 1)
     axs[0].plot(params, p2s)
     axs[0].set_ylabel(r'$p_2$')
     axs[1].plot(params, m2s)
@@ -455,5 +466,5 @@ def analyze_ising_2d():
     axs[3].set_ylabel(r'$\theta/\pi$')
     axs[3].set_xlabel(r'$h$')
     plt.show()
-run()
-# analyze()
+# run()
+analyze()
