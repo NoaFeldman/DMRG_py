@@ -275,7 +275,7 @@ def infinite_system_energy(params, Jp: float, hz: float, is_sr=True):
     h_ops = [tn.Node(np.kron(Z, np.eye(d**3))), tn.Node(np.eye(d**4)), tn.Node(np.eye(d**4)), tn.Node(np.eye(d**4))]
     h_term = pe.applyLocalOperators(cUp, dUp, cDown, dDown, leftRow, rightRow, node, node, 2, 2, h_ops)
     result = -Jp * plaquette_term / (norm * 2) - hz * h_term / norm
-    print(params, 'energy', result, 'plaquette', plaquette_term, 'h', h_term)
+    # print(params, 'energy', result, 'plaquette', plaquette_term, 'h', h_term)
     return result
 
 
@@ -287,7 +287,8 @@ def gradient_descent(learning_rate, params, Jp: float, hz: float, is_sr=True, ac
         new_E_ds = [0] * len(params)
         no_sr_inds = 2
         for i in range(no_sr_inds):
-            E_ds[i] = (infinite_system_energy(params[:i] + [params[i] + steps[i]] + params[i+1:], Jp, hz, is_sr=is_sr) - E) / steps[i]
+            E_ds[i] = (infinite_system_energy(params[:i] + [params[i] + steps[i]] + params[i+1:], Jp, hz, is_sr=is_sr) \
+                       - infinite_system_energy(params[:i] + [params[i] - steps[i]] + params[i+1:], Jp, hz, is_sr=is_sr)) / (2 * steps[i])
             params[i] -= steps[i] * E_ds[i]
         # if np.abs(new_E_d_alpha) > np.abs(E_d_alpha): # si % 20 == 0: #
         #     alpha_step /= 2
@@ -299,6 +300,8 @@ def gradient_descent(learning_rate, params, Jp: float, hz: float, is_sr=True, ac
                 E_ds[i] = (infinite_system_energy(params[:i] + [params[i] + steps[i]] + params[i+1:], Jp, hz, is_sr=is_sr) - E) / steps[i]
                 params[i] -= steps[i] * E_ds[i]
         E_new = infinite_system_energy(params, Jp, hz, is_sr=is_sr)
+        if E < E_new:
+            dbg = 1
         print(E, E_new, np.abs(E_ds))
         if max(np.abs(E_ds[:no_sr_inds])) < accuracy:
             if not is_sr:
