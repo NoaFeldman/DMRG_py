@@ -10,6 +10,7 @@ import sys
 import random
 import randomUs as ru
 from os import path
+from scipy import linalg
 
 
 d = 2
@@ -19,6 +20,8 @@ n = int(sys.argv[3])
 range_i = int(sys.argv[4])
 range_f = int(sys.argv[5])
 
+X = np.array([[0, 1], [1, 0]])
+Z = np.diag([1, -1])
 
 def get_xxz_dmrg_terms(delta):
     onsite_terms = [0 * np.eye(d) for i in range(n)]
@@ -45,18 +48,19 @@ t_z = np.array([[0, np.exp(1j * np.pi / 4)], [np.exp(-1j * np.pi / 4), 0]])
 hadamard = np.array([[1, 1, ], [1, -1]]) / np.sqrt(2)
 rotated_t_gate = np.matmul(hadamard, np.matmul(t_z, hadamard))
 def get_magic_ising_dmrg_terms(theta):
-    onsite_terms = [- np.diag([1, np.exp(1j * np.pi * theta)]) for i in range(n)]
-    neighbor_terms = [- np.kron(basic.pauli2X, basic.pauli2X) for i in range(n - 1)]
+    onsite_terms = [- np.array([[0, np.exp(1j * np.pi * theta)], [np.exp(-1j * np.pi * theta), 0]]) for i in range(n)]
+    neighbor_terms = [- np.kron(basic.pauli2Z, basic.pauli2Z) for i in range(n - 1)]
     return onsite_terms, neighbor_terms
 
 def get_magic_ising_h_2_dmrg_terms(theta):
-    onsite_terms = [- 2 * np.diag([1, np.exp(1j * np.pi * theta)]) for i in range(n)]
-    neighbor_terms = [- np.kron(basic.pauli2X, basic.pauli2X) for i in range(n - 1)]
+    onsite_terms = [- 2 * - np.array([[0, np.exp(1j * np.pi * theta)], [np.exp(-1j * np.pi * theta), 0]]) for i in range(n)]
+    neighbor_terms = [- np.kron(basic.pauli2Z, basic.pauli2Z) for i in range(n - 1)]
     return onsite_terms, neighbor_terms
 
-def get_magic_xxz_dmrg_terms(delta):
-    onsite_terms = [0 * np.eye(d) for i in range(n)]
-    neighbor_terms = [np.kron(t_z, t_z) * delta + \
+def get_magic_xxz_dmrg_terms(params):
+    h, theta, delta = [0.1 * params[0], 0.1 * np.pi * params[1], 0.1 * params[2] - 2]
+    onsite_terms = [h * np.array([[0, np.exp(1j * theta)], [np.exp(-1j * theta), 0]]) for i in range(n)]
+    neighbor_terms = [np.kron(basic.pauli2Z, basic.pauli2Z) * delta + \
                       np.kron(basic.pauli2X, basic.pauli2X) + \
                       np.kron(basic.pauli2Y, basic.pauli2Y) for i in range(n - 1)]
     return onsite_terms, neighbor_terms
@@ -108,7 +112,7 @@ def get_fermion_tight_binding_dmrg_terms(mu):
 
 
 def filename(indir, model, param_name, param, n):
-    return indir + '/magic/results/' + model + '/' + param_name + '_' + str(param) + '_n_' + str(n)
+    return indir + '/' + model + '/' + param_name + '_' + str(param) + '_n_' + str(n)
 
 
 def get_H_explicit(onsite_terms, neighbor_terms):
@@ -148,7 +152,11 @@ if model == 'xxz':
     h_func = get_xxz_dmrg_terms
 elif model == 'magic_xxz':
     param_name = 'delta'
-    params = [np.round(i * 0.1 - 2, 1) for i in range(range_i, range_f)]
+    delta_range = 40
+    theta_range = 10
+    params = [[(i - i % delta_range - (((i - i % delta_range) / delta_range) % theta_range) * delta_range) / (delta_range*theta_range),
+               ((i - i % delta_range) / delta_range) % theta_range,
+               i % delta_range] for i in range(range_i, range_f)]
     h_func = get_magic_xxz_dmrg_terms
 elif model == 'magic_xxz_rotations':
     param_name = 'theta'
@@ -163,6 +171,10 @@ elif model == 'ising_magic':
     param_name = 'theta'
     params = [np.round(i * 0.005, 8) for i in range(range_i, range_f)]
     h_func = get_magic_ising_dmrg_terms
+elif model == 'ising_magic_h_2':
+    param_name = 'theta'
+    params = [np.round(i * 0.005, 8) for i in range(range_i, range_f)]
+    h_func = get_magic_ising_h_2_dmrg_terms
 elif model == 'xy':
     param_name = 'gamma'
     params = [np.round(i * 0.1, 1) for i in range(-10, 11)]
@@ -184,16 +196,17 @@ elif model == 'fermion_tight_binding':
     params = [np.round(1.5 + 0.1 * i, 8) for i in range(11)]
     h_func = get_fermion_tight_binding_dmrg_terms
 
-thetas = [t * np.pi for t in [0.0, 0.15, 0.25, 0.4]]
-phis = [p * np.pi for p in [0.0, 0.15, 0.25, 0.4]]
-etas = [e * np.pi for e in [0.0, 0.15, 0.25, 0.4]]
-
+angle_step = 10
+thetas = [np.round(i/angle_step, 3) for i in range(angle_step)]
+phis = [np.round(i/angle_step, 3) for i in range(angle_step)]
+etas = [np.round(i/angle_step, 3) for i in range(angle_step)]
 
 def run():
     psi = [tn.Node(np.array([np.sqrt(2), np.sqrt(2)]).reshape([1, 2, 1])) for i in range(n)] #bops.getStartupState(n, d)
-    m2s = np.zeros((len(params), len(thetas), len(phis), len(etas)))
-    mhalves = np.zeros((len(params), len(thetas), len(phis), len(etas)))
     for pi in range(len(params)):
+        m2s = np.zeros((len(thetas), len(phis), len(etas)))
+        mhalves = np.zeros((len(thetas), len(phis), len(etas)))
+        m2_avgs = np.zeros((len(thetas), len(phis), len(etas)))
         param = params[pi]
         print(param)
         final_file_name = filename(indir, model, param_name, param, n)
@@ -237,17 +250,22 @@ def run():
             if psi[int(n / 2)].tensor.shape[0] > 4:
                 psi = bops.relaxState(psi, 4)
                 print(bops.getOverlap(psi, psi_orig))
-            m2 = magicRenyi.getSecondRenyi(psi, d)
-            print('m2 = ' + str(m2))
-            dm = get_half_system_dm(psi)
-            mhalf = magicRenyi.getHalfRenyiExact_dm(dm, d)
-            print('mhalf = ' + str(mhalf))
-            m2_avg = magicRenyi.getSecondRenyiAverage(psi, int(n / 2), d)
-            print('m2_avg = ' + str(m2_avg))
-            print(psi[int(n/2)].tensor.shape)
-            print(param)
+            for ti in range(len(thetas)):
+                for pi in range(len(phis)):
+                    for ei in range(len(etas)):
+                        print(ti, pi, ei)
+                        u = tn.Node(np.matmul(np.matmul(linalg.expm(1j * np.pi * thetas[ti] * X),
+                                                        linalg.expm(1j * np.pi * phis[pi] * Z)),
+                                                        linalg.expm(1j * np.pi * etas[ei] * X)))
+                        psi_curr = [bops.permute(bops.contract(site, u, '1', '0'), [0, 2, 1]) for site in psi]
+                        m2s[ti, pi, ei] = magicRenyi.getSecondRenyi(psi_curr, d)
+                        dm = get_half_system_dm(psi_curr)
+                        mhalves[ti, pi, ei] = magicRenyi.getHalfRenyiExact_dm(dm, d)
+                        m2_avgs[ti, pi, ei] = magicRenyi.getSecondRenyiAverage(psi_curr, int(n / 2), d)
+                        print(psi[int(n/2)].tensor.shape)
+                        print(param)
             with open(filename(indir, model, param_name, param, n), 'wb') as f:
-                pickle.dump([psi_orig, m2, mhalf, m2_avg], f)
+                pickle.dump([psi_orig, m2s, mhalves, m2_avgs], f)
 
 
 def darken(color, i):
@@ -304,11 +322,16 @@ def analyze_kitaev_2d():
 
 def analyze():
     import matplotlib.pyplot as plt
-    f, axs = plt.subplots(4, 1)
     p2s = np.zeros(len(params))
     m2s = np.zeros(len(params))
     mhalves = np.zeros(len(params))
     m2s_avgs = np.zeros(len(params))
+    m2s_min = np.zeros(len(params))
+    mhalves_min = np.zeros(len(params))
+    m2s_avgs_min = np.zeros(len(params))
+    m2s_max = np.zeros(len(params))
+    mhalves_max = np.zeros(len(params))
+    m2s_avgs_max = np.zeros(len(params))
     for pi in range(len(params)):
         param = params[pi]
         if not os.path.exists(filename(indir, model, param_name, param, n)):
@@ -316,20 +339,40 @@ def analyze():
         with open(filename(indir, model, param_name, param, n), 'rb') as f:
             a = pickle.load(f)
             psi = a[0]
-            m2 = a[1]
-            mhalf = a[2]
-            m2_avg = a[3]
+            m2s_curr = a[1]
+            mhalves_curr = a[2]
+            m2_avgs_curr = a[3]
         p2s[pi] = bops.getRenyiEntropy(psi, 2, int(len(psi) / 2))
-        m2s[pi] = m2
-        mhalves[pi] = mhalf
-        m2s_avgs[pi] = m2_avg
+        m2s[pi] = m2s_curr[0, 0, 0]
+        mhalves[pi] = mhalves_curr[0, 0, 0]
+        m2s_avgs[pi] = m2_avgs_curr[0, 0, 0]
+        m2s_min[pi] = np.amin(m2s_curr)
+        wh = np.where(mhalves_curr - np.amin(mhalves_curr) < 0.01)
+        print(param, [[wh[0][i], wh[1][i], wh[2][i]] for i in range(len(wh[0]))])
+        mhalves_min[pi] = np.amin(mhalves_curr)
+        # plt.plot(mhalves_curr.reshape(1000))
+        # plt.title(str(param))
+        # plt.show()
+        if param == 0.045:
+            dbg = 1
+        m2s_avgs_min[pi] = np.amin(m2_avgs_curr)
+        m2s_max[pi] = np.amax(m2s_curr)
+        mhalves_max[pi] = np.amax(mhalves_curr)
+        m2s_avgs_max[pi] = np.amax(m2_avgs_curr)
+    f, axs = plt.subplots(4, 1)
     axs[0].plot(params, p2s)
     axs[0].set_ylabel(r'$p_2$')
     axs[1].plot(params, m2s)
+    axs[1].plot(params, m2s_min, '--')
+    axs[1].plot(params, m2s_max)
     axs[1].set_ylabel(r'$M_2$')
     axs[2].plot(params, mhalves)
+    axs[2].plot(params, mhalves_min, '--')
+    axs[2].plot(params, mhalves_max)
     axs[2].set_ylabel(r'$M_{1/2}$')
     axs[3].plot(params, m2s_avgs)
+    axs[3].plot(params, m2s_avgs_min, '--')
+    axs[3].plot(params, m2s_avgs_max)
     axs[3].set_ylabel(r'$\overline{M_2}$')
     plt.xlabel(r'$\theta/\pi$')
     plt.show()
@@ -423,4 +466,5 @@ def analyze_ising_2d():
     axs[3].set_ylabel(r'$\theta/\pi$')
     axs[3].set_xlabel(r'$h$')
     plt.show()
-analyze_ising_2d()
+# run()
+analyze()
