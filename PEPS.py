@@ -282,7 +282,7 @@ def twoCopiesEntanglement(circle, A, B):
 
 # TODO I stopped getting A, B and return openA, openB, which would cause problems with old code.
 #  Fix this by checking the case (for example, shape of A)
-def applyBMPS(AEnv: tn.Node, BEnv:tn.Node, d=2, steps=1000, chi=128, gauge=False):
+def applyBMPS(AEnv: tn.Node, BEnv:tn.Node, d=2, steps=100, chi=16, gauge=False):
     # envOpBA = bops.permute(bops.multiContraction(BEnv, AEnv, '1', '3'), [2, 0, 3, 1, 5, 4])
     # upRow = tn.Node(envOpBA.tensor[:, 0, 0, :, :, :])
     # [C, D, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>', normalize=True)
@@ -290,14 +290,14 @@ def applyBMPS(AEnv: tn.Node, BEnv:tn.Node, d=2, steps=1000, chi=128, gauge=False
     upRow = tn.Node(np.zeros((1, AEnv[0].dimension, BEnv[0].dimension, 1)))
     upRow.tensor[0, 0, 0, 0] = 1
     [cUp_orig, dUp_orig, te] = bops.svdTruncation(upRow, [0, 1], [2, 3], '>>', normalize=True)
-    print('starting bmps rows')
+    # print('starting bmps rows')
     GammaC_up, LambdaC_up, GammaD_up, LambdaD_up = getBMPSRowOps(cUp_orig,
                             tn.Node(np.ones(cUp_orig[2].dimension)), dUp_orig,
                             tn.Node(np.ones(dUp_orig[2].dimension)), AEnv, BEnv, steps, chi=chi)
     upRow = bops.contract(bops.contract(bops.contract(
         GammaC_up, LambdaC_up, '2', '0', isDiag2=True),
         GammaD_up, '2', '0'), LambdaD_up, '3', '0', isDiag2=True)
-    print('finished up')
+    # print('finished up')
     # downRow = tn.Node(envOpBA.tensor[:, :, :, 0, 0, :])
     # [C, D, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>', normalize=True)
     # downRow = bops.multiContraction(D, C, '2', '0')
@@ -312,7 +312,7 @@ def applyBMPS(AEnv: tn.Node, BEnv:tn.Node, d=2, steps=1000, chi=128, gauge=False
     downRow = bops.contract(bops.contract(bops.contract(
         GammaC_down, LambdaC_down, '2', '0', isDiag2=True),
         GammaD_down, '2', '0'), LambdaD_down, '3', '0', isDiag2=True)
-    print('finished down')
+    # print('finished down')
 
     rightRow = bmpsCols(upRow, downRow, AEnv, BEnv, steps, option='right', X=None)
     leftRow = bmpsCols(upRow, downRow, AEnv, BEnv, steps, option='left', X=None)

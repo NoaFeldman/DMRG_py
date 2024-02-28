@@ -9,6 +9,7 @@ import sys
 import os
 import PEPS as peps
 import pepsExpect as pe
+import sys
 
 def full_inds(N, i, bc='P'):
     inds = [int(c) for c in bin(i).split('b')[1].zfill(N**2 + 1)]
@@ -283,7 +284,7 @@ def gradient_descent(learning_rate, params, Jp: float, hz: float, is_sr=True, ac
     E = infinite_system_energy(params, Jp=Jp, hz=hz, is_sr=is_sr)
     E_ds = np.array([1] * len(params), dtype=float)
     steps = [learning_rate] * len(params)
-    for si in range(1000):
+    for si in range(10000):
         new_E_ds = [0] * len(params)
         no_sr_inds = 2
         for i in range(no_sr_inds):
@@ -314,31 +315,34 @@ def gradient_descent(learning_rate, params, Jp: float, hz: float, is_sr=True, ac
         E = E_new
     return E, params
 
-import matplotlib.pyplot as plt
-lambdas = [0.05 * i for i in range(1, 4)] + [0.2 * i for i in range(1, 16)]
+lambdas = [0.2 * i for i in range(int(sys.argv[1]), int(sys.argv[2]))] # + [np.round(0.05 * i, 10) for i in range(1, 4)]
 E0s = np.zeros(len(lambdas))
 E1s = np.zeros(len(lambdas))
 N = 2 #int(sys.argv[1])
 small_loop_c = 0.1
 bc = 'O'
+dirname = sys.argv[3]
 for li in range(len(lambdas)):
     print(li)
-    filename = 'results/gauge/no_sr_N_' + str(N) + '_lambda_' + str(lambdas[li]) + '_bc_' + bc
+    filename = dirname + 'no_sr_N_' + str(N) + '_lambda_' + str(lambdas[li]) + '_bc_' + bc
     if not os.path.exists(filename):
         E_0_order, params_0 = gradient_descent(1e-2, [0.1] + [0.5] * 4, 1 / 2 / lambdas[li], lambdas[li] / 2, is_sr=False)
         print('-------')
-        E_1_order, params_1 = gradient_descent(1e-2, params_0[:2] + [1] * 3, 1 / 2 / lambdas[li], lambdas[li] / 2, is_sr=True)
+        E_1_order, params_1 = gradient_descent(1e-2, params_0[:2] + [0] * 3, 1 / 2 / lambdas[li], lambdas[li] / 2, is_sr=True)
         pickle.dump([E_0_order, params_0, E_1_order, params_1], open(filename, 'wb'))
     else:
-        E_0_order, alpha_0, beta_0, c, E_1_order, alpha_, beta_1, c_1 = pickle.load(open(filename, 'rb'))
-        print([alpha_0, beta_0, c], [alpha_, beta_1, c_1])
-        # E_0_order, params_0, E_1_order, params_1 = pickle.load(open(filename, 'rb'))
-        # print(params_0, params_1)
+        # E_0_order, alpha_0, beta_0, c, E_1_order, alpha_, beta_1, c_1 = pickle.load(open(filename, 'rb'))
+        # print([alpha_0, beta_0, c], [alpha_, beta_1, c_1])
+        E_0_order, params_0, E_1_order, params_1 = pickle.load(open(filename, 'rb'))
+        print(E_0_order, params_0, E_1_order, params_1)
     E0s[li] = E_0_order
     E1s[li] = E_1_order
-plt.scatter(lambdas, E0s, marker='+')
-# plt.plot(lambdas, Es_ansatz)
-plt.scatter(lambdas, E1s, marker='+')
-plt.show()
-plt.plot(lambdas, (E0s - E1s)/E1s)
-plt.show()
+plot = True
+if plot:
+    import matplotlib.pyplot as plt
+    plt.scatter(lambdas, E0s, marker='+')
+    # plt.plot(lambdas, Es_ansatz)
+    plt.scatter(lambdas, E1s, marker='+')
+    plt.show()
+    plt.plot(lambdas, (E0s - E1s)/E1s)
+    plt.show()
