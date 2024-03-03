@@ -288,8 +288,10 @@ def gradient_descent(learning_rate, params, Jp: float, hz: float, is_sr=True, ac
         new_E_ds = [0] * len(params)
         no_sr_inds = 2
         for i in range(no_sr_inds):
-            E_ds[i] = (infinite_system_energy(params[:i] + [params[i] + steps[i]] + params[i+1:], Jp, hz, is_sr=is_sr) \
-                       - infinite_system_energy(params[:i] + [params[i] - steps[i]] + params[i+1:], Jp, hz, is_sr=is_sr)) / (2 * steps[i])
+            Ep = infinite_system_energy(params[:i] + [params[i] + steps[i]] + params[i+1:], Jp, hz, is_sr=is_sr)
+            Em = infinite_system_energy(params[:i] + [params[i] - steps[i]] + params[i+1:], Jp, hz, is_sr=is_sr)
+            # print(i, Ep, Em, params[i])
+            E_ds[i] = (Ep - Em) / (2 * steps[i])
             params[i] -= steps[i] * E_ds[i]
         # if np.abs(new_E_d_alpha) > np.abs(E_d_alpha): # si % 20 == 0: #
         #     alpha_step /= 2
@@ -298,7 +300,10 @@ def gradient_descent(learning_rate, params, Jp: float, hz: float, is_sr=True, ac
         #     beta_step /= 2
         if is_sr:
             for i in range(no_sr_inds, len(params)):
-                E_ds[i] = (infinite_system_energy(params[:i] + [params[i] + steps[i]] + params[i+1:], Jp, hz, is_sr=is_sr) - E) / steps[i]
+                Ep = infinite_system_energy(params[:i] + [params[i] + steps[i]] + params[i + 1:], Jp, hz, is_sr=is_sr)
+                Em = infinite_system_energy(params[:i] + [params[i] - steps[i]] + params[i + 1:], Jp, hz, is_sr=is_sr)
+                # print(i, Ep, Em, params[i])
+                E_ds[i] = (Ep - Em) / (2 * steps[i])
                 params[i] -= steps[i] * E_ds[i]
         E_new = infinite_system_energy(params, Jp, hz, is_sr=is_sr)
         if E < E_new:
@@ -315,7 +320,7 @@ def gradient_descent(learning_rate, params, Jp: float, hz: float, is_sr=True, ac
         E = E_new
     return E, params
 
-lambdas = [0.2 * i for i in range(int(sys.argv[1]), int(sys.argv[2]))] # + [np.round(0.05 * i, 10) for i in range(1, 4)]
+lambdas = [np.round(0.05 * i, 10) for i in range(1, 4)] + [0.2 * i for i in range(int(sys.argv[1]), int(sys.argv[2]))] # +
 E0s = np.zeros(len(lambdas))
 E1s = np.zeros(len(lambdas))
 N = 2 #int(sys.argv[1])
