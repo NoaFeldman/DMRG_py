@@ -1,7 +1,6 @@
 import numpy as np
 import basicOperations as bops
 import tensornetwork as tn
-import randomUs as ru
 import gc
 
 d = 2
@@ -153,24 +152,6 @@ def applyVecsToSite(site: tn.Node, vecUp: np.array, vecDown: np.array):
     down = bops.multiContraction(site, tn.Node(vecDown), '4*', '0*', cleanOr2=True)
     dm = tn.Node(np.kron(up.tensor, down.tensor))
     return dm
-
-
-def horizontalPair(leftSite, rightSite, cleanLeft=True, cleanRight=True):
-    pair = bops.multiContraction(leftSite, rightSite, '1', '3', cleanOr1=cleanLeft, cleanOr2=cleanRight)
-    pair = bops.multiContraction(pair, ru.getPairUnitary(d), '37', '01')
-    [left, right, te] = bops.svdTruncation(pair, [0, 1, 2, 6], [3, 4, 5, 7], '>>', maxBondDim=16)
-    left.reorder_axes([0, 4, 1, 2, 3])
-    right.reorder.axis([1, 2, 3, 0, 4])
-    return left, right
-
-
-def verticalPair(topSite, bottomSite, cleanTop=True, cleanBottom=True):
-    pair = bops.multiContraction(topSite, bottomSite, '2', '0', cleanOr1=cleanTop, cleanOr2=cleanBottom)
-    pair = bops.multiContraction(pair, ru.getPairUnitary(d), '37', '01',
-                                 cleanOr1=True, cleanOr2=True)
-    [top, bottom, te] = bops.svdTruncation(pair, [0, 1, 2, 6], [3, 4, 5, 7], '>>', maxBondDim=16)
-    top.reorder.axes([0, 1, 4, 2, 3])
-    return top, bottom
 
 
 def applyLocalOperators_torus(cUp, dUp, cDown, dDown, leftRow, rightRow, A, B, w, h, ops):
