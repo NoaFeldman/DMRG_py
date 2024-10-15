@@ -76,14 +76,15 @@ def two_point_correlation(basic_node: tn.Node, cUp: tn.Node, dUp: tn.Node, cDown
 
 
 def get_corr_length(dirname: str, empty_coeff=0.0, chi=8):
-    basic_node, cUp, dUp, cDown, dDown, leftRow, rightRow = bmps_boundaries(empty_coeff=empty_coeff, chi=chi)
-    ds = [i * 2 for i in range(3, 20)]
-    corrs = np.round([two_point_correlation(basic_node, cUp, dUp, cDown, dDown, leftRow, rightRow, l) for l in ds], 15)
-    pickle.dump([ds, corrs], open(dirname + '/corrs_vs_ds_chi_' + str(chi), 'wb'))
+    filename = dirname + '/corrs_vs_ds_chi_' + str(chi)
+    if os.path.exists(filename):
+        [ds, corrs] = pickle.load(open(filename, 'rb'))
+    else:
+        basic_node, cUp, dUp, cDown, dDown, leftRow, rightRow = bmps_boundaries(empty_coeff=empty_coeff, chi=chi)
+        ds = [i * 2 for i in range(3, 25)]
+        corrs = np.round([two_point_correlation(basic_node, cUp, dUp, cDown, dDown, leftRow, rightRow, l) for l in ds], 15)
+        pickle.dump([ds, corrs], open(filename, 'wb'))
     xi, const = np.polyfit(ds, np.log(np.abs(corrs)), 1)
-    # plt.plot(np.array(ds), np.log(np.abs(corrs)))
-    # plt.plot(np.array(ds), xi * np.array(ds) + const)
-    # plt.show()
     return -xi
 
 
@@ -93,4 +94,7 @@ def get_kappa(empty_coeff=0.0):
     kappa, const = np.polyfit(np.log(xis), np.log(chis), 1)
     return kappa
 
-get_kappa()
+import sys
+dirname = sys.argv[1]
+chi = int(sys.argv[2])
+get_corr_length(dirname=dirname, chi=chi)
