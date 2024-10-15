@@ -80,7 +80,7 @@ def get_corr_length(dirname: str, empty_coeff=0.0, chi=8):
     if os.path.exists(filename):
         [ds, corrs] = pickle.load(open(filename, 'rb'))
     else:
-        basic_node, cUp, dUp, cDown, dDown, leftRow, rightRow = bmps_boundaries(empty_coeff=empty_coeff, chi=chi)
+        basic_node, cUp, dUp, cDown, dDown, leftRow, rightRow = bmps_boundaries(dirname=dirname, empty_coeff=empty_coeff, chi=chi)
         ds = [i * 2 for i in range(3, 25)]
         corrs = np.round([two_point_correlation(basic_node, cUp, dUp, cDown, dDown, leftRow, rightRow, l) for l in ds], 15)
         pickle.dump([ds, corrs], open(filename, 'wb'))
