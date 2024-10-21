@@ -125,6 +125,7 @@ def getBMPSRowOps(GammaC, LambdaC, GammaD, LambdaD, AEnv, BEnv, steps, chi):
     op = envOpBA
     start = time.time()
     for i in range(steps):
+        # print(i)
         oldGammaC, oldLambdaC, oldGammaD, oldLambdaD = [bops.copyState([node])[0] for node in [GammaC, LambdaC, GammaD, LambdaD]]
         GammaC, LambdaC, GammaD, LambdaD = bmpsRowStep(GammaC, LambdaC, GammaD, LambdaD, op, chi=chi)
         GammaD, LambdaD, GammaC, LambdaC = bmpsRowStep(GammaD, LambdaD, GammaC, LambdaC, op, chi=chi)
@@ -295,8 +296,8 @@ def applyBMPS(AEnv: tn.Node, BEnv:tn.Node, d=2, steps=100, chi=16, gauge=False):
                             tn.Node(np.ones(cUp_orig[2].dimension)), dUp_orig,
                             tn.Node(np.ones(dUp_orig[2].dimension)), AEnv, BEnv, steps, chi=chi)
     upRow = bops.contract(bops.contract(bops.contract(
-        GammaC_up, LambdaC_up, '2', '0', isDiag2=True),
-        GammaD_up, '2', '0'), LambdaD_up, '3', '0', isDiag2=True)
+        GammaD_up, LambdaD_up, '2', '0', isDiag2=True),
+        GammaC_up, '2', '0'), LambdaC_up, '3', '0', isDiag2=True)
     # print('finished up')
     # downRow = tn.Node(envOpBA.tensor[:, :, :, 0, 0, :])
     # [C, D, te] = bops.svdTruncation(downRow, [0, 1], [2, 3], '>>', normalize=True)
@@ -310,8 +311,8 @@ def applyBMPS(AEnv: tn.Node, BEnv:tn.Node, d=2, steps=100, chi=16, gauge=False):
                      bops.permute(AEnv, [2, 3, 0, 1]),
                      bops.permute(BEnv, [2, 3, 0, 1]), steps, chi=chi)
     downRow = bops.contract(bops.contract(bops.contract(
-        GammaC_down, LambdaC_down, '2', '0', isDiag2=True),
-        GammaD_down, '2', '0'), LambdaD_down, '3', '0', isDiag2=True)
+        GammaD_down, LambdaD_down, '2', '0', isDiag2=True),
+        GammaC_down, '2', '0'), LambdaC_down, '3', '0', isDiag2=True)
     # print('finished down')
 
     rightRow = bmpsCols(upRow, downRow, AEnv, BEnv, steps, option='right', X=None)
